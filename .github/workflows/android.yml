@@ -2,7 +2,7 @@ name: Android
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -90,7 +90,7 @@ jobs:
           path: smoke
           if-no-files-found: warn
       - name: Publish screenshots to the smoke-shots branch
-        if: always() && github.event_name == 'push'
+        if: always() && github.ref == 'refs/heads/main'
         run: |
           cd smoke
           git init -q -b smoke-shots
@@ -104,7 +104,8 @@ jobs:
 
   release:
     name: Publish GitHub release
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Runs for a pushed tag (v1.2.3) or a pushed branch named release/v1.2.3.
+    if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/v')
     needs: [build, smoke]
     runs-on: ubuntu-latest
     permissions:
@@ -118,7 +119,8 @@ jobs:
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
+          TAG="${REF_NAME#release/}"
           mv out/engram.apk "out/engram-$TAG.apk"
-          gh release create "$TAG" "out/engram-$TAG.apk" --title "Engram $TAG" --notes-file docs/release-notes.md
+          gh release create "$TAG" "out/engram-$TAG.apk" --target "$GITHUB_SHA" --title "Engram $TAG" --notes-file docs/release-notes.md

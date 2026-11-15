@@ -29,7 +29,7 @@ npm run lint              # ESLint
 npm run check             # database migrations, search and linker logic, in Node
 ```
 
-Every push to `main` builds a release APK and launches it on an emulator in GitHub Actions. Pushing a tag such as `v1.0.1` also publishes a GitHub release with the APK attached.
+Every push to `main` builds a release APK and launches it on an emulator in GitHub Actions. Pushing a tag such as `v1.0.1`, or a branch named `release/v1.0.1`, also publishes a GitHub release with the APK attached.
 
 ## How it is built
 
