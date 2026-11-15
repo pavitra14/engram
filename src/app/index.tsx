@@ -174,7 +174,14 @@ export default function BrainScreen() {
               ) : null}
             </View>
             <View style={styles.topActions}>
-              <IconButton icon="search" label="Search" onPress={() => setSearching(true)} />
+              <IconButton
+                icon="search"
+                label="Search"
+                onPress={() => {
+                  setSelectedId(null);
+                  setSearching(true);
+                }}
+              />
               <IconButton icon="list" label="All thoughts" onPress={() => router.push('/stream')} />
               <IconButton icon="sliders" label="Settings" onPress={() => router.push('/settings')} />
             </View>
