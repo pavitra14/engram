@@ -1,41 +1,124 @@
-This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
+# Engram — instructions for agents
 
-## Expo has changed — do not trust your training data
+Engram is a local-first "second brain" for Android, built with Expo and React Native. You capture thoughts by typing, speaking or sharing from any app, and they link themselves into an interactive graph. There is no server and no account; everything is stored in SQLite on the phone.
 
-Expo ships breaking changes every SDK release. APIs you remember are likely renamed, moved, or removed. Before writing any code that touches an Expo, EAS, or React Native API:
+This file is the entry point for any coding agent (Claude Code, Codex, Cursor, Copilot and others). Read it fully before changing anything. Humans can read it too.
 
-1. Read the major version of the `expo` package in `package.json`.
-2. Fetch the matching versioned docs: `https://docs.expo.dev/versions/v<major>.0.0/`
-3. For anything else, fetch https://docs.expo.dev/llms.txt — an index of all Expo docs with corrections to common LLM misconceptions. Follow its links to the specific page you need; never answer from memory.
+## Start here
+
+| Read | When |
+|---|---|
+| [`docs/STATUS.md`](docs/STATUS.md) | Always. What works, what is unverified, and the prioritised backlog. |
+| [`docs/SPEC.md`](docs/SPEC.md) | Before changing behaviour. The product and technical spec as built. |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | Before touching UI. Palette, type, motion, copy rules, logo. |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Before reversing a choice. Why things are the way they are. |
+| [`docs/original-plan.md`](docs/original-plan.md) | Background only. The pre-build plan; superseded where SPEC differs. |
+| [`docs/research.md`](docs/research.md) | When choosing libraries or revisiting design inspiration. |
+
+When you finish a piece of work, update `docs/STATUS.md` (and `DECISIONS.md` if you made a choice someone might later question). These files are the shared memory between agents and sessions; if they are stale, the next agent starts wrong.
+
+## Project facts
+
+- **Owner:** pavitra14 on GitHub. Repo: `pavitra14/engram`. Default branch: `main`.
+- **Platform:** Android first. iOS is out of scope for now, but avoid Android-only code where a cross-platform option is equally good.
+- **Package id:** `com.pavitra14.engram`. App name: Engram. URL scheme: `engram://`.
+- **Stack:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript, Expo Router, `expo-sqlite`, React Native Skia 2.14, `d3-force`, Gesture Handler 3.3, Reanimated 4.7, `react-native-worklets` 0.13.
+- **Release:** v1.0.0 published at <https://github.com/pavitra14/engram/releases/tag/v1.0.0>.
+
+## Repository map
+
+```
+src/
+  app/                 Expo Router screens (every file is a route)
+    _layout.tsx        fonts, SQLite provider + migrations, stack
+    index.tsx          graph home screen, search, selection card, capture dock
+    stream.tsx         list of all thoughts with search and kind filters
+    thought/[id].tsx   detail: edit, audio, tags, connections, delete
+    settings.tsx       voice language, rebuild links, backup, wipe
+    handle-share.tsx   target for the Android share sheet
+    samples.tsx        engram://samples loads demo data (used by the smoke test)
+    +native-intent.ts  routes incoming share intents to /handle-share
+  components/          CaptureDock, ThoughtRow, small UI primitives (ui.tsx)
+  db/                  schema.ts (migrations), migrate.ts, repo.ts (all SQL), types.ts
+  graph/BrainCanvas.tsx  Skia canvas, d3-force simulation, gestures
+  lib/                 capture.ts (save + link pipeline), linker.ts, useVoice.ts,
+                       backup.ts, samples.ts, bus.ts (change signal), text.ts
+  theme.ts             colour, type and spacing tokens
+assets/brand/          SVG sources for the logo; PNGs in assets/images are rendered from them
+scripts/check.ts       Node-only logic tests (migrations, FTS, linker)
+scripts/smoke.sh       emulator smoke test run by CI
+.github/workflows/android.yml   CI: checks, APK builds, emulator test, releases
+docs/                  spec, design, status, decisions, research, screenshots
+```
 
 ## Commands
 
-Use `bunx` instead of `npx` if the project uses bun (`bun.lock` present).
-
 ```bash
-npx expo install <package>  # ALWAYS use instead of npm/yarn/pnpm/bun add — resolves SDK-compatible versions
-npx expo start              # start the dev server
-npx expo lint               # lint
-npx tsc --noEmit            # typecheck
-npx expo-doctor             # diagnose dependency and config issues
-npx expo install --fix      # fix incompatible package versions
+npm ci                     # install (use npm; there is a package-lock.json)
+npm run typecheck          # tsc --noEmit
+npm run lint               # expo lint (ESLint flat config, eslint-config-expo)
+npm run check              # Node tests: migrations, FTS, cascades, linker
+npx expo run:android       # dev build on a device or emulator (Expo Go will NOT work)
+npx expo export --platform android   # bundles JS; a quick "does it compile for Android" check
+npx expo install <pkg>     # ALWAYS use this to add packages; it picks SDK-compatible versions
 ```
 
-Run lint and typecheck before declaring any task done.
+Run `typecheck`, `lint` and `check` before every commit. CI runs them too and will fail the build.
 
-## Navigation & Routing
+### Sandboxed or offline environments
 
-- Use **Expo Router** for all navigation. Routes live in `src/app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) outside `src/app/`.
-- Import `Link`, `router`, and `useLocalSearchParams` from `expo-router`.
-- Docs: https://docs.expo.dev/router/introduction.md
+If `npx expo install` fails with a network or proxy error (it calls the Expo API and React Native Directory), run it as `EXPO_OFFLINE=1 npx expo install <pkg>`. It then uses the version map bundled in `node_modules/expo/bundledNativeModules.json`.
 
-## Building with EAS
-
-Use EAS to build, sign, and submit the app in the cloud (`eas build`, `eas submit`) and to ship over-the-air updates (`eas update`) — no local Xcode or Android Studio required. Run EAS CLI as `bunx eas-cli <command>` in Bun projects, or `npx eas-cli@latest <command>` otherwise; substitute that for bare `eas` in docs examples.
-Docs: https://docs.expo.dev/eas/index.md
+You do not need the Android SDK locally. CI builds the APK.
 
 ## Rules
 
-- If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
-- Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
-- Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+- **Never create or edit `android/` or `ios/`.** They are generated by `expo prebuild` and gitignored. Change native behaviour through `app.json` and config plugins.
+- **Never edit a shipped migration** in `src/db/schema.ts`. Append a new entry to `MIGRATIONS`. The array index + 1 is the `PRAGMA user_version`.
+- **All SQL lives in `src/db/repo.ts`.** Screens call repo functions; they do not write SQL.
+- **Every write must call `dataChanged()`** from `src/lib/bus.ts` (directly or via `capture()` / `removeThought()`), or screens will not refresh. Pass the new id to animate it into the graph.
+- **Capture is save-first.** Insert the row, then link. Never make capture wait on anything slower than one insert.
+- **Links are undirected** and stored with `a_id < b_id` (a CHECK constraint enforces it). Use `repo.upsertLink`, which orders ids and never downgrades a manual link to an automatic one.
+- **Nothing leaves the device.** No analytics, no network calls for user data, no cloud speech. Voice uses `requiresOnDeviceRecognition: true`.
+- **Follow `docs/DESIGN.md`** for UI: Sora only, tokens from `src/theme.ts`, sentence case, no all-caps labels, no decorative animation. The graph is the only thing that glows.
+- **Copy is plain and specific.** Buttons name the action ("Export a backup"); errors say what happened and what to do. Users see "thought" and "connection", never "node", "edge" or "embedding".
+- **Expo APIs change every SDK.** Before using an Expo or React Native API, read the installed type definitions in `node_modules/<pkg>/build/*.d.ts` or the versioned docs at `https://docs.expo.dev/versions/v58.0.0/`. Do not rely on memory.
+
+## API gotchas in this codebase
+
+These caught the first build out. The installed versions behave this way:
+
+- **Gesture Handler 3** uses hook builders: `usePanGesture`, `usePinchGesture`, `useTapGesture`, combined with `useSimultaneousGestures`, passed to `<GestureDetector gesture={...}>`. Callbacks are `onBegin`, `onActivate`, `onUpdate`, `onDeactivate`, `onFinalize`. Event fields are flat (`e.x`, `e.changeX`, `e.focalX`), not under `nativeEvent`. The old `Gesture.Pan()` builder is not used here.
+- **Call JS from a worklet** with `scheduleOnRN(fn, ...args)` from `react-native-worklets`, not `runOnJS`.
+- **Shared values:** write with `sv.set(value)`, not `sv.value = value`. The React Compiler lint rule `react-hooks/immutability` rejects direct assignment to values returned by hooks. Reading `sv.value` inside worklets and derived values is fine.
+- **Skia paths are immutable in Skia 2.x.** Build with `Skia.PathBuilder.Make()`, chain `moveTo` / `lineTo` / `addCircle`, then `.detach()` to get an `SkPath`.
+- **`StyleSheet.absoluteFillObject` does not exist** in RN 0.88 types. Use `StyleSheet.absoluteFill` or spell out `position: 'absolute', top: 0, ...`.
+- **`expo-file-system`** uses the `File` / `Directory` / `Paths` classes. `new File(contentUri).copy(dest)` imports a shared `content://` file.
+- **`expo-sharing`** receives shares on Android via its config plugin (`android.enabled`, MIME type lists) and `useIncomingShare()`. Payloads have `value`, `shareType` and `mimeType`.
+- **`expo-speech-recognition`** emits `result`, `volumechange`, `audioend` (with the saved WAV URI when `recordingOptions.persist` is true), `error` and `end`. On-device recognition needs Android 13+ and an installed offline speech pack.
+- **React Compiler is off.** The template enabled `experiments.reactCompiler`; it was removed during the first build to keep the graph's ref-heavy simulation code predictable, and has not been re-tested since. Its lint rules still run, so code must pass them.
+
+## Testing
+
+- `npm run check` covers the database and linker in Node using `node:sqlite`. Add a case there for any SQL or linker change.
+- CI's emulator job (`scripts/smoke.sh`) installs the x86_64 APK on an Android 14 Pixel 6 emulator, loads sample data via `engram://samples`, taps the graph, searches, types a thought, opens the list, a thought and settings, shares text in, and fails on any crash. **Tap coordinates assume 1080×2400.** If you move the top bar or dock, update them.
+- Screenshots from the latest `main` run are force-pushed to the `smoke-shots` branch. Look at them after any UI change: `git clone --depth 1 -b smoke-shots https://github.com/pavitra14/engram`.
+- Not covered by automation: microphone, speech recognition, multi-finger gestures, real-device performance. Say so when you report work in those areas.
+
+## Releasing
+
+1. Bump `expo.version` and `expo.android.versionCode` in `app.json`.
+2. Update `docs/release-notes.md` (it becomes the GitHub release body) and `docs/STATUS.md`.
+3. Merge to `main` and wait for CI to pass.
+4. Push a branch named `release/vX.Y.Z` from that commit, or a tag `vX.Y.Z` if your environment allows pushing tags (Claude Code cloud sessions cannot).
+5. CI builds, runs the emulator test, and publishes the release with `engram-vX.Y.Z.apk` (arm64) attached.
+
+The APK is signed with the React Native template's debug keystore, which is the same on every build, so new versions install over old ones. Replace it with a real keystore (via a config plugin and CI secrets) before any Play Store submission.
+
+## Conventions
+
+- TypeScript strict. Import from `@/…` (maps to `src/`).
+- Functional components and hooks. No state library; SQLite is the source of truth and `useDataVersion()` triggers reloads.
+- Name things for what the user sees.
+- Commits: imperative subject under 72 characters, a body explaining why when it is not obvious.
+- Branches: work on a feature branch and open a PR unless the owner asks you to push to `main`.

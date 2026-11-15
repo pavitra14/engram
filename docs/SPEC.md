@@ -126,9 +126,4 @@ Not covered by automation: real-device gestures, microphone recording and speech
 
 ## 11. Next
 
-1. Semantic linking with an on-device embedding model, stored with `sqlite-vec`
-2. Quick Settings tile and home-screen widget
-3. Node labels and cluster names in the graph
-4. Media in backups
-5. Play Store signing, R8 shrinking
-6. iOS
+The prioritised backlog, with done-when criteria, is in [`STATUS.md`](STATUS.md#backlog).

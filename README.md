@@ -4,6 +4,13 @@ A second brain that lives entirely on your phone. Capture a thought by typing, s
 
 <img src="assets/images/icon.png" width="96" alt="Engram icon">
 
+<p>
+  <img src="docs/screenshots/graph.jpg" width="200" alt="Graph of thoughts">
+  <img src="docs/screenshots/graph-selected.jpg" width="200" alt="A selected thought and its connections">
+  <img src="docs/screenshots/thought.jpg" width="200" alt="A thought with its connections">
+  <img src="docs/screenshots/list.jpg" width="200" alt="List of all thoughts">
+</p>
+
 ## What it does
 
 - **Graph home screen.** Every thought is a glowing node; related thoughts pull together. Pan, pinch, drag, tap to peek, search to dim everything that does not match.
@@ -56,14 +63,18 @@ src/
 
 ## Docs
 
-- [Product and technical spec](docs/SPEC.md)
-- [Design: principles, colour, type, logo](docs/DESIGN.md)
-- Brand sources: `assets/brand/`
+| | |
+|---|---|
+| [AGENTS.md](AGENTS.md) | Start here if you are a coding agent (or a new contributor): repo map, commands, rules, gotchas, release steps |
+| [docs/STATUS.md](docs/STATUS.md) | What works, what is untested, and the prioritised backlog |
+| [docs/SPEC.md](docs/SPEC.md) | Product and technical spec as built |
+| [docs/DESIGN.md](docs/DESIGN.md) | Design principles, colour, type, motion, copy, logo |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Why things are the way they are |
+| [docs/research.md](docs/research.md) | Design inspiration and library research |
+| [docs/original-plan.md](docs/original-plan.md) | The pre-build plan, for history |
+
+Brand sources are in `assets/brand/`.
 
 ## Roadmap
 
-- Semantic linking with an on-device embedding model
-- Quick Settings tile and home-screen widget for one-tap capture
-- Labels and cluster names in the graph
-- Media in backups
-- iOS
+See the backlog in [docs/STATUS.md](docs/STATUS.md#backlog).
