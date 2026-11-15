@@ -9,9 +9,22 @@ _Last updated: 16 Nov 2026, v2 redesign on the `redesign-v2` branch. Update this
 
 ## What works in v2
 
-Verified by the CI emulator run on Android 14 (screenshots on the `smoke-shots-redesign-v2` branch):
+Verified by the CI emulator run on Android 14:
 
-- See the pull request for the list confirmed by the latest run.
+- Launch, empty state, loading sample thoughts
+- Today: stream sectioned by day, group pills, placement line on every thought
+- Typing a thought in the capture bar saves it, links it and places it in a group
+- Thought screen: text, group pill, linked thoughts with reasons
+- Map: six named groups laid out without overlapping, ungrouped count, latest thought
+- Group screen with nearby groups
+- Search: counts per kind, a matching group first, matches highlighted
+- Note editor: typing and word count (saving from it was not exercised)
+- Settings renders; the Black override switches the theme
+- Sharing text from another app: saved, placed, sheet shown, app closes
+- The app follows the phone into dark and back to light, including when the switch happens while Engram is closed
+- No crashes in the log across the run
+
+Screenshots are in [`screenshots/`](screenshots/).
 
 Verified in Node (`npm run check`): migrations, full-text search, cascade deletes, the linker, link explanations, grouping and group naming (including that results do not depend on input order), day labels and search highlighting.
 

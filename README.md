@@ -4,6 +4,13 @@ A second brain that lives entirely on your phone. Write, speak or share a though
 
 <img src="assets/brand/wordmark.png" width="300" alt="engram.">
 
+<p>
+  <img src="docs/screenshots/today.jpg" width="190" alt="Today: a stream of thoughts">
+  <img src="docs/screenshots/map.jpg" width="190" alt="Map of named groups">
+  <img src="docs/screenshots/thought.jpg" width="190" alt="A thought and what it links to">
+  <img src="docs/screenshots/today-black.jpg" width="190" alt="Today in the black theme">
+</p>
+
 ## What it does
 
 - **Today.** A calm, readable stream of what you captured, each thought showing where it landed.
