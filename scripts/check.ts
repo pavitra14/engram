@@ -1,0 +1,70 @@
+/**
+ * Logic checks that run in plain Node (no device needed):
+ *  - every migration applies cleanly and full-text search works
+ *  - the auto-linker groups related thoughts and keeps unrelated ones apart
+ * Run with: npm run check
+ */
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+
+import { MIGRATIONS } from '../src/db/schema';
+import { related, relateAll, tokenize } from '../src/lib/linker';
+import { firstUrl, ftsQuery, hostOf, titleOf } from '../src/lib/text';
+
+// --- database ---
+const db = new DatabaseSync(':memory:');
+db.exec('PRAGMA foreign_keys = ON');
+for (const sql of MIGRATIONS) db.exec(sql);
+
+const ins = db.prepare(
+  `INSERT INTO thoughts (id, kind, body, title, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 1)`,
+);
+ins.run('a', 'text', 'Sourdough starter needs feeding tonight', null);
+ins.run('b', 'text', 'Train tickets for the Hampi trip', null);
+ins.run('c', 'voice', '', null);
+
+const match = (q: string) =>
+  db
+    .prepare(`SELECT t.id FROM thoughts_fts f JOIN thoughts t ON t.pk = f.rowid WHERE thoughts_fts MATCH ?`)
+    .all(ftsQuery(q) as string)
+    .map((r: unknown) => (r as { id: string }).id);
+
+assert.deepEqual(match('sourd'), ['a'], 'prefix search finds the thought');
+assert.deepEqual(match('hampi trip'), ['b']);
+db.prepare(`UPDATE thoughts SET body = ? WHERE id = ?`).run('Rye flour shopping', 'a');
+assert.deepEqual(match('sourdough'), [], 'index follows edits');
+assert.deepEqual(match('rye'), ['a']);
+
+db.prepare(`INSERT INTO links (a_id, b_id, kind, weight) VALUES ('a', 'b', 'auto', 0.5)`).run();
+assert.throws(() => db.prepare(`INSERT INTO links (a_id, b_id, kind, weight) VALUES ('b', 'a', 'auto', 0.5)`).run(), 'links are stored one way round');
+db.prepare(`DELETE FROM thoughts WHERE id = 'b'`).run();
+assert.equal((db.prepare(`SELECT COUNT(*) AS n FROM links`).get() as { n: number }).n, 0, 'deleting a thought removes its links');
+assert.deepEqual(match('hampi'), [], 'deleted thoughts leave the index');
+
+// --- text helpers ---
+assert.equal(firstUrl('see https://example.com/a?b=1, later'), 'https://example.com/a?b=1');
+assert.equal(hostOf('https://www.Example.com/x'), 'example.com');
+assert.equal(titleOf({ title: null, body: '', kind: 'voice', url: null }), 'Voice note');
+assert.equal(ftsQuery('  "; DROP -- '), '"drop"*');
+assert.equal(ftsQuery('!!!'), null);
+
+// --- linker ---
+assert.deepEqual(tokenize('The running shoes'), ['runn', 'shoe']);
+const docs = [
+  { id: '1', text: 'Sourdough: feed the starter at night, bake in the morning' },
+  { id: '2', text: 'Sourdough crumb was too dense, try a longer proof' },
+  { id: '3', text: 'Trip to Hampi in January, check the train' },
+  { id: '4', text: 'Hampi: rent a scooter, sunrise at Matanga hill' },
+  { id: '5', text: 'Quarterly tax filing is due', url: 'https://tax.example/file' },
+  { id: '6', text: 'Read later', url: 'https://tax.example/guide' },
+];
+const hits = related(docs[0], docs).map((h) => h.id);
+assert.deepEqual(hits, ['2'], `sourdough links to sourdough only, got ${hits}`);
+assert.deepEqual(related(docs[2], docs).map((h) => h.id), ['4']);
+assert.ok(related(docs[5], docs).some((h) => h.id === '5'), 'same website links two thoughts');
+const all = relateAll(docs);
+assert.ok(all.every((l) => l.a < l.b), 'pairs are ordered');
+assert.equal(new Set(all.map((l) => `${l.a}-${l.b}`)).size, all.length, 'no duplicate pairs');
+assert.ok(!all.some((l) => l.a === '1' && l.b === '3'), 'unrelated thoughts stay apart');
+
+console.log(`ok: ${MIGRATIONS.length} migration(s), search, text helpers and linker (${all.length} links in fixture)`);
