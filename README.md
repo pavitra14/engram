@@ -54,6 +54,12 @@ src/
 
 `src/lib/linker.ts` scores two thoughts by the words they share (TF-IDF cosine), lifts the score for each distinctive shared word, and adds a boost for a shared website or tag. It is pure TypeScript and instant. The plan is to add an on-device embedding model behind the same interface so that thoughts link by meaning, not only by wording.
 
+## Docs
+
+- [Product and technical spec](docs/SPEC.md)
+- [Design: principles, colour, type, logo](docs/DESIGN.md)
+- Brand sources: `assets/brand/`
+
 ## Roadmap
 
 - Semantic linking with an on-device embedding model

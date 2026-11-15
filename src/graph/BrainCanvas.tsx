@@ -510,8 +510,8 @@ export const BrainCanvas = forwardRef<BrainCanvasHandle, Props>(function BrainCa
               <Path key={`d${k}`} path={dimPaths[i]} color={kindColor[k]} opacity={0.2} />
             ))}
             {KINDS.map((k, i) => (
-              <Path key={`g${k}`} path={litPaths[i]} color={kindColor[k]} opacity={0.6}>
-                <BlurMask blur={9} style="normal" />
+              <Path key={`g${k}`} path={litPaths[i]} color={kindColor[k]} opacity={0.8}>
+                <BlurMask blur={13} style="normal" />
               </Path>
             ))}
             {KINDS.map((k, i) => (

@@ -20,10 +20,27 @@ sleep 25; shot 01-empty
 open "engram://samples"; sleep 20; shot 02-graph
 sleep 6; shot 03-graph-settled
 
-# Tap the middle of the graph area, then type a thought in the dock.
-adb shell input tap 540 1100; sleep 3; shot 04-tap
+# Tap a few places in the graph; at least one should land on a thought and show its card.
+i=0
+for xy in "420 800" "560 1000" "700 1150" "420 1300" "600 1400" "800 950"; do
+  i=$((i + 1)); adb shell input tap $xy; sleep 2; shot "04-tap-$i"
+done
+
+# Search from the graph: matches stay lit, the rest dims.
+adb shell input tap 738 205; sleep 2
+adb shell input text "sourdough"; sleep 3; shot 04-search
+adb shell input keyevent 4; sleep 1
+adb shell input tap 1020 205; sleep 2
+
+# Type a thought in the dock and send it.
+adb shell input tap 400 2238; sleep 2
+adb shell input text "Sourdough%sproofing%stimes%sfor%sa%scold%skitchen"; sleep 2; shot 04-typing
+adb shell input keyevent 4; sleep 2
+adb shell input tap 962 2238; sleep 4; shot 04-captured
 
 open "engram://stream"; sleep 6; shot 05-list
+adb shell input tap 700 660; sleep 5; shot 05-thought
+adb shell input keyevent 4; sleep 2
 open "engram://settings"; sleep 6; shot 06-settings
 
 adb shell am start -W -a android.intent.action.SEND -t text/plain \
