@@ -1,20 +1,27 @@
-First release of Engram, a second brain that lives entirely on your phone.
+Engram 2 is a redesign: a calm, readable notebook that organises itself.
 
-**Install:** download the APK below on an Android phone (Android 7 or newer) and open it. Android will ask you to allow installs from your browser or file manager.
+**Install:** download the APK below on an Android phone (Android 7 or newer) and open it. It installs over version 1 and keeps your thoughts.
 
-**What's in it**
+**New**
 
-- A living graph of your thoughts as the home screen: pan, pinch, drag a thought, tap to peek, search to dim everything else.
-- Capture from anywhere: type in the dock, record a voice note, or share text, links, images and audio to Engram from any app.
-- Voice notes are transcribed on the phone where Android supports offline speech (Android 13+); otherwise the audio alone is kept.
-- Thoughts link themselves by shared words, tags and websites. You can also connect any two by hand.
-- A searchable list of everything, tags, and a detail screen with playback and connections.
-- Backup export and import as a single file.
-- No account, no server, no network permission needed for your notes.
+- **Today.** Home is now a readable stream of what you captured, each thought showing the group it landed in.
+- **Map of groups.** Related thoughts gather into named groups on their own. Tap a group to read it.
+- **Light and true black.** Follows your phone, or choose in Settings. Black is for AMOLED screens.
+- **Notepad.** The expand button in the capture bar opens a full-page editor for longer notes.
+- **Save what you copied.** When your clipboard has text, home offers to save it. Engram reads the clipboard only when you tap.
+- **Why things are linked.** Each linked thought says what it shares with the one you are reading.
+- **Full-screen voice notes** with your words appearing as you speak.
+- **Search** with highlighted matches, filters and matching groups.
+- **New icon.**
+
+**Changed**
+
+- The dark graph of dots is gone. The map of groups replaces it.
 
 **Known limits**
 
-- Auto-linking compares words, not meaning. Two thoughts about the same idea in different words will not link until you connect them.
-- The graph shows your newest 400 thoughts.
+- Linking and grouping compare words, not meaning. Group names are single words taken from your thoughts and can be odd; groups cannot be renamed yet.
+- The share sheet appears over Engram, not over the app you shared from.
 - Backups do not include recordings or images.
+- Voice notes, the clipboard prompt and sharing images have not been tested on a real phone.
 - The APK is signed with a development key, which is fine for installing directly but not for the Play Store.

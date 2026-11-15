@@ -146,24 +146,24 @@ export function Header({
   const { c } = useTheme();
   return (
     <View style={styles.header}>
-      <View style={{ flex: 1, gap: 2 }}>
-        {back ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Back to ${back}`}
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-            hitSlop={8}
-            style={({ pressed }) => [styles.back, { opacity: pressed ? 0.6 : 1 }]}>
-            <Feather name="chevron-left" size={18} color={c.soft} />
-            <Text style={[type.smallStrong, { color: c.soft }]}>{back}</Text>
-          </Pressable>
-        ) : null}
-        <Text style={[type.display, { color: c.ink }]} numberOfLines={2}>
+      {back ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Back to ${back}`}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+          hitSlop={8}
+          style={({ pressed }) => [styles.back, { opacity: pressed ? 0.6 : 1 }]}>
+          <Feather name="chevron-left" size={18} color={c.soft} />
+          <Text style={[type.smallStrong, { color: c.soft }]}>{back}</Text>
+        </Pressable>
+      ) : null}
+      <View style={styles.headerRow}>
+        <Text style={[type.display, { color: c.ink, flex: 1 }]} numberOfLines={2}>
           {title}
         </Text>
-        {sub ? <Text style={[type.small, { color: c.soft }]}>{sub}</Text> : null}
+        {children ? <View style={styles.headerButtons}>{children}</View> : null}
       </View>
-      {children ? <View style={styles.headerButtons}>{children}</View> : null}
+      {sub ? <Text style={[type.small, { color: c.soft }]}>{sub}</Text> : null}
     </View>
   );
 }
@@ -201,8 +201,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  header: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingLeft: 24, paddingRight: 20 },
-  headerButtons: { flexDirection: 'row', gap: 8, paddingTop: 2 },
+  header: { gap: 2, paddingLeft: 24, paddingRight: 20 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerButtons: { flexDirection: 'row', gap: 8 },
   back: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 48, marginLeft: -6, alignSelf: 'flex-start' },
   notice: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16 },
 });

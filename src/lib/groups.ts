@@ -39,6 +39,13 @@ const BLAND = new Set(
 );
 const TONES = 8;
 
+/** A group keeps its colour for as long as it keeps its id, whatever happens to other groups. */
+function toneOf(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return (h >>> 0) % TONES;
+}
+
 function propagate(ids: string[], links: GroupLink[]): Map<string, string> {
   const neighbours = new Map<string, { id: string; w: number }[]>();
   for (const l of links) {
@@ -137,7 +144,7 @@ export function computeGroups(thoughts: GroupThought[], links: GroupLink[]): Gro
   const buckets = [...byLabel.values()]
     .filter((m) => m.length >= 2)
     .map((m) => m.sort((x, y) => (created.get(y) ?? 0) - (created.get(x) ?? 0)))
-    // Biggest first; ties by smallest id so colours stay put between runs.
+    // Biggest first; ties by smallest id so the order is the same on every run.
     .sort((x, y) => y.length - x.length || ([...x].sort()[0] < [...y].sort()[0] ? -1 : 1));
 
   const textOf = new Map(thoughts.map((t) => [t.id, t.text]));
@@ -147,7 +154,7 @@ export function computeGroups(thoughts: GroupThought[], links: GroupLink[]): Gro
   const groups: Group[] = buckets.map((members, i) => {
     const id = [...members].sort()[0];
     for (const m of members) groupOf.set(m, id);
-    return { id, name: names[i], members, tone: i % TONES, near: [], newest: created.get(members[0]) ?? 0 };
+    return { id, name: names[i], members, tone: toneOf(id), near: [], newest: created.get(members[0]) ?? 0 };
   });
 
   const cross = new Map<string, Map<string, number>>();

@@ -38,17 +38,28 @@ function layout(brain: Brain, width: number) {
     .force(
       'link',
       forceLink<Bubble, { source: number | Bubble; target: number | Bubble }>(pairs.map((p) => ({ ...p })))
-        .distance((l) => (l.source as Bubble).r + (l.target as Bubble).r + 26)
-        .strength(0.35),
+        .distance((l) => (l.source as Bubble).r + (l.target as Bubble).r + 22)
+        .strength(0.12),
     )
-    .force('charge', forceManyBody<Bubble>().strength(-260))
-    .force('x', forceX<Bubble>(width / 2).strength(0.12))
-    .force('y', forceY<Bubble>(0).strength(0.03))
-    .force('collide', forceCollide<Bubble>((n) => n.r + 9).iterations(3))
+    .force('charge', forceManyBody<Bubble>().strength(-90))
+    .force('x', forceX<Bubble>(width / 2).strength(0.06))
+    .force('y', forceY<Bubble>(0).strength(0.05))
+    .force('collide', forceCollide<Bubble>((n) => n.r + 7).strength(1).iterations(6))
     .stop();
-  for (let i = 0; i < 320; i++) sim.tick();
+  const clamp = () => {
+    for (const n of nodes) n.x = Math.max(n.r + 16, Math.min(width - n.r - 16, n.x ?? 0));
+  };
+  for (let i = 0; i < 400; i++) {
+    sim.tick();
+    clamp();
+  }
+  // Finish with collisions only, so nothing is left overlapping after the last clamp.
+  sim.force('link', null).force('charge', null).force('x', null).force('y', null).alpha(0.3);
+  for (let i = 0; i < 80; i++) {
+    sim.tick();
+    clamp();
+  }
 
-  for (const n of nodes) n.x = Math.max(n.r + 16, Math.min(width - n.r - 16, n.x ?? 0));
   const top = Math.min(...nodes.map((n) => (n.y ?? 0) - n.r), 0);
   for (const n of nodes) n.y = (n.y ?? 0) - top;
   const height = nodes.length ? Math.max(...nodes.map((n) => (n.y ?? 0) + n.r)) : 0;
