@@ -12,7 +12,7 @@ import { dataChanged, useDataVersion } from '@/lib/bus';
 import { rebuildAllLinks } from '@/lib/capture';
 import { loadSamples } from '@/lib/samples';
 import { canTranscribeOnDevice, SPEECH_LANGS, speechLang } from '@/lib/useVoice';
-import { type Appearance, type, useTheme } from '@/theme';
+import { type AppearanceSetting, type, useTheme } from '@/theme';
 
 function Row({ title, sub, action, onPress, danger }: { title: string; sub: string; action: string; onPress: () => void; danger?: boolean }) {
   const { c } = useTheme();
@@ -64,7 +64,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-const APPEARANCES: { value: Appearance; label: string }[] = [
+const APPEARANCES: { value: AppearanceSetting; label: string }[] = [
   { value: 'system', label: 'System' },
   { value: 'light', label: 'Light' },
   { value: 'black', label: 'Black' },

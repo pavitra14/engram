@@ -48,15 +48,23 @@ adb shell am start -W -a android.intent.action.SEND -t text/plain \
 sleep 2; shot 11-share
 sleep 5
 
-# Same screens in the black theme (the app follows the system setting by default).
+# The phone switches to dark while Engram has no screen open (it closed itself
+# after the share). On return it must follow, in true black.
 adb shell cmd uimode night yes
 launch; sleep 10; shot 12-home-black
 open "engram://map"; sleep 6; shot 13-map-black
 open "engram://group/largest"; sleep 5; shot 14-group-black
-open "engram://settings"; sleep 5; shot 15-settings-black
+open "engram://search"; sleep 4
+adb shell input text "hampi"; sleep 3; shot 15-search-black
+adb shell input keyevent 4; sleep 1
 open "engram:///"; sleep 5
 adb shell input tap 500 900; sleep 4; shot 16-thought-black
-adb shell cmd uimode night no
+adb shell cmd uimode night no; sleep 4; shot 17-thought-light-again
+
+# The in-app override: Settings, Appearance, Black, while the phone is light.
+open "engram://settings"; sleep 5
+adb shell input tap 852 677; sleep 3; shot 18-settings-forced-black
+adb shell input tap 240 677; sleep 2
 
 adb logcat -d > "$OUT/logcat.txt"
 if grep -E "FATAL EXCEPTION|Fatal signal" -A 25 "$OUT/logcat.txt" | grep -q "$PKG"; then

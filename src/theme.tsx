@@ -1,6 +1,6 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useColorScheme } from 'react-native';
+import { Appearance, AppState } from 'react-native';
 
 import * as repo from '@/db/repo';
 import type { ThoughtKind } from '@/db/types';
@@ -104,21 +104,45 @@ export const space = { xs: 6, sm: 8, md: 16, lg: 24, xl: 36 } as const;
 export const kindLabel: Record<ThoughtKind, string> = { text: 'Note', voice: 'Voice', link: 'Link', image: 'Image' };
 export const KINDS: ThoughtKind[] = ['text', 'voice', 'link', 'image'];
 
-export type Appearance = 'system' | 'light' | 'black';
+export type AppearanceSetting = 'system' | 'light' | 'black';
 
 type ThemeValue = {
   c: Palette;
   dark: boolean;
-  appearance: Appearance;
-  setAppearance: (a: Appearance) => void;
+  appearance: AppearanceSetting;
+  setAppearance: (a: AppearanceSetting) => void;
 };
 
 const ThemeContext = createContext<ThemeValue>({ c: light, dark: false, appearance: 'system', setAppearance: () => {} });
 
+/**
+ * The phone's light/dark setting, read fresh.
+ *
+ * React Native caches the colour scheme in JS and only updates it from a
+ * change event. If the setting changes while the app has no activity (after
+ * leaving through the share sheet, say), no event arrives and the cache goes
+ * stale. Resetting the override makes React Native re-read the real value.
+ */
+function readSystemScheme(): 'light' | 'dark' {
+  Appearance.setColorScheme('unspecified');
+  return Appearance.getColorScheme() === 'dark' ? 'dark' : 'light';
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const db = useSQLiteContext();
-  const system = useColorScheme();
-  const [appearance, setState] = useState<Appearance>('system');
+  const [system, setSystem] = useState<'light' | 'dark'>(readSystemScheme);
+  const [appearance, setState] = useState<AppearanceSetting>('system');
+
+  useEffect(() => {
+    const scheme = Appearance.addChangeListener((p) => setSystem(p.colorScheme === 'dark' ? 'dark' : 'light'));
+    const app = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setSystem(readSystemScheme());
+    });
+    return () => {
+      scheme.remove();
+      app.remove();
+    };
+  }, []);
 
   useEffect(() => {
     repo.getMeta(db, 'appearance').then((v) => {
@@ -127,7 +151,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [db]);
 
   const setAppearance = useCallback(
-    (a: Appearance) => {
+    (a: AppearanceSetting) => {
       setState(a);
       repo.setMeta(db, 'appearance', a).catch(() => {});
     },
