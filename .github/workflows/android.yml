@@ -38,18 +38,22 @@ jobs:
           npm run check
       - name: Generate the Android project
         run: npx expo prebuild --platform android --no-install
-      - name: Build the release APK
+      - name: Build the emulator APK (x86_64)
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64
-      - name: Collect the APK
         run: |
-          mkdir -p out
-          cp android/app/build/outputs/apk/release/app-release.apk out/engram.apk
-          ls -lh out
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=x86_64
+          mkdir -p ../out
+          cp app/build/outputs/apk/release/app-release.apk ../out/engram-x86_64.apk
+      - name: Build the phone APK (arm64)
+        working-directory: android
+        run: |
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+          cp app/build/outputs/apk/release/app-release.apk ../out/engram.apk
+          ls -lh ../out
       - uses: actions/upload-artifact@v4
         with:
           name: engram-apk
-          path: out/engram.apk
+          path: out/*.apk
           if-no-files-found: error
 
   smoke:
@@ -57,6 +61,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -76,13 +82,25 @@ jobs:
           profile: pixel_6
           disable-animations: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          script: bash scripts/smoke.sh out/engram.apk
+          script: bash scripts/smoke.sh out/engram-x86_64.apk
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: smoke-test
           path: smoke
           if-no-files-found: warn
+      - name: Publish screenshots to the smoke-shots branch
+        if: always() && github.event_name == 'push'
+        run: |
+          cd smoke
+          git init -q -b smoke-shots
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tail -c 400000 logcat.txt > logcat-tail.txt 2>/dev/null || true
+          rm -f logcat.txt
+          git add -A
+          git commit -q -m "Smoke test screenshots for ${GITHUB_SHA}"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" smoke-shots
 
   release:
     name: Publish GitHub release
