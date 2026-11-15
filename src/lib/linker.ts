@@ -42,14 +42,42 @@ function stem(w: string): string {
   return w;
 }
 
-export function tokenize(text: string): string[] {
-  const out: string[] = [];
+/** Tokens with the word as written, so a stem can be shown back to the user. */
+export function surfaceTokens(text: string): { stem: string; surface: string }[] {
+  const out: { stem: string; surface: string }[] = [];
   for (const raw of text.toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
     if (raw.length < 2 || STOP.has(raw)) continue;
     if (/^\d+$/.test(raw) && raw.length < 4) continue;
-    out.push(stem(raw));
+    out.push({ stem: stem(raw), surface: raw });
   }
   return out;
+}
+
+export function tokenize(text: string): string[] {
+  return surfaceTokens(text).map((t) => t.stem);
+}
+
+/**
+ * A short, plain reason two thoughts are linked, for the thought screen.
+ * Mirrors what the scorer rewards: a shared website, a shared tag, shared words.
+ */
+export function whyLinked(a: Doc, b: Doc): string {
+  const ha = hostOf(a.url);
+  if (ha && ha === hostOf(b.url)) return `Both from ${ha}`;
+  if (a.tags?.length && b.tags?.length) {
+    const set = new Set(a.tags.map((t) => t.toLowerCase()));
+    const tag = b.tags.find((t) => set.has(t.toLowerCase()));
+    if (tag) return `Both tagged ${tag}`;
+  }
+  const mine = new Map(surfaceTokens(docText(a)).map((t) => [t.stem, t.surface]));
+  const shared: string[] = [];
+  for (const t of surfaceTokens(docText(b))) {
+    if (mine.has(t.stem) && !shared.includes(mine.get(t.stem)!)) shared.push(mine.get(t.stem)!);
+  }
+  shared.sort((x, y) => y.length - x.length);
+  if (shared.length === 0) return 'Related';
+  if (shared.length === 1) return `Both mention ${shared[0]}`;
+  return `Both mention ${shared[0]} and ${shared[1]}`;
 }
 
 type Vec = Map<string, number>;

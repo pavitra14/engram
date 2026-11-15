@@ -58,3 +58,64 @@ export function ftsQuery(input: string): string | null {
   if (terms.length === 0) return null;
   return terms.map((t) => `"${t}"*`).join(' ');
 }
+
+export function timeOfDay(ts: number): string {
+  const d = new Date(ts);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  return `${h % 12 === 0 ? 12 : h % 12}:${m < 10 ? '0' : ''}${m} ${h < 12 ? 'am' : 'pm'}`;
+}
+
+const startOfDay = (ts: number) => {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
+
+/** Whole days between two moments, by calendar day. */
+export function daysAgo(ts: number, now: number = Date.now()): number {
+  return Math.round((startOfDay(now) - startOfDay(ts)) / 86_400_000);
+}
+
+export function dayLabel(ts: number, now: number = Date.now()): string {
+  const n = daysAgo(ts, now);
+  if (n <= 0) return 'Today';
+  if (n === 1) return 'Yesterday';
+  const d = new Date(ts);
+  const sameYear = d.getFullYear() === new Date(now).getFullYear();
+  return d.toLocaleDateString(undefined, {
+    weekday: n < 7 ? 'long' : undefined,
+    day: 'numeric',
+    month: 'long',
+    year: sameYear ? undefined : 'numeric',
+  });
+}
+
+/** "9:42 am" for today, otherwise "yesterday", "3 days ago", or a date. */
+export function when(ts: number, now: number = Date.now()): string {
+  const n = daysAgo(ts, now);
+  if (n <= 0) return timeOfDay(ts);
+  if (n === 1) return 'yesterday';
+  if (n < 7) return `${n} days ago`;
+  return relativeTime(ts, now);
+}
+
+export function longDate(ts: number): string {
+  return new Date(ts).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+/** Splits text into runs, marking the parts that match any search word. */
+export function highlightRuns(text: string, query: string): { text: string; hit: boolean }[] {
+  const words = query
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w.length > 1)
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (words.length === 0) return [{ text, hit: false }];
+  const re = new RegExp(`(${words.join('|')})`, 'giu');
+  const exact = new RegExp(`^(?:${words.join('|')})$`, 'iu');
+  return text
+    .split(re)
+    .filter((part) => part.length > 0)
+    .map((part) => ({ text: part, hit: exact.test(part) }));
+}

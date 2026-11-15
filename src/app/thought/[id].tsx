@@ -1,31 +1,24 @@
+import * as Clipboard from 'expo-clipboard';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThoughtRow } from '@/components/ThoughtRow';
-import { Button, Chip, IconButton, KindBadge } from '@/components/ui';
+import { Entry, entryMeta } from '@/components/Entry';
+import { Button, KindGlyph, Pill, RoundButton } from '@/components/ui';
 import * as repo from '@/db/repo';
 import type { Tag, Thought } from '@/db/types';
-import { dataChanged, useDataVersion } from '@/lib/bus';
+import { useBrain } from '@/lib/brain';
+import { dataChanged } from '@/lib/bus';
 import { relink, removeThought } from '@/lib/capture';
-import { clock, hostOf, titleOf } from '@/lib/text';
-import { colors, font, kindColor, radius, space, type } from '@/theme';
+import { whyLinked } from '@/lib/linker';
+import { clock, hostOf } from '@/lib/text';
+import { font, type, useTheme } from '@/theme';
 
 function AudioPlayer({ uri }: { uri: string }) {
+  const { c } = useTheme();
   const player = useAudioPlayer(uri);
   const status = useAudioPlayerStatus(player);
   const duration = status.duration || 0;
@@ -41,17 +34,17 @@ function AudioPlayer({ uri }: { uri: string }) {
   };
 
   return (
-    <View style={styles.player}>
-      <IconButton
+    <View style={[styles.player, { backgroundColor: c.surface, borderColor: c.line }]}>
+      <RoundButton
         icon={status.playing ? 'pause' : 'play'}
         label={status.playing ? 'Pause voice note' : 'Play voice note'}
         tone="solid"
         onPress={toggle}
       />
-      <View style={styles.track}>
-        <View style={[styles.trackFill, { width: `${progress * 100}%` }]} />
+      <View style={[styles.track, { backgroundColor: c.rule }]}>
+        <View style={{ height: 4, borderRadius: 2, width: `${progress * 100}%`, backgroundColor: c.accent }} />
       </View>
-      <Text style={[type.small, styles.time]}>
+      <Text style={[type.meta, { color: c.soft, fontVariant: ['tabular-nums'] }]}>
         {clock(status.currentTime * 1000)} / {clock(duration * 1000)}
       </Text>
     </View>
@@ -61,18 +54,19 @@ function AudioPlayer({ uri }: { uri: string }) {
 export default function ThoughtScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
+  const { c } = useTheme();
   const insets = useSafeAreaInsets();
-  const version = useDataVersion();
+  const brain = useBrain(db);
 
   const [thought, setThought] = useState<Thought | null | undefined>(undefined);
   const [body, setBody] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
   const [neighbours, setNeighbours] = useState<repo.Neighbour[]>([]);
-  const [tagDraft, setTagDraft] = useState('');
-  const [connecting, setConnecting] = useState(false);
-  const [connectQuery, setConnectQuery] = useState('');
+  const [tagDraft, setTagDraft] = useState<string | null>(null);
+  const [linking, setLinking] = useState(false);
+  const [linkQuery, setLinkQuery] = useState('');
   const [candidates, setCandidates] = useState<Thought[]>([]);
-  const saved = useRef('');
+  const saved = useRef<string | null>(null);
   const latest = useRef('');
 
   useEffect(() => {
@@ -81,33 +75,33 @@ export default function ThoughtScreen() {
       const t = await repo.getThought(db, id);
       if (!live) return;
       setThought(t);
-      if (t && saved.current === '' && latest.current === '') {
+      if (!t) return;
+      if (saved.current === null) {
         saved.current = t.body;
         latest.current = t.body;
         setBody(t.body);
       }
-      if (t) {
-        const [g, n] = await Promise.all([repo.tagsOf(db, id), repo.neighboursOf(db, id)]);
-        if (!live) return;
-        setTags(g);
-        setNeighbours(n);
-      }
+      const [g, n] = await Promise.all([repo.tagsOf(db, id), repo.neighboursOf(db, id)]);
+      if (!live) return;
+      setTags(g);
+      setNeighbours(n);
     })();
     return () => {
       live = false;
     };
-  }, [db, id, version]);
+    // `brain` changes whenever the data does, which is the reload signal here.
+  }, [db, id, brain]);
 
   const commit = useCallback(async () => {
     const next = latest.current;
-    if (next === saved.current) return;
+    if (saved.current === null || next === saved.current) return;
     saved.current = next;
     await repo.updateThoughtBody(db, id, next.trim());
     await relink(db, id);
     dataChanged();
   }, [db, id]);
 
-  // Save edits when leaving the screen.
+  // Edits are saved when you leave the field or the screen.
   useEffect(
     () => () => {
       void commit();
@@ -116,102 +110,103 @@ export default function ThoughtScreen() {
   );
 
   useEffect(() => {
-    if (!connecting) return;
+    if (!linking) return;
     let live = true;
     const timer = setTimeout(async () => {
       const linked = new Set(neighbours.map((n) => n.id));
-      const rows = await repo.searchThoughts(db, connectQuery, { limit: 30 });
-      if (live) setCandidates(rows.filter((r) => r.id !== id && !linked.has(r.id)).slice(0, 8));
+      const rows = await repo.searchThoughts(db, linkQuery, { limit: 30 });
+      if (live) setCandidates(rows.filter((r) => r.id !== id && !linked.has(r.id)).slice(0, 6));
     }, 120);
     return () => {
       live = false;
       clearTimeout(timer);
     };
-  }, [db, id, connecting, connectQuery, neighbours]);
+  }, [db, id, linking, linkQuery, neighbours]);
 
-  if (thought === undefined) return <View style={styles.screen} />;
+  if (thought === undefined) return <View style={{ flex: 1, backgroundColor: c.bg }} />;
 
   if (thought === null) {
     return (
-      <View style={[styles.screen, styles.missing, { paddingTop: insets.top + space.xl }]}>
-        <Text style={[type.title, { color: colors.text }]}>This thought no longer exists</Text>
-        <Button title="Back to the graph" onPress={() => router.back()} />
+      <View style={[styles.missing, { backgroundColor: c.bg, paddingTop: insets.top + 80 }]}>
+        <Text style={[type.title, { color: c.ink }]}>This thought was deleted</Text>
+        <Button title="Back to today" onPress={() => router.replace('/')} />
       </View>
     );
   }
 
+  const group = brain?.groupById.get(brain.groupOf.get(id) ?? '');
+  const host = hostOf(thought.url);
+
   const addTag = async () => {
-    const name = tagDraft.trim();
+    const name = (tagDraft ?? '').trim();
+    setTagDraft(null);
     if (!name) return;
-    setTagDraft('');
     await repo.addTag(db, id, name);
     await relink(db, id);
     dataChanged();
   };
 
-  const dropTag = async (tag: Tag) => {
-    await repo.removeTag(db, id, tag.id);
-    await relink(db, id);
-    dataChanged();
-  };
-
-  const confirmDelete = () => {
-    Alert.alert('Delete this thought?', 'Its connections and any recording are deleted too. This cannot be undone.', [
+  const dropTag = (tag: Tag) => {
+    Alert.alert(`Remove the tag ${tag.name}?`, undefined, [
       { text: 'Keep', style: 'cancel' },
       {
-        text: 'Delete',
+        text: 'Remove',
         style: 'destructive',
         onPress: async () => {
-          latest.current = saved.current; // nothing left to save
-          await removeThought(db, thought);
-          router.back();
+          await repo.removeTag(db, id, tag.id);
+          await relink(db, id);
+          dataChanged();
         },
       },
     ]);
   };
 
-  const host = hostOf(thought.url);
-  const created = new Date(thought.created_at).toLocaleString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  const confirmDelete = () => {
+    Alert.alert('Delete this thought?', 'Its links and any recording are deleted too. This cannot be undone.', [
+      { text: 'Keep', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          latest.current = saved.current ?? '';
+          await removeThought(db, thought);
+          if (router.canGoBack()) router.back();
+          else router.replace('/');
+        },
+      },
+    ]);
+  };
+
+  const more = () => {
+    Alert.alert('This thought', undefined, [
+      { text: 'Copy text', onPress: () => void Clipboard.setStringAsync(latest.current || thought.url || '') },
+      { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const me = { id, text: body, url: thought.url, tags: tags.map((t) => t.name) };
 
   return (
-    <KeyboardAvoidingView behavior="padding" style={styles.screen}>
-      <View style={[styles.head, { paddingTop: insets.top + 8 }]}>
-        <IconButton icon="arrow-left" label="Back" onPress={() => router.back()} />
-        <IconButton icon="trash-2" label="Delete thought" color={colors.danger} onPress={confirmDelete} />
+    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.bg }}>
+      <View style={[styles.bar, { paddingTop: insets.top + 8 }]}>
+        <RoundButton
+          icon="chevron-left"
+          label="Back"
+          tone="plain"
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        />
+        <RoundButton icon="more-horizontal" label="More actions: copy or delete" onPress={more} />
       </View>
 
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: space.lg, paddingBottom: insets.bottom + space.xl, gap: space.lg }}>
-        <View style={styles.metaRow}>
-          <KindBadge kind={thought.kind} />
-          <Text style={[type.small, { color: colors.textFaint }]}>{created}</Text>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 40, gap: 16 }}>
+        <View style={styles.meta}>
+          <KindGlyph kind={thought.kind} />
+          <Text style={[type.meta, { color: c.soft }]}>{entryMeta(thought)}</Text>
         </View>
 
         {thought.kind === 'image' && thought.media_path ? (
-          <Image source={{ uri: thought.media_path }} style={styles.image} resizeMode="cover" accessibilityLabel="Saved image" />
-        ) : null}
-
-        {thought.kind === 'voice' && thought.media_path ? <AudioPlayer uri={thought.media_path} /> : null}
-
-        {thought.url ? (
-          <Pressable
-            accessibilityRole="link"
-            onPress={() => Linking.openURL(thought.url as string).catch(() => {})}
-            style={({ pressed }) => [styles.linkCard, pressed && { opacity: 0.7 }]}>
-            <Text style={[type.bodyStrong, { color: kindColor.link }]} numberOfLines={1}>
-              {host ?? 'Open link'}
-            </Text>
-            <Text style={[type.small, { color: colors.textSoft }]} numberOfLines={2}>
-              {thought.url}
-            </Text>
-          </Pressable>
+          <Image source={{ uri: thought.media_path }} style={[styles.image, { backgroundColor: c.surface }]} resizeMode="cover" accessibilityLabel="Saved image" />
         ) : null}
 
         <TextInput
@@ -221,101 +216,125 @@ export default function ThoughtScreen() {
             setBody(v);
           }}
           onBlur={() => void commit()}
-          placeholder={
-            thought.kind === 'voice' ? 'No transcript. Add a note about this recording.' : 'Add a note'
-          }
-          placeholderTextColor={colors.textFaint}
+          placeholder={thought.kind === 'voice' ? 'No transcript. Add a note about this recording.' : 'Add a note'}
+          placeholderTextColor={c.faint}
+          accessibilityLabel="Thought text"
           multiline
           scrollEnabled={false}
-          style={styles.body}
-          selectionColor={kindColor[thought.kind]}
-          accessibilityLabel="Thought text"
+          style={[styles.body, { color: c.ink }]}
+          selectionColor={c.accent}
         />
 
-        <View style={styles.section}>
-          <Text style={[type.smallStrong, styles.sectionTitle]}>Tags</Text>
-          <View style={styles.tags}>
-            {tags.map((g) => (
-              <Chip key={g.id} label={`${g.name}  ×`} onPress={() => void dropTag(g)} />
-            ))}
+        {thought.url ? (
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => Linking.openURL(thought.url as string).catch(() => {})}
+            style={({ pressed }) => [styles.link, { backgroundColor: c.surface, borderColor: c.line, opacity: pressed ? 0.7 : 1 }]}>
+            <Text style={[type.label, { color: c.accent }]} numberOfLines={1}>
+              {host ?? 'Open link'}
+            </Text>
+            <Text style={[type.meta, { color: c.soft }]} numberOfLines={2}>
+              {thought.url}
+            </Text>
+          </Pressable>
+        ) : null}
+
+        {thought.kind === 'voice' && thought.media_path ? <AudioPlayer uri={thought.media_path} /> : null}
+
+        <View style={styles.pills}>
+          {group ? (
+            <Pill tone={group.tone} label={`In ${group.name}`} onPress={() => router.push({ pathname: '/group/[id]', params: { id: group.id } })} />
+          ) : null}
+          {tags.map((g) => (
+            <Pill key={g.id} label={g.name} icon="hash" onPress={() => dropTag(g)} />
+          ))}
+          {tagDraft === null ? (
+            <Pill label="Add a tag" icon="plus" onPress={() => setTagDraft('')} />
+          ) : (
             <TextInput
+              autoFocus
               value={tagDraft}
               onChangeText={setTagDraft}
               onSubmitEditing={() => void addTag()}
-              submitBehavior="submit"
-              placeholder="Add a tag"
-              placeholderTextColor={colors.textFaint}
+              onBlur={() => void addTag()}
+              placeholder="Tag name"
+              placeholderTextColor={c.faint}
+              accessibilityLabel="New tag"
               autoCapitalize="none"
               returnKeyType="done"
-              style={styles.tagInput}
-              selectionColor={colors.text}
+              style={[styles.tagInput, { color: c.ink, borderColor: c.accent, backgroundColor: c.surface }]}
+              selectionColor={c.accent}
             />
-          </View>
+          )}
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHead}>
-            <Text style={[type.smallStrong, styles.sectionTitle]}>
-              {neighbours.length === 0 ? 'Connections' : `Connections (${neighbours.length})`}
+        <View>
+          <View style={styles.linksHead}>
+            <Text style={[type.labelStrong, { color: c.ink }]}>
+              {neighbours.length === 0 ? 'Linked thoughts' : `Linked thoughts, ${neighbours.length}`}
             </Text>
-            <Chip
-              label={connecting ? 'Done' : 'Connect'}
-              selected={connecting}
+            <Pressable
+              accessibilityRole="button"
               onPress={() => {
-                setConnecting(!connecting);
-                setConnectQuery('');
+                setLinking(!linking);
+                setLinkQuery('');
               }}
-            />
+              hitSlop={8}
+              style={styles.linkAnother}>
+              <Text style={[type.smallStrong, { color: c.accent, fontFamily: font.semibold }]}>{linking ? 'Done' : 'Link another'}</Text>
+            </Pressable>
           </View>
 
-          {connecting ? (
-            <View style={styles.connectBox}>
+          {linking ? (
+            <View style={[styles.picker, { backgroundColor: c.surface, borderColor: c.line }]}>
               <TextInput
                 autoFocus
-                value={connectQuery}
-                onChangeText={setConnectQuery}
-                placeholder="Find a thought to connect"
-                placeholderTextColor={colors.textFaint}
-                style={styles.connectInput}
-                selectionColor={colors.text}
+                value={linkQuery}
+                onChangeText={setLinkQuery}
+                placeholder="Find a thought to link"
+                placeholderTextColor={c.faint}
+                accessibilityLabel="Find a thought to link"
+                style={[styles.pickerInput, { color: c.ink, borderBottomColor: c.rule }]}
+                selectionColor={c.accent}
               />
-              {candidates.map((c) => (
-                <ThoughtRow
-                  key={c.id}
-                  thought={c}
-                  trailing="Connect"
+              {candidates.map((cand, i) => (
+                <Entry
+                  key={cand.id}
+                  thought={cand}
+                  size="small"
+                  trailing="Link"
+                  divider={i < candidates.length - 1}
                   onPress={async () => {
-                    await repo.upsertLink(db, id, c.id, 'manual', 1);
+                    await repo.upsertLink(db, id, cand.id, 'manual', 1);
                     dataChanged();
                   }}
                 />
               ))}
-              {candidates.length === 0 ? (
-                <Text style={[type.small, styles.hint]}>No other thoughts match.</Text>
-              ) : null}
+              {candidates.length === 0 ? <Text style={[type.small, styles.hint, { color: c.soft }]}>No other thoughts match.</Text> : null}
             </View>
           ) : null}
 
-          {neighbours.length === 0 && !connecting ? (
-            <Text style={[type.small, styles.hint]}>
-              Nothing related yet. Engram links thoughts that share words, tags or a website, and you can connect any two by hand.
+          {neighbours.length === 0 && !linking ? (
+            <Text style={[type.small, { color: c.soft, paddingTop: 4 }]}>
+              Nothing linked yet. Engram links thoughts that share words, a tag or a website, and you can link any two yourself.
             </Text>
           ) : null}
 
           {neighbours.map((n) => (
-            <View key={n.id} style={styles.neighbour}>
-              <View style={{ flex: 1 }}>
-                <ThoughtRow
+            <View key={n.id} style={[styles.neighbour, { borderTopColor: c.rule }]}>
+              <View style={{ flex: 1, marginHorizontal: -24 }}>
+                <Entry
                   thought={n}
-                  trailing={n.link_kind === 'manual' ? 'by you' : `${Math.round(n.weight * 100)}%`}
+                  size="small"
+                  divider={false}
+                  sub={n.link_kind === 'manual' ? 'Linked by you' : whyLinked(me, { id: n.id, text: `${n.title ?? ''} ${n.body}`, url: n.url })}
                   onPress={() => router.push({ pathname: '/thought/[id]', params: { id: n.id } })}
                 />
               </View>
-              <IconButton
+              <RoundButton
                 icon="x"
-                label={`Remove connection to ${titleOf(n)}`}
-                size={40}
-                color={colors.textFaint}
+                label="Remove this link"
+                tone="plain"
                 onPress={async () => {
                   await repo.removeLink(db, id, n.id);
                   dataChanged();
@@ -330,53 +349,20 @@ export default function ThoughtScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.ink },
-  missing: { alignItems: 'center', gap: space.lg, paddingHorizontal: space.lg },
-  head: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.sm, paddingBottom: 4 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  image: { width: '100%', aspectRatio: 4 / 3, borderRadius: radius.card, backgroundColor: colors.inkRaised },
-  player: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    padding: space.sm,
-    paddingRight: space.md,
-    borderRadius: radius.pill,
-    backgroundColor: colors.inkRaised,
-  },
-  track: { flex: 1, height: 4, borderRadius: 4, backgroundColor: colors.inkLifted, overflow: 'hidden' },
-  trackFill: { height: 4, backgroundColor: kindColor.voice },
-  time: { color: colors.textSoft, fontVariant: ['tabular-nums'] },
-  linkCard: {
-    padding: space.md,
-    gap: 4,
-    borderRadius: radius.card,
-    backgroundColor: colors.inkRaised,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  body: { color: colors.text, fontFamily: font.regular, fontSize: 18, lineHeight: 28, padding: 0, minHeight: 60 },
-  section: { gap: space.sm },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitle: { color: colors.textSoft },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
-  tagInput: { minWidth: 110, height: 36, padding: 0, color: colors.text, fontFamily: font.regular, fontSize: 13 },
-  connectBox: {
-    borderRadius: radius.card,
-    backgroundColor: colors.inkRaised,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    overflow: 'hidden',
-  },
-  connectInput: {
-    height: 48,
-    paddingHorizontal: space.md,
-    color: colors.text,
-    fontFamily: font.regular,
-    fontSize: 15.5,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  hint: { color: colors.textFaint, paddingVertical: space.sm, paddingHorizontal: 2 },
-  neighbour: { flexDirection: 'row', alignItems: 'center', marginHorizontal: -space.lg, paddingRight: space.sm },
+  missing: { flex: 1, alignItems: 'center', gap: 24, paddingHorizontal: 24 },
+  bar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, paddingBottom: 8 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  image: { width: '100%', aspectRatio: 4 / 3, borderRadius: 20 },
+  body: { ...type.thoughtLarge, padding: 0, minHeight: 40 },
+  link: { padding: 16, gap: 4, borderRadius: 20, borderWidth: 1 },
+  player: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 8, paddingRight: 18, borderRadius: 32, borderWidth: 1 },
+  track: { flex: 1, height: 4, borderRadius: 2, overflow: 'hidden' },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  tagInput: { height: 48, minWidth: 140, borderRadius: 24, borderWidth: 2, paddingHorizontal: 16, fontFamily: font.medium, fontSize: 14 },
+  linksHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 },
+  linkAnother: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 4 },
+  picker: { borderRadius: 20, borderWidth: 1, overflow: 'hidden', marginBottom: 8 },
+  pickerInput: { height: 52, paddingHorizontal: 18, fontFamily: font.regular, fontSize: 16, borderBottomWidth: 1 },
+  hint: { padding: 18 },
+  neighbour: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, paddingLeft: 24, marginLeft: -24 },
 });

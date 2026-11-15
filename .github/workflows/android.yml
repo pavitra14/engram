@@ -2,7 +2,7 @@ name: Android
 
 on:
   push:
-    branches: [main, 'release/**']
+    branches: [main, 'release/**', 'redesign-**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -90,17 +90,22 @@ jobs:
           path: smoke
           if-no-files-found: warn
       - name: Publish screenshots to the smoke-shots branch
-        if: always() && github.ref == 'refs/heads/main'
+        if: always() && github.event_name == 'push'
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
+          # main publishes to smoke-shots; any other branch to smoke-shots-<branch>
+          TARGET=smoke-shots
+          if [ "$REF_NAME" != "main" ]; then TARGET="smoke-shots-$(echo "$REF_NAME" | tr '/' '-')"; fi
           cd smoke
-          git init -q -b smoke-shots
+          git init -q -b "$TARGET"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           tail -c 400000 logcat.txt > logcat-tail.txt 2>/dev/null || true
           rm -f logcat.txt
           git add -A
           git commit -q -m "Smoke test screenshots for ${GITHUB_SHA}"
-          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" smoke-shots
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "$TARGET"
 
   release:
     name: Publish GitHub release
@@ -123,4 +128,5 @@ jobs:
         run: |
           TAG="${REF_NAME#release/}"
           mv out/engram.apk "out/engram-$TAG.apk"
-          gh release create "$TAG" "out/engram-$TAG.apk" --target "$GITHUB_SHA" --title "Engram $TAG" --notes-file docs/release-notes.md
+          PRE=""; case "$TAG" in *-*) PRE="--prerelease";; esac
+          gh release create "$TAG" "out/engram-$TAG.apk" $PRE --target "$GITHUB_SHA" --title "Engram $TAG" --notes-file docs/release-notes.md

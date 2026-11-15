@@ -3,131 +3,148 @@ import { router } from 'expo-router';
 import { type SharePayload, useIncomingShare } from 'expo-sharing';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useRef, useState } from 'react';
-import { BackHandler, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button } from '@/components/ui';
+import { entryMeta } from '@/components/Entry';
+import { Button, KindGlyph } from '@/components/ui';
+import type { Thought } from '@/db/types';
+import { loadBrain, placement } from '@/lib/brain';
 import { capture, captureText, importMedia } from '@/lib/capture';
-import { firstUrl } from '@/lib/text';
-import { colors, kindColor, radius, space, type } from '@/theme';
+import { firstUrl, titleOf } from '@/lib/text';
+import { type, useTheme } from '@/theme';
 
-type State = { phase: 'saving' } | { phase: 'saved'; count: number } | { phase: 'failed'; message: string };
+type State = { phase: 'saving' } | { phase: 'saved'; first: Thought; count: number; where: string } | { phase: 'failed'; message: string };
 
-async function savePayload(db: ReturnType<typeof useSQLiteContext>, p: SharePayload): Promise<boolean> {
+async function savePayload(db: ReturnType<typeof useSQLiteContext>, p: SharePayload): Promise<Thought | null> {
   const value = p.value?.trim();
-  if (!value) return false;
+  if (!value) return null;
   const kind = p.shareType ?? 'text';
-  if (kind === 'text' || kind === 'url') {
-    await captureText(db, value, 'share');
-    return true;
-  }
+  if (kind === 'text' || kind === 'url') return captureText(db, value, 'share');
   if (kind === 'image') {
-    const media = await importMedia(value, p.mimeType, 'jpg');
-    await capture(db, { kind: 'image', body: '', media_path: media, source: 'share' });
-    return true;
+    return capture(db, { kind: 'image', body: '', media_path: await importMedia(value, p.mimeType, 'jpg'), source: 'share' });
   }
   if (kind === 'audio') {
-    const media = await importMedia(value, p.mimeType, 'm4a');
-    await capture(db, { kind: 'voice', body: '', media_path: media, source: 'share' });
-    return true;
+    return capture(db, { kind: 'voice', body: '', media_path: await importMedia(value, p.mimeType, 'm4a'), source: 'share' });
   }
   // Files and video are not supported yet; keep a link if the value is one.
-  if (firstUrl(value)) {
-    await captureText(db, value, 'share');
-    return true;
-  }
-  return false;
+  return firstUrl(value) ? captureText(db, value, 'share') : null;
 }
 
 /**
- * Shown when another app shares something to Engram. Saves at once, confirms,
- * then steps out of the way so you land back where you were.
+ * Shown when another app shares something to Engram. Saves at once, says where
+ * the item landed, then steps out of the way so you return to what you were doing.
  */
 export default function HandleShareScreen() {
   const db = useSQLiteContext();
+  const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const { sharedPayloads, clearSharedPayloads } = useIncomingShare();
   const [state, setState] = useState<State>({ phase: 'saving' });
+  const [stay, setStay] = useState(false);
   const handled = useRef(false);
 
   useEffect(() => {
     if (handled.current) return;
     if (sharedPayloads.length === 0) {
-      // Opened without anything to save (for example after a restart).
       const t = setTimeout(() => {
         if (!handled.current) router.replace('/');
-      }, 600);
+      }, 700);
       return () => clearTimeout(t);
     }
     handled.current = true;
     (async () => {
       try {
-        let count = 0;
-        for (const p of sharedPayloads) if (await savePayload(db, p)) count += 1;
+        const saved: Thought[] = [];
+        for (const p of sharedPayloads) {
+          const t = await savePayload(db, p);
+          if (t) saved.push(t);
+        }
         clearSharedPayloads();
-        setState(
-          count > 0
-            ? { phase: 'saved', count }
-            : { phase: 'failed', message: 'Engram can save text, links, images and audio. This item is none of those.' },
-        );
+        if (saved.length === 0) {
+          setState({ phase: 'failed', message: 'Engram can save text, links, images and audio. This item is none of those.' });
+          return;
+        }
+        const brain = await loadBrain(db, Date.now());
+        setState({ phase: 'saved', first: saved[0], count: saved.length, where: placement(brain, saved[0]) });
       } catch (e) {
         setState({ phase: 'failed', message: e instanceof Error ? e.message : 'The item could not be saved.' });
       }
     })();
   }, [db, sharedPayloads, clearSharedPayloads]);
 
+  const leave = () => {
+    router.replace('/');
+    BackHandler.exitApp();
+  };
+
   useEffect(() => {
-    if (state.phase !== 'saved') return;
-    const t = setTimeout(() => {
-      router.replace('/');
-      BackHandler.exitApp();
-    }, 1300);
+    if (state.phase !== 'saved' || stay) return;
+    const t = setTimeout(leave, 2600);
     return () => clearTimeout(t);
-  }, [state.phase]);
+  }, [state.phase, stay]);
 
   return (
-    <View style={styles.screen}>
-      <View style={styles.card} accessibilityLiveRegion="polite">
+    <Animated.View entering={FadeIn.duration(160)} style={[styles.screen, { backgroundColor: c.scrim }]}>
+      <Pressable style={{ flex: 1 }} accessibilityLabel="Close" onPress={leave} />
+      <Animated.View
+        entering={SlideInDown.duration(260)}
+        accessibilityLiveRegion="polite"
+        style={[styles.sheet, { backgroundColor: c.bg, borderColor: c.line, paddingBottom: insets.bottom + 20 }]}>
+        <View style={[styles.handle, { backgroundColor: c.line }]} />
         {state.phase === 'saved' ? (
           <>
-            <View style={styles.tick}>
-              <Feather name="check" size={26} color={colors.ink} />
+            <View style={styles.head}>
+              <View style={[styles.tick, { backgroundColor: c.accent }]}>
+                <Feather name="check" size={22} color={c.onAccent} />
+              </View>
+              <Text style={[type.title, { color: c.ink }]}>{state.count === 1 ? 'Saved to Engram' : `Saved ${state.count} items`}</Text>
             </View>
-            <Text style={[type.title, { color: colors.text }]}>
-              {state.count === 1 ? 'Saved to Engram' : `Saved ${state.count} items to Engram`}
-            </Text>
-            <Button title="Open Engram" onPress={() => router.replace('/')} />
+            <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.line }]}>
+              <View style={styles.meta}>
+                <KindGlyph kind={state.first.kind} />
+                <Text style={[type.meta, { color: c.soft }]}>{entryMeta(state.first)}</Text>
+              </View>
+              <Text style={[type.thought, { color: c.ink }]} numberOfLines={3}>
+                {titleOf(state.first)}
+              </Text>
+              <Text style={[type.small, { color: c.soft }]}>{state.where}</Text>
+            </View>
+            <View style={styles.buttons}>
+              <Button
+                title="Add a note"
+                style={{ flex: 1 }}
+                onPress={() => {
+                  setStay(true);
+                  router.replace({ pathname: '/thought/[id]', params: { id: state.first.id } });
+                }}
+              />
+              <Button title="Done" tone="solid" style={{ flex: 1 }} onPress={leave} />
+            </View>
+            <Text style={[type.meta, { color: c.soft, textAlign: 'center' }]}>This closes on its own if you do nothing.</Text>
           </>
         ) : state.phase === 'failed' ? (
           <>
-            <Text style={[type.title, { color: colors.text }]}>Not saved</Text>
-            <Text style={[type.body, { color: colors.textSoft, textAlign: 'center' }]}>{state.message}</Text>
+            <Text style={[type.title, { color: c.ink }]}>Not saved</Text>
+            <Text style={[type.body, { color: c.soft }]}>{state.message}</Text>
             <Button title="Open Engram" onPress={() => router.replace('/')} />
           </>
         ) : (
-          <Text style={[type.title, { color: colors.textSoft }]}>Saving</Text>
+          <Text style={[type.title, { color: c.soft }]}>Saving</Text>
         )}
-      </View>
-    </View>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', padding: space.lg },
-  card: {
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    gap: space.md,
-    padding: space.xl,
-    borderRadius: radius.sheet,
-    backgroundColor: colors.inkRaised,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
-  },
-  tick: {
-    width: 56,
-    height: 56,
-    borderRadius: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: kindColor.voice,
-  },
+  screen: { flex: 1, justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, paddingHorizontal: 24, paddingTop: 12, gap: 18 },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  tick: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  card: { padding: 16, borderRadius: 20, borderWidth: 1, gap: 6 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  buttons: { flexDirection: 'row', gap: 12 },
 });

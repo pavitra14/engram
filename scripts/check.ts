@@ -8,8 +8,9 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 
 import { MIGRATIONS } from '../src/db/schema';
-import { related, relateAll, tokenize } from '../src/lib/linker';
-import { firstUrl, ftsQuery, hostOf, titleOf } from '../src/lib/text';
+import { computeGroups } from '../src/lib/groups';
+import { related, relateAll, surfaceTokens, tokenize, whyLinked } from '../src/lib/linker';
+import { dayLabel, daysAgo, firstUrl, ftsQuery, highlightRuns, hostOf, titleOf } from '../src/lib/text';
 
 // --- database ---
 const db = new DatabaseSync(':memory:');
@@ -67,4 +68,34 @@ assert.ok(all.every((l) => l.a < l.b), 'pairs are ordered');
 assert.equal(new Set(all.map((l) => `${l.a}-${l.b}`)).size, all.length, 'no duplicate pairs');
 assert.ok(!all.some((l) => l.a === '1' && l.b === '3'), 'unrelated thoughts stay apart');
 
-console.log(`ok: ${MIGRATIONS.length} migration(s), search, text helpers and linker (${all.length} links in fixture)`);
+assert.deepEqual(surfaceTokens('Feeding starters')[1], { stem: 'starter', surface: 'starters' });
+assert.equal(whyLinked(docs[0], docs[1]), 'Both mention sourdough');
+assert.equal(whyLinked(docs[4], docs[5]), 'Both from tax.example');
+
+// --- groups ---
+const grouped = computeGroups(
+  docs.map((d, i) => ({ id: d.id, text: d.text, created_at: i })),
+  all.map((l) => ({ a: l.a, b: l.b, weight: l.score })),
+);
+const named = new Map(grouped.groups.map((g) => [g.name, g.members.slice().sort()]));
+assert.deepEqual(named.get('Sourdough'), ['1', '2'], `groups: ${[...named.keys()]}`);
+assert.deepEqual(named.get('Hampi'), ['3', '4']);
+assert.equal(grouped.groupOf.get('1'), grouped.groupOf.get('2'));
+assert.notEqual(grouped.groupOf.get('1'), grouped.groupOf.get('3'));
+assert.equal(new Set(grouped.groups.map((g) => g.id)).size, grouped.groups.length, 'group ids are unique');
+const again = computeGroups(
+  docs.map((d, i) => ({ id: d.id, text: d.text, created_at: i })).reverse(),
+  all.map((l) => ({ a: l.a, b: l.b, weight: l.score })).reverse(),
+);
+assert.deepEqual(again.groups.map((g) => g.id), grouped.groups.map((g) => g.id), 'grouping does not depend on input order');
+assert.deepEqual(computeGroups([{ id: 'x', text: 'alone', created_at: 1 }], []).loose, ['x']);
+
+// --- dates and highlights ---
+const noon = new Date(2026, 10, 16, 12).getTime();
+assert.equal(dayLabel(noon - 3_600_000, noon), 'Today');
+assert.equal(dayLabel(noon - 20 * 3_600_000, noon), 'Yesterday');
+assert.equal(daysAgo(noon - 13 * 3_600_000, noon), 1, 'late last night counts as yesterday');
+assert.deepEqual(highlightRuns('Sourdough crumb', 'sour'), [{ text: 'Sour', hit: true }, { text: 'dough crumb', hit: false }]);
+assert.deepEqual(highlightRuns('a (b', '('), [{ text: 'a (b', hit: false }]);
+
+console.log(`ok: ${MIGRATIONS.length} migration(s), search, text helpers, linker and groups (${all.length} links in fixture)`);
