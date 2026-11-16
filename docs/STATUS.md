@@ -6,7 +6,7 @@ _Last updated: 16 Nov 2026, v0.3.0-beta.1 on `main`. Update this file whenever y
 
 - The app is **0.3.0**. Work is pushed straight to `main`; every release is a `0.x` beta (pre-release) until the owner says otherwise.
 - Two earlier releases were numbered `v1.0.0` and `v2.0.0-beta.1`. The owner has asked for them to be removed; that has to be done by hand on GitHub's Releases page (the agent environment cannot delete releases or tags).
-- 0.3.0 was written and checked locally as one batch and pushed once. **Everything native in it compiled for the first time in CI**, so read the latest run before trusting any line below marked "new in 0.3".
+- 0.3.0 was written and checked locally as one batch and pushed once, as the `release/v0.3.0-beta.1` branch. That one run built both APKs, passed the emulator walkthrough and published <https://github.com/pavitra14/engram/releases/tag/v0.3.0-beta.1>. Its screenshots are on the `smoke-shots-release-v0.3.0-beta.1` branch.
 
 ## What 0.3 changed
 
@@ -28,11 +28,29 @@ In Node (`npm run check`), running the app's own `repo.ts`: inserts, search and 
 
 Locally: typecheck, lint, a full Android JS bundle, and `expo prebuild` generating the widget receivers and the app-visibility queries.
 
-On the emulator before 0.3 (still expected to hold, re-check in the latest run): capture, sharing text and a picture in, a reminder scheduled with Android, search, the map, both themes, the model self-check passing with the processor build.
+On the Android 14 emulator, from the 0.3.0-beta.1 run's screenshots and log:
+
+- The PowerSync database opens on a fresh install; sample thoughts load, link and group
+- Typing a thought; the thought screen with its Title field and body editor
+- The to-do menu sliding up; "in a week" putting the thought on the list with its time, and Android holding the alarm
+- The to-do screen with its add line, a "Later" section and the important star
+- "Worth another look" on Today
+- Sharing a picture and text in
+- Search finding a thought through the new index
+- Linking by meaning: the model passes its self-check (pair 0.277, unrelated 0.194), and the garage note links to the car note with the reason "Similar meaning", with no words in common
+- The map with eight groups and two ungrouped thoughts drawn as their own small circles
+- A group screen with "Make one note of these"
+- A titled note typed in the new editor and saved
+- Settings with the Home screen control and the speech pack row
+- Android registered both widgets (`dumpsys appwidget` lists `widget.QuickThought` and `widget.Todo`)
+- The black theme
+- No crash and no `engram:` error line in the log
 
 ## Not verified by anyone
 
-- **Everything "new in 0.3" on a device**, until the first CI run's screenshots are read: PowerSync opening and the old-database import, the rich text editor, the home layouts, transitions, widgets, notification buttons.
+- **The two new home layouts.** The walkthrough photographed the wrong screen for both (it was still on a group screen); `smoke.sh` is fixed for the next run. They reuse the map drawing that is verified on the Map screen.
+- **The old-database import on a phone.** The emulator starts empty, so only the Node tests cover it.
+- **Formatting buttons, drawn widgets, notification buttons, how the transitions feel.** The walkthrough types and takes still pictures; it does not press these.
 - **Does a PowerSync table behave like the plain tables the tests use?** The tests cannot tell. Watch for errors mentioning views or triggers.
 - **Linking by meaning on real notes.** On the emulator the sample paraphrase pair scored 0.28 against 0.19 for an unrelated pair, which is a narrow margin. The thresholds in `linker.ts` were set from that one run.
 - **The Claude and ChatGPT links.** They open `https://claude.ai/new?q=…` and `https://chatgpt.com/?q=…`. Whether each app opens with the draft filled in has not been tried; the draft is also put on the clipboard for that reason.
@@ -55,8 +73,6 @@ On the emulator before 0.3 (still expected to hold, re-check in the latest run):
 
 Ordered by priority. Each item has a done-when line so any agent can pick it up.
 
-0. **Read the first 0.3 CI run and fix what it shows.** Screenshots are on `smoke-shots`. Then refresh `docs/screenshots/` and the README from them.
-   _Done when:_ every screenshot shows the screen it is named for and the log has no `engram:` error lines.
 0. **Tune linking by meaning on real notes.** The self-check passes on the emulator with a narrow margin. Collect the similarity spread from the owner's phone (logged as `engram: meaning ready; …`) and adjust `MEANING_*` in `linker.ts`.
    _Done when:_ the car and garage pair in the sample data links on a real phone and unrelated notes do not.
 1. **Verify on a real device.** Install v2 on the owner's phone and go through "Not yet verified". Fix what breaks.

@@ -9,7 +9,7 @@ Everything stays on your phone. There is no account and no server.
 <p>
   <img src="docs/screenshots/today.jpg" width="200" alt="Today: your thoughts as a list, with to-dos on top">
   <img src="docs/screenshots/map.jpg" width="200" alt="The map: groups of related thoughts as named circles">
-  <img src="docs/screenshots/todo.jpg" width="200" alt="The to-do list with a reminder">
+  <img src="docs/screenshots/note.jpg" width="200" alt="A note, linked by meaning to another that shares no words with it">
   <img src="docs/screenshots/today-black.jpg" width="200" alt="Today in the true-black theme">
 </p>
 

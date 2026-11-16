@@ -84,14 +84,13 @@ adb shell input text "Notepad"; sleep 2; shot 18-compose
 tap 930 212; sleep 5; shot 18b-note-saved
 
 # The two other home layouts, then back to the list.
+# "engram://" is the home screen itself; without it the test would still be on whatever screen was open.
 open "engram://settings?home=split"; sleep 3
-adb shell input keyevent 4; sleep 2
-launch; sleep 6; shot 18c-home-split
+open "engram://"; sleep 6; shot 18c-home-split
 open "engram://settings?home=map"; sleep 3
-adb shell input keyevent 4; sleep 2
-launch; sleep 6; shot 18d-home-map
+open "engram://"; sleep 6; shot 18d-home-map
 open "engram://settings?home=list"; sleep 3
-adb shell input keyevent 4; sleep 2
+open "engram://"; sleep 3
 open "engram://settings"; sleep 5; shot 19-settings
 
 # Share text in from "another app".
