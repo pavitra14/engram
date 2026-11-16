@@ -1,22 +1,23 @@
 # Engram
 
-A second brain that lives entirely on your phone. Capture a thought by typing, speaking or sharing from any app, and watch it link itself into a living graph. No account, no server.
+A second brain that lives entirely on your phone. Write, speak or share a thought from any app; related thoughts link themselves and gather into named groups. No account, no server.
 
-<img src="assets/images/icon.png" width="96" alt="Engram icon">
+<img src="assets/brand/wordmark.png" width="300" alt="engram.">
 
 <p>
-  <img src="docs/screenshots/graph.jpg" width="200" alt="Graph of thoughts">
-  <img src="docs/screenshots/graph-selected.jpg" width="200" alt="A selected thought and its connections">
-  <img src="docs/screenshots/thought.jpg" width="200" alt="A thought with its connections">
-  <img src="docs/screenshots/list.jpg" width="200" alt="List of all thoughts">
+  <img src="docs/screenshots/today.jpg" width="190" alt="Today: a stream of thoughts">
+  <img src="docs/screenshots/map.jpg" width="190" alt="Map of named groups">
+  <img src="docs/screenshots/thought.jpg" width="190" alt="A thought and what it links to">
+  <img src="docs/screenshots/today-black.jpg" width="190" alt="Today in the black theme">
 </p>
 
 ## What it does
 
-- **Graph home screen.** Every thought is a glowing node; related thoughts pull together. Pan, pinch, drag, tap to peek, search to dim everything that does not match.
-- **Capture from anywhere.** Type in the dock, record a voice note, or share text, links, images and audio to Engram from the Android share sheet.
-- **On-device transcription.** Voice notes are transcribed by Android's offline speech recogniser (Android 13+). On phones without it, the audio alone is saved.
-- **Self-organising.** Thoughts that share distinctive words, tags or a website are linked automatically. You can connect any two by hand.
+- **Today.** A calm, readable stream of what you captured, each thought showing where it landed.
+- **Map.** Your thoughts as named groups ("Sourdough", "Hampi") that form on their own.
+- **Capture from anywhere.** Type in the bar, tap the mic, open the full-page note editor, save what you just copied, or share text, links, images and audio from any app.
+- **On-device transcription.** Voice notes are transcribed by Android's offline speech recogniser (Android 13+). On other phones the audio alone is saved.
+- **Light and true black.** Follows your phone, or pick one. Black is for AMOLED screens.
 - **Yours.** Everything is in one SQLite database on the phone. Export and import a backup file whenever you like.
 
 ## Install
@@ -44,18 +45,12 @@ Every push to `main` builds a release APK and launches it on an emulator in GitH
 |---|---|
 | Framework | Expo SDK 58, React Native 0.88, Expo Router |
 | Storage | `expo-sqlite` with FTS5 full-text search |
-| Graph | React Native Skia for drawing, `d3-force` for layout, Gesture Handler and Reanimated for touch |
+| Groups and links | Pure TypeScript: word-overlap scoring and label propagation (`src/lib/linker.ts`, `src/lib/groups.ts`) |
+| Map layout | `d3-force`, drawn with plain views |
 | Voice | `expo-speech-recognition` (on-device only) with `expo-audio` as the audio-only fallback |
 | Share target | `expo-sharing` |
 
-```
-src/
-  app/          screens (graph, list, thought, settings, share capture)
-  components/   capture dock, rows, buttons
-  db/           schema and migrations, queries
-  graph/        the Skia canvas and force simulation
-  lib/          capture pipeline, linker, voice, backup
-```
+The repository map is in [AGENTS.md](AGENTS.md#repository-map).
 
 ### Linking
 
@@ -68,7 +63,8 @@ src/
 | [AGENTS.md](AGENTS.md) | Start here if you are a coding agent (or a new contributor): repo map, commands, rules, gotchas, release steps |
 | [docs/STATUS.md](docs/STATUS.md) | What works, what is untested, and the prioritised backlog |
 | [docs/SPEC.md](docs/SPEC.md) | Product and technical spec as built |
-| [docs/DESIGN.md](docs/DESIGN.md) | Design principles, colour, type, motion, copy, logo |
+| [docs/DESIGN.md](docs/DESIGN.md) | Design principles, colour, type, motion, wording, brand |
+| [docs/design/](docs/design/README.md) | The mocks the app is built from |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Why things are the way they are |
 | [docs/research.md](docs/research.md) | Design inspiration and library research |
 | [docs/original-plan.md](docs/original-plan.md) | The pre-build plan, for history |

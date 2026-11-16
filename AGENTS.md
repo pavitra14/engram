@@ -22,33 +22,37 @@ When you finish a piece of work, update `docs/STATUS.md` (and `DECISIONS.md` if 
 - **Owner:** pavitra14 on GitHub. Repo: `pavitra14/engram`. Default branch: `main`.
 - **Platform:** Android first. iOS is out of scope for now, but avoid Android-only code where a cross-platform option is equally good.
 - **Package id:** `com.pavitra14.engram`. App name: Engram. URL scheme: `engram://`.
-- **Stack:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript, Expo Router, `expo-sqlite`, React Native Skia 2.14, `d3-force`, Gesture Handler 3.3, Reanimated 4.7, `react-native-worklets` 0.13.
-- **Release:** v1.0.0 published at <https://github.com/pavitra14/engram/releases/tag/v1.0.0>.
+- **Stack:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript, Expo Router, `expo-sqlite`, `d3-force` (layout only), Reanimated 4.7, `expo-clipboard`, `expo-speech-recognition`. Skia was removed in v2; nothing draws on a canvas.
+- **Release:** v1.0.0 (the dark graph design) is at <https://github.com/pavitra14/engram/releases/tag/v1.0.0>. v2 (the redesign) is described in `docs/STATUS.md`.
 
 ## Repository map
 
 ```
 src/
   app/                 Expo Router screens (every file is a route)
-    _layout.tsx        fonts, SQLite provider + migrations, stack
-    index.tsx          graph home screen, search, selection card, capture dock
-    stream.tsx         list of all thoughts with search and kind filters
-    thought/[id].tsx   detail: edit, audio, tags, connections, delete
-    settings.tsx       voice language, rebuild links, backup, wipe
-    handle-share.tsx   target for the Android share sheet
+    _layout.tsx        fonts, SQLite provider + migrations, theme, stack
+    index.tsx          Today: the stream, group pills, capture bar
+    map.tsx            map of groups (circles laid out with d3-force)
+    group/[id].tsx     one group's thoughts ("loose" = ungrouped, "largest" = test hook)
+    thought/[id].tsx   detail: edit in place, audio, group, tags, linked thoughts
+    search.tsx         full-text search with kind filters and group matches
+    voice.tsx          full-screen voice capture with live transcript
+    compose.tsx        the notepad: full-page note editor
+    settings.tsx       appearance, voice language, backup, data
+    handle-share.tsx   sheet shown when another app shares to Engram
     samples.tsx        engram://samples loads demo data (used by the smoke test)
     +native-intent.ts  routes incoming share intents to /handle-share
-  components/          CaptureDock, ThoughtRow, small UI primitives (ui.tsx)
+  components/          CaptureBar (text, mic, clipboard prompt), Entry, ui.tsx primitives
   db/                  schema.ts (migrations), migrate.ts, repo.ts (all SQL), types.ts
-  graph/BrainCanvas.tsx  Skia canvas, d3-force simulation, gestures
-  lib/                 capture.ts (save + link pipeline), linker.ts, useVoice.ts,
-                       backup.ts, samples.ts, bus.ts (change signal), text.ts
-  theme.ts             colour, type and spacing tokens
-assets/brand/          SVG sources for the logo; PNGs in assets/images are rendered from them
-scripts/check.ts       Node-only logic tests (migrations, FTS, linker)
-scripts/smoke.sh       emulator smoke test run by CI
+  lib/                 brain.ts (shared data loader + groups), groups.ts, linker.ts,
+                       capture.ts (save + link pipeline), useVoice.ts, backup.ts,
+                       samples.ts, bus.ts (change signal), text.ts
+  theme.tsx            light and black palettes, type scale, ThemeProvider, useTheme()
+assets/brand/          SVG sources for the mark and wordmark; PNGs in assets/images are rendered from them
+scripts/check.ts       Node-only logic tests (migrations, FTS, linker, groups, dates)
+scripts/smoke.sh       emulator walkthrough run by CI, in both themes
 .github/workflows/android.yml   CI: checks, APK builds, emulator test, releases
-docs/                  spec, design, status, decisions, research, screenshots
+docs/                  spec, design (with mocks), status, decisions, research, screenshots
 ```
 
 ## Commands
@@ -80,37 +84,40 @@ You do not need the Android SDK locally. CI builds the APK.
 - **Capture is save-first.** Insert the row, then link. Never make capture wait on anything slower than one insert.
 - **Links are undirected** and stored with `a_id < b_id` (a CHECK constraint enforces it). Use `repo.upsertLink`, which orders ids and never downgrades a manual link to an automatic one.
 - **Nothing leaves the device.** No analytics, no network calls for user data, no cloud speech. Voice uses `requiresOnDeviceRecognition: true`.
-- **Follow `docs/DESIGN.md`** for UI: Sora only, tokens from `src/theme.ts`, sentence case, no all-caps labels, no decorative animation. The graph is the only thing that glows.
-- **Copy is plain and specific.** Buttons name the action ("Export a backup"); errors say what happened and what to do. Users see "thought" and "connection", never "node", "edge" or "embedding".
+- **Follow `docs/DESIGN.md`** for UI. Never hard-code a colour: take every one from `useTheme().c` so both the light and the black theme work. Newsreader for the person's words and titles, Inter for the app's own text, sentence case, 48 pt minimum targets, no decorative animation.
+- **Screens read through `useBrain(db)`** (`src/lib/brain.ts`), which loads thoughts and links once per data change and computes groups. Do not query thoughts and recompute groups per screen.
+- **Groups are derived, not stored.** `computeGroups` runs label propagation over the links and names each group from its shared words. A group's id is its smallest member id and can change when links change; screens must cope with a group id that no longer exists.
+- **Do not read the clipboard without a tap.** `Clipboard.hasStringAsync()` is fine at any time; `getStringAsync()` triggers Android's "pasted from clipboard" notice and iOS's paste prompt, so call it only in response to the person tapping the prompt.
+- **Copy is plain and specific.** Buttons name the action ("Export a backup"); errors say what happened and what to do. Users see "thought", "link" and "group", never "node", "edge", "cluster" or "embedding".
 - **Expo APIs change every SDK.** Before using an Expo or React Native API, read the installed type definitions in `node_modules/<pkg>/build/*.d.ts` or the versioned docs at `https://docs.expo.dev/versions/v58.0.0/`. Do not rely on memory.
 
 ## API gotchas in this codebase
 
 These caught the first build out. The installed versions behave this way:
 
-- **Gesture Handler 3** uses hook builders: `usePanGesture`, `usePinchGesture`, `useTapGesture`, combined with `useSimultaneousGestures`, passed to `<GestureDetector gesture={...}>`. Callbacks are `onBegin`, `onActivate`, `onUpdate`, `onDeactivate`, `onFinalize`. Event fields are flat (`e.x`, `e.changeX`, `e.focalX`), not under `nativeEvent`. The old `Gesture.Pan()` builder is not used here.
-- **Call JS from a worklet** with `scheduleOnRN(fn, ...args)` from `react-native-worklets`, not `runOnJS`.
-- **Shared values:** write with `sv.set(value)`, not `sv.value = value`. The React Compiler lint rule `react-hooks/immutability` rejects direct assignment to values returned by hooks. Reading `sv.value` inside worklets and derived values is fine.
-- **Skia paths are immutable in Skia 2.x.** Build with `Skia.PathBuilder.Make()`, chain `moveTo` / `lineTo` / `addCircle`, then `.detach()` to get an `SkPath`.
+- **Shared values (Reanimated):** write with `sv.set(value)`, not `sv.value = value`. The lint rule `react-hooks/immutability` rejects direct assignment.
+- **`react-hooks/purity`** rejects impure calls such as `Date.now()` during render. Use `useState(() => Date.now())`.
+- **React Native styles do not accept `oklch()`**. The group colours in `src/theme.tsx` are hex values computed from the oklch recipe in `docs/DESIGN.md`.
+- **Typed routes** are generated into `.expo/types` by `expo start` or `expo export`. If `tsc` complains that a new route is not assignable, that folder is stale: delete it or regenerate.
 - **`StyleSheet.absoluteFillObject` does not exist** in RN 0.88 types. Use `StyleSheet.absoluteFill` or spell out `position: 'absolute', top: 0, ...`.
 - **`expo-file-system`** uses the `File` / `Directory` / `Paths` classes. `new File(contentUri).copy(dest)` imports a shared `content://` file.
 - **`expo-sharing`** receives shares on Android via its config plugin (`android.enabled`, MIME type lists) and `useIncomingShare()`. Payloads have `value`, `shareType` and `mimeType`.
 - **`expo-speech-recognition`** emits `result`, `volumechange`, `audioend` (with the saved WAV URI when `recordingOptions.persist` is true), `error` and `end`. On-device recognition needs Android 13+ and an installed offline speech pack.
-- **React Compiler is off.** The template enabled `experiments.reactCompiler`; it was removed during the first build to keep the graph's ref-heavy simulation code predictable, and has not been re-tested since. Its lint rules still run, so code must pass them.
+- **React Compiler is off.** The template enabled `experiments.reactCompiler`; it was removed during the first build and has not been re-tested since. Its lint rules still run, so code must pass them.
 
 ## Testing
 
 - `npm run check` covers the database and linker in Node using `node:sqlite`. Add a case there for any SQL or linker change.
-- CI's emulator job (`scripts/smoke.sh`) installs the x86_64 APK on an Android 14 Pixel 6 emulator, loads sample data via `engram://samples`, taps the graph, searches, types a thought, opens the list, a thought and settings, shares text in, and fails on any crash. **Tap coordinates assume 1080×2400.** If you move the top bar or dock, update them.
-- Screenshots from the latest `main` run are force-pushed to the `smoke-shots` branch. Look at them after any UI change: `git clone --depth 1 -b smoke-shots https://github.com/pavitra14/engram`.
-- Not covered by automation: microphone, speech recognition, multi-finger gestures, real-device performance. Say so when you report work in those areas.
+- CI's emulator job (`scripts/smoke.sh`) installs the x86_64 APK on an Android 14 Pixel 6 emulator, loads sample data via `engram://samples`, types a thought, opens a thought, the map, a group, search, the note editor and settings, shares text in, repeats the main screens in the black theme, and fails on any crash. **Tap coordinates assume 1080×2400.** If you move the top bar or dock, update them.
+- Screenshots from each pushed branch's latest run are force-pushed to `smoke-shots` (for `main`) or `smoke-shots-<branch>`. CI runs on `main`, `release/**` and `redesign-**` branches and on pull requests; add your branch pattern to the workflow if you need screenshots from it. Look at them after any UI change: `git clone --depth 1 -b smoke-shots https://github.com/pavitra14/engram`.
+- Not covered by automation: microphone, speech recognition, the clipboard prompt, image and audio shares, real-device performance. Say so when you report work in those areas.
 
 ## Releasing
 
 1. Bump `expo.version` and `expo.android.versionCode` in `app.json`.
 2. Update `docs/release-notes.md` (it becomes the GitHub release body) and `docs/STATUS.md`.
 3. Merge to `main` and wait for CI to pass.
-4. Push a branch named `release/vX.Y.Z` from that commit, or a tag `vX.Y.Z` if your environment allows pushing tags (Claude Code cloud sessions cannot).
+4. Push a branch named `release/vX.Y.Z` from that commit, or a tag `vX.Y.Z` if your environment allows pushing tags (Claude Code cloud sessions cannot). A version with a hyphen, such as `v2.0.0-beta.1`, is published as a pre-release.
 5. CI builds, runs the emulator test, and publishes the release with `engram-vX.Y.Z.apk` (arm64) attached.
 
 The APK is signed with the React Native template's debug keystore, which is the same on every build, so new versions install over old ones. Replace it with a real keystore (via a config plugin and CI secrets) before any Play Store submission.

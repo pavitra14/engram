@@ -1,6 +1,6 @@
 # Engram — product and technical spec
 
-_As built in v1.0.0, November 2026. The original plan is summarised in section 9 with what changed and why._
+_Sections 1 to 10 describe v1.0.0. **Section 12 describes what v2 changes**; where they disagree, section 12 wins. The original plan is summarised in section 9._
 
 ## 1. What it is
 
@@ -127,3 +127,49 @@ Not covered by automation: real-device gestures, microphone recording and speech
 ## 11. Next
 
 The prioritised backlog, with done-when criteria, is in [`STATUS.md`](STATUS.md#backlog).
+
+## 12. Version 2: the redesign
+
+v2 keeps v1's database, capture pipeline, linker, voice path and backup. It replaces the interface and adds grouping, a notepad and a clipboard prompt. Design: [`DESIGN.md`](DESIGN.md). Reasons: [`DECISIONS.md`](DECISIONS.md) D14 to D19.
+
+### Screens
+
+| Route | Screen | Notes |
+|---|---|---|
+| `/` | Today | Stream of all thoughts, newest first, sectioned by day. Group pills. Capture bar with the clipboard prompt. |
+| `/map` | Map | One circle per group, sized by count; lines join related groups. Ungrouped thoughts and the latest thought below. |
+| `/group/[id]` | Group | Members newest first, nearby groups. `loose` lists ungrouped thoughts. |
+| `/thought/[id]` | Thought | Edit in place (saved on blur and on leaving), audio, link card, group, tags, linked thoughts with a reason each, link another, copy, delete. |
+| `/search` | Search | FTS5 prefix search, kind filters with counts, matching groups first, matches highlighted. |
+| `/voice` | Voice | Starts recording on open. Live transcript, level meter, save or discard. |
+| `/compose` | Note editor | Full page. Saves one text thought. Asks before discarding. |
+| `/settings` | Settings | Appearance (System, Light, Black), voice language, speech pack, export, import, rebuild links, delete everything. |
+| `/handle-share` | Share sheet | Saves, shows where the item was placed, closes after about 2.6 s unless "Add a note" is tapped. |
+
+The v1 graph canvas and list screen are gone.
+
+### Groups
+
+`src/lib/groups.ts`, pure TypeScript, recomputed on every data change by `src/lib/brain.ts`.
+
+1. Every thought starts with its own label. For up to 12 rounds, in id order, each thought takes the label with the greatest total link weight among its neighbours; ties go to the smaller label. This is deterministic and independent of input order.
+2. Labels with two or more thoughts become groups. The rest are "not in a group".
+3. A group's name is the word that scores highest on coverage (share of members using it) × rarity across all thoughts × focus (how much of its use is inside this group), shown in its most common written form. Generic words are excluded, and no two groups share a name.
+4. A group's id is its smallest member id. Colours are assigned in size order.
+5. "Near" groups are those it shares links with, strongest first.
+
+### Link reasons
+
+`whyLinked` gives each linked thought a plain reason: the same website, a shared tag, the one or two longest shared words, or "Linked by you".
+
+### Clipboard
+
+The capture bar asks the system whether the clipboard has text, on launch, on returning to the foreground and when the clipboard changes. If so it shows "Save what you copied". Tapping it reads the clipboard and saves the text as a thought with source `clipboard`; a URL becomes a link thought. The clipboard is never read without that tap.
+
+### Themes
+
+`ThemeProvider` in `src/theme.tsx` resolves the appearance setting (stored in `meta.appearance`) against the system colour scheme and exposes a palette through `useTheme()`. No component hard-codes a colour.
+
+### Removed dependencies
+
+`@shopify/react-native-skia` and the Sora font. Added: `expo-clipboard`, Newsreader and Inter.

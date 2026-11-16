@@ -35,7 +35,7 @@ _15 Nov 2026_
 **Decision.** Expo (CNG, `expo prebuild`) rather than bare React Native, on the current SDK 58 / RN 0.88. Native modules (Skia, SQLite extensions, speech, sharing) rule out Expo Go.
 **Consequences.** `android/` is generated and gitignored; native changes go through config plugins.
 
-## D5. The graph is the home screen
+## D5. The graph is the home screen (superseded by D14)
 
 **Context.** The owner wanted thoughts shown "as an interactive neural network" that looks modern and futuristic.
 **Decision.** A force-directed graph drawn with React Native Skia, laid out by `d3-force`, is the first screen. Capture lives in a dock on top of it.
@@ -73,7 +73,7 @@ _15 Nov 2026_
 **Decision.** SQLite is the source of truth. Writes call `dataChanged()`; screens subscribe with `useDataVersion()` and re-query.
 **Why.** The data set is small and local; a store would duplicate it.
 
-## D11. Design direction: "night water"
+## D11. Design direction: "night water" (superseded by D14)
 
 **Decision.** Deep indigo instead of black, one typeface (Sora), four signal colours mapped to the kinds of thought, and only the graph allowed to glow or move. See `DESIGN.md` for tokens and `research.md` for the award-winning apps used as reference.
 
@@ -87,3 +87,40 @@ _15 Nov 2026_
 
 **Decision.** v1 is signed with the template debug keystore, which is stable across builds so upgrades install cleanly.
 **Revisit** before any Play Store submission (backlog item 7).
+
+## D14. Redesign: a typographic stream with a map of groups
+
+_16 Nov 2026_
+
+**Context.** The owner found the v1 design poor. Reviewing it against Apple's and Google's guidance and recent award winners showed three problems: the home screen had no readable words, capture was a thin bar, and kind was shown by colour alone.
+**Decision.** Three directions were mocked (Atlas, Stream, Orbit). The owner chose Stream's look with Atlas as the map. Home is now a readable stream of today's thoughts; the network appears as a map of named groups; thoughts are always shown as words.
+**Consequences.** The Skia thought-level graph and its gestures were removed, along with the Skia dependency. `docs/DESIGN.md` was rewritten. Mocks live in `docs/design/`.
+
+## D15. Light and true-black themes
+
+**Decision.** Two palettes with the same token names: light, and true black (`#000000`) for AMOLED screens. Settings offers System, Light and Black; System follows the phone.
+**Why not Material's grey dark theme.** The owner asked for AMOLED black. Material's default dark surface is dark grey, which is fine alongside an explicit black option.
+**Revisit if** a softer grey dark theme is wanted as what System maps to.
+
+## D16. Groups are computed, not stored
+
+**Context.** The map needs groups with names; v1 only had pairwise links.
+**Decision.** `src/lib/groups.ts` runs deterministic label propagation over the link graph and names each group after the distinctive word most members share. Groups are recomputed whenever data changes and are never written to the database.
+**Consequences.** No migration. Groups cannot be renamed, merged or pinned by hand yet, and a group's id can change when links change. Names are single words and sometimes odd (a running group may be called "Pace").
+**Revisit** when semantic linking lands, or if hand-edited groups are wanted (that needs a table).
+
+## D17. Clipboard prompt reads only on tap
+
+**Context.** The owner wants home to offer "create from clipboard" when something has been copied.
+**Decision.** The app checks whether the clipboard has text (`hasStringAsync`, which does not read it) and shows a "Save what you copied" prompt. The content is read only when the prompt is tapped.
+**Why.** Reading the clipboard makes Android show a "pasted from your clipboard" notice and iOS show a permission prompt. Doing that on every launch would be intrusive. There is no clipboard permission to declare on Android; a foreground app may read it.
+**Consequences.** The prompt cannot preview what will be saved, and it reappears each time the app returns to the foreground while the clipboard has text.
+
+## D18. Notepad as a full-page editor
+
+**Decision.** The capture field has an expand button that opens `compose.tsx`, a full-page editor for longer notes. A note is an ordinary text thought; its first line is its title in lists. Existing thoughts are edited in place on their own screen.
+**Why.** No new data model, and long notes link and group like everything else.
+
+## D19. New brand: a serif "e" and a full stop
+
+**Decision.** The mark is a Newsreader "e" followed by a dot, paper on cobalt. The wordmark is "engram." It replaces the v1 mark (an "e" drawn as a graph), which belonged to the dark graph design.

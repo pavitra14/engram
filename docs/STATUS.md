@@ -1,28 +1,32 @@
 # Status
 
-_Last updated: 15 Nov 2026, after v1.0.0. Update this file whenever you finish work._
+_Last updated: 16 Nov 2026, v2 redesign on the `redesign-v2` branch. Update this file whenever you finish work._
 
-## Current release
+## Where things are
 
-**v1.0.0**, published 15 Nov 2026: <https://github.com/pavitra14/engram/releases/tag/v1.0.0> (APK `engram-v1.0.0.apk`, arm64, about 50 MB).
+- **v1.0.0** (released 15 Nov 2026) is the original dark graph design: <https://github.com/pavitra14/engram/releases/tag/v1.0.0>.
+- **v2.0.0** is the redesign: light and true-black themes, a readable stream as home, a map of named groups, a notepad editor, a clipboard prompt, and a new icon. It lives on `redesign-v2` and is not released yet.
 
-`main` is ahead of the release by: clearing the selected thought when search opens, and these agent docs.
+## What works in v2
 
-## What works
+Verified by the CI emulator run on Android 14:
 
-Verified by the CI emulator test on Android 14 (Pixel 6 profile), with screenshots in [`screenshots/`](screenshots/):
-
-- App launches, fonts load, empty state shows
-- Sample data loads; the graph lays out, glows and pulses
-- Tapping a thought selects it, dims the rest and shows the card
-- Search from the graph dims non-matches and shows a count
-- Typing a thought in the dock saves it, links it and animates it in
-- List screen with search and filters; thought detail with tags and connections
-- Settings screen renders
-- Sharing text from another app saves it and returns
+- Launch, empty state, loading sample thoughts
+- Today: stream sectioned by day, group pills, placement line on every thought
+- Typing a thought in the capture bar saves it, links it and places it in a group
+- Thought screen: text, group pill, linked thoughts with reasons
+- Map: six named groups laid out without overlapping, ungrouped count, latest thought
+- Group screen with nearby groups
+- Search: counts per kind, a matching group first, matches highlighted
+- Note editor: typing and word count (saving from it was not exercised)
+- Settings renders; the Black override switches the theme
+- Sharing text from another app: saved, placed, sheet shown, app closes
+- The app follows the phone into dark and back to light, including when the switch happens while Engram is closed
 - No crashes in the log across the run
 
-Verified in Node (`npm run check`): migrations, full-text search including prefix and edits, cascade deletes, undirected link constraint, text helpers, linker grouping.
+Screenshots are in [`screenshots/`](screenshots/).
+
+Verified in Node (`npm run check`): migrations, full-text search, cascade deletes, the linker, link explanations, grouping and group naming (including that results do not depend on input order), day labels and search highlighting.
 
 ## Not yet verified
 
@@ -30,18 +34,21 @@ Nobody has run these; treat them as untested, not broken:
 
 - **Install on a real phone** (only the emulator has run it)
 - **Voice notes**: microphone permission, live transcription, the audio-only fallback, playback
-- **Speech pack download** button in Settings
-- **Multi-finger gestures**: pinch zoom and dragging a node (single taps are tested)
+- **The clipboard prompt** (the emulator's clipboard was empty during the test)
 - **Sharing images and audio** (only text was tested)
 - **Backup export and import** round trip
-- **Performance** with hundreds of thoughts on a mid-range phone
+- **Large text sizes** (200% scaling) and screen readers
+- **Performance** with thousands of thoughts: groups are recomputed on every change
 
 ## Known issues and limits
 
-- Auto-linking compares words, not meaning. Paraphrases do not link.
-- Only the newest 400 thoughts are drawn in the graph.
+- Linking and grouping compare words, not meaning. Paraphrases do not link.
+- Group names are one word taken from the thoughts, and can be odd. Groups cannot be renamed or edited by hand.
+- A group's identity can change when links change, so an open group screen may say the group has changed.
+- The share sheet appears over a dimmed Engram screen, not over the app you shared from.
+- The voice screen has no pause.
+- The clipboard prompt cannot preview the content (by design, see `DECISIONS.md` D17).
 - Backups exclude recordings and images.
-- The launcher icon looked slightly washed out on the emulator's home screen; check on a real device.
 - Signed with the debug keystore. Fine for sideloading, not for the Play Store.
 - The smoke test's tap coordinates are hard-coded for 1080×2400.
 
@@ -49,22 +56,21 @@ Nobody has run these; treat them as untested, not broken:
 
 Ordered by priority. Each item has a done-when line so any agent can pick it up.
 
-1. **Verify on a real device.** Install the release on the owner's phone and go through the "Not yet verified" list. Fix what breaks.
-   _Done when:_ every item above is checked off or has an issue filed.
-2. **Semantic linking.** Add an on-device text-embedding model (candidate: `react-native-executorch` with all-MiniLM-L6-v2, 384-d, about 90 MB) behind the existing `related` / `relateAll` interface in `src/lib/linker.ts`. Store vectors with `sqlite-vec` (`expo-sqlite` plugin option `withSQLiteVecExtension`). Download the model on first use with progress; keep TF-IDF as the fallback until it is ready. Note the model is English-only; the owner may want Hindi (see open questions).
-   _Done when:_ two paraphrased thoughts link, linking a new thought takes under 300 ms on a mid-range phone, and the app works fully before the model has downloaded.
-3. **Faster capture surfaces.** Quick Settings tile and a home-screen widget that open straight into voice or text capture. Both need a config plugin with native Kotlin; also consider app-icon shortcuts (`expo-quick-actions` or similar).
-   _Done when:_ a voice note can be started from the notification shade in one tap.
-4. **Graph at scale.** Replace the 400-node cap with clustering (super-nodes that expand on zoom) and move the simulation off the JS thread if it janks.
-   _Done when:_ 2,000 thoughts render and pan at 60 fps on a mid-range phone.
-5. **Labels in the graph.** Show short titles for selected and nearby nodes when zoomed in; name clusters.
+1. **Verify on a real device.** Install v2 on the owner's phone and go through "Not yet verified". Fix what breaks.
+   _Done when:_ every item is checked off or has an issue filed.
+2. **Semantic linking.** Add an on-device text-embedding model (candidate: `react-native-executorch` with all-MiniLM-L6-v2) behind the `related` / `relateAll` interface in `src/lib/linker.ts`, stored with `sqlite-vec`. Keep word overlap as the fallback until the model has downloaded. Groups and their names improve for free.
+   _Done when:_ two paraphrased thoughts link and land in the same group, and the app works fully before the model has downloaded.
+3. **Editable groups.** Rename a group, move a thought between groups, pin a group. Needs a `groups` table and a rule for how hand edits and automatic grouping coexist.
+4. **Translucent share target.** A native transparent activity (config plugin) so the share sheet appears over the app you shared from, as in the mock.
+5. **Faster capture surfaces.** Quick Settings tile, home-screen widget, app-icon shortcuts.
 6. **Media in backups.** Export a zip with the database rows and the `media/` folder.
-7. **Release signing.** Real keystore via CI secrets and a config plugin; enable R8 shrinking to cut APK size.
-8. **iOS.** Share extension, speech path (Apple's on-device recogniser), and a TestFlight build.
+7. **Accessibility pass.** Test at 200% text size and with TalkBack; fix what truncates.
+8. **Release signing and size.** Real keystore via CI secrets; enable R8.
+9. **iOS.** Share extension, Apple's on-device speech recogniser, a TestFlight build. The design already follows the HIG's target sizes, safe areas and back conventions.
 
 ## Open questions for the owner
 
-- Which languages should voice and linking support? Settings currently offers English (India, US, UK) and Hindi for voice; linking is language-agnostic word overlap today.
-- Personal tool only, or headed for the Play Store? This decides when signing and a privacy policy matter.
-- Should images be understood (OCR, image embeddings) or only stored?
-- Encryption at rest (SQLCipher)?
+- Should System dark map to true black (as now) or to a softer grey theme?
+- Which languages should voice support beyond English (India, US, UK) and Hindi?
+- Personal tool only, or headed for the Play Store and App Store?
+- Should images be understood (OCR) or only stored?
