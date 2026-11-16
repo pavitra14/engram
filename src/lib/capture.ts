@@ -8,6 +8,7 @@ import type { NewThought, Thought, ThoughtKind } from '@/db/types';
 
 import { dataChanged } from './bus';
 import { splitQuick } from './capture.logic';
+import { translateLater } from './translate';
 import { type Doc, relateAll, related } from './linker';
 import { embedText, MODEL_ID, modelReady } from './semantic';
 import { firstUrl } from './text';
@@ -22,7 +23,8 @@ async function corpus(db: Db): Promise<Doc[]> {
   for (const p of pairs) tags.set(p.thought_id, [...(tags.get(p.thought_id) ?? []), p.name]);
   return thoughts.map((t) => ({
     id: t.id,
-    text: `${t.title ?? ''} ${t.body}`,
+    // An English version, when there is one, lets a Hindi note link to an English one by its words.
+    text: `${t.title ?? ''} ${t.body} ${t.en_title ?? ''} ${t.en_body ?? ''}`,
     url: t.url,
     tags: tags.get(t.id),
     vec: vectors.get(t.id),
@@ -70,6 +72,7 @@ export async function capture(db: Db, input: NewThought): Promise<Thought> {
   } finally {
     dataChanged(thought.id);
   }
+  translateLater(db, thought.id);
   return thought;
 }
 
@@ -108,6 +111,7 @@ export async function saveNote(db: Db, id: string, note: { title: string; text: 
   await repo.updateThought(db, id, { title: note.title.trim() || null, body: note.text.trim(), body_html: note.html });
   await relink(db, id);
   dataChanged();
+  translateLater(db, id);
 }
 
 // ---------- media files ----------

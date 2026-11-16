@@ -15,8 +15,9 @@ import type { Thought } from '@/db/types';
 import { placement, useBrain } from '@/lib/brain';
 import { type DayEvent, eventsToday, noteForEvent } from '@/lib/calendar';
 import { loadSamples } from '@/lib/samples';
+import { questionFor, weekOf } from '@/lib/habits';
 import { dayLabel, daysAgo, longDate, timeOfDay, when } from '@/lib/text';
-import { type, useTheme } from '@/theme';
+import { font, type, useTheme } from '@/theme';
 
 type HomeView = 'list' | 'split' | 'map';
 
@@ -34,6 +35,7 @@ export default function HomeScreen() {
   const [events, setEvents] = useState<DayEvent[]>([]);
   const [view, setView] = useState<HomeView>('list');
   const [toured, setToured] = useState(false);
+  const [question, setQuestion] = useState<'show' | 'hide'>('hide');
 
   // A new install starts with the tour. A phone that already holds thoughts has no need of it.
   useEffect(() => {
@@ -68,6 +70,10 @@ export default function HomeScreen() {
     useCallback(() => {
       let live = true;
       (async () => {
+        // Today's question shows until it is answered or hidden for the day, unless switched off in Settings.
+        const off = (await repo.getMeta(db, 'daily_question')) === 'off';
+        const hidden = (await repo.getMeta(db, 'question_hidden')) === questionFor();
+        if (live) setQuestion(off || hidden ? 'hide' : 'show');
         const v = await repo.getMeta(db, 'home_view');
         if (live) setView(v === 'split' || v === 'map' ? v : 'list');
         const on = (await repo.getMeta(db, 'calendar')) === 'on';
@@ -118,8 +124,44 @@ export default function HomeScreen() {
       </ScrollView>
     ) : null;
 
+  const ask = questionFor(now);
+  const answered = (brain?.thoughts ?? []).some((t) => t.title === ask && daysAgo(t.created_at) === 0);
+  const week = useMemo(() => weekOf(brain?.thoughts ?? [], now), [brain, now]);
+
   const agenda = (
     <>
+      {question === 'show' && !answered && !empty ? (
+        <View style={[styles.ask, { backgroundColor: c.surface, borderColor: c.line }]}>
+          <Text style={[type.meta, { color: c.soft }]}>Today&rsquo;s question</Text>
+          <Text style={{ fontFamily: font.serifMedium, fontSize: 21, lineHeight: 27, color: c.ink }}>{ask}</Text>
+          <View style={styles.askRow}>
+            <Button title="Answer" tone="solid" onPress={() => router.push({ pathname: '/compose', params: { title: ask } })} />
+            <Button
+              title="Not today"
+              onPress={() => {
+                setQuestion('hide');
+                void repo.setMeta(db, 'question_hidden', ask);
+              }}
+            />
+          </View>
+        </View>
+      ) : null}
+
+      {brain && brain.thoughts.length > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityHint="Opens your weekly review"
+          onPress={() => router.push('/review')}
+          style={({ pressed }) => [styles.week, { opacity: pressed ? 0.6 : 1 }]}>
+          <Feather name="bar-chart-2" size={16} color={c.accent} />
+          <Text style={[type.small, { color: c.ink, flex: 1 }]}>
+            This week: {week.captured} {week.captured === 1 ? 'note' : 'notes'}, {week.done} done
+            {week.streak > 1 ? `, ${week.streak} days in a row` : ''}
+          </Text>
+          <Text style={[type.smallStrong, { color: c.accent }]}>Review</Text>
+        </Pressable>
+      ) : null}
+
       {events.length > 0 ? (
         <View>
           <Text style={[type.labelStrong, styles.heading, { color: c.ink }]}>On your calendar today</Text>
@@ -264,6 +306,9 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  ask: { marginHorizontal: 16, padding: 18, borderRadius: 20, borderWidth: 1, gap: 10 },
+  askRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  week: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingHorizontal: 24 },
   groups: { gap: 8, paddingHorizontal: 24 },
   heading: { paddingHorizontal: 24, paddingBottom: 4 },
   event: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: 24 },

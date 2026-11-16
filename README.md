@@ -4,7 +4,7 @@
 
 Engram is a second brain for your phone. You put a thought in within a couple of seconds, from wherever you are, and it files itself: related thoughts link up and gather into named groups without you sorting anything. Later it helps you come back to them, with reminders, a to-do list, and a button that turns a group of half-ideas into a plan.
 
-Everything stays on your phone. There is no account to make. If you want your notes on more than one device, you can turn on Engram Cloud; it is optional and off until you sign in.
+Everything stays on your phone. There is no account to make. Syncing between devices (Engram Cloud) is built but switched off while it is tested.
 
 <p>
   <img src="docs/screenshots/today.jpg" width="200" alt="Today: your thoughts as a list, with to-dos on top">
@@ -45,19 +45,22 @@ Open a group and Engram can gather it into one note with a line for the next ste
 | **Find** | Full-text search with filters by kind |
 | **Remember** | To-dos with reminders, repeats, an "important" mark, and Done or In an hour buttons on the notification |
 | **Plan** | Add a thought to your calendar. Optionally show your calendar's events and start a note for any of them |
-| **Sync** | Optional Engram Cloud account to see your notes on your other devices |
+| **Translate** | Optionally, an English version of notes written or spoken in other languages, made on the phone |
+| **Review** | A question a day, a weekly review with your streak, and older notes to keep, act on or let go |
+| **Sync** | Optional Engram Cloud account (built, currently switched off) |
 | **Keep** | Light and true-black themes. Export and import a backup file |
 
 ## Private by design
 
-- Your thoughts are stored in a database on the phone. Unless you sign in to Engram Cloud, they are never uploaded.
+- Your thoughts are stored in a database on the phone and are not uploaded.
+- When it starts, the app asks Engram's server which unfinished features are switched on. That request has no account and nothing about you in it.
 - Speech is turned into text by Android's offline recogniser, not a cloud service.
 - "Chat with Claude" and "Chat with ChatGPT" open that app with a draft. Nothing is sent until you send it there.
-- One download happens only if you ask for it: the language model for linking by meaning (about 130 MB).
+- Two downloads happen only if you ask for them: the language model for linking by meaning (about 130 MB), and a language pack per language if you turn on translation (about 30 MB each). Both then run on the phone.
 
-### Engram Cloud (optional)
+### Engram Cloud (optional, not yet switched on)
 
-Sign in under Settings and your notes, to-dos, tags and hand-made links are copied to Engram Cloud and kept in step across your devices. If the same note is changed in two places, both versions are kept. You can sign out or delete the account and its cloud copy at any time; the phone keeps everything.
+This is built and waiting behind a switch while it is tested. When it is on: sign in under Settings and your notes, to-dos, tags and hand-made links are copied to Engram Cloud and kept in step across your devices. If the same note is changed in two places, both versions are kept. You can sign out or delete the account and its cloud copy at any time; the phone keeps everything.
 
 Be clear about what it is: the cloud copy is protected in transit and at rest and only your account can read it through the app, but it is **not end-to-end encrypted**. Photos, videos, recordings and files are not uploaded. Details in [docs/CLOUD.md](docs/CLOUD.md).
 

@@ -13,6 +13,7 @@ import * as repo from '../src/db/repo';
 import { plainDDL } from '../src/db/schema';
 import { type OpResult, type Remote, type RemoteRow, syncOnce } from '../src/cloud/sync';
 import { splitQuick } from '../src/lib/capture.logic';
+import { questionFor, streak, weekOf } from '../src/lib/habits';
 import { computeGroups } from '../src/lib/groups';
 import { meaningSimilarity, related, relateAll, surfaceTokens, tokenize, whyLinked } from '../src/lib/linker';
 import { dayLabel, daysAgo, dueBucket, dueLabel, fileSize, firstUrl, ftsQuery, highlightRuns, hostOf, htmlToText, isFormatted, nextRepeat, textToHtml, titleOf } from '../src/lib/text';
@@ -116,6 +117,18 @@ async function databaseChecks(): Promise<void> {
   assert.equal(await count('thought_tags'), 1);
   assert.equal(await count('embeddings'), 0);
   assert.deepEqual(await found('rye'), []);
+  // An English version sits beside the original, is searchable, and goes when the note goes.
+  await repo.insertThought(db, { id: 'hi', kind: 'text', title: 'आज बाज़ार जाना है', body: '' });
+  await repo.saveTranslation(db, 'hi', 'hi', 'Have to go to the market today', null);
+  assert.deepEqual(await found('market'), ['hi'], 'the English words find the note');
+  assert.equal((await repo.getThought(db, 'hi'))!.en_title, 'Have to go to the market today');
+  assert.equal((await repo.listThoughts(db)).find((t) => t.id === 'hi')!.en_lang, 'hi');
+  await repo.saveTranslation(db, 'b', 'en', null, null);
+  assert.equal((await repo.getThought(db, 'b'))!.en_lang, null, 'a note already in English shows no translation');
+  assert.deepEqual(await repo.idsWithoutTranslation(db), ['c']);
+  await repo.deleteThought(db, 'hi');
+  assert.equal(await count('translations'), 1);
+
   await repo.deleteThought(db, 'b');
   assert.equal(await count('tags'), 0, 'a tag nobody uses is removed');
   await repo.wipeAll(db);
@@ -405,6 +418,31 @@ async function cloudChecks(): Promise<void> {
   await syncOnce(b, cloud.remote, id);
   assert.deepEqual(await repo.tagsOf(b, 'n1'), []);
   repo.setTracking(false);
+}
+
+// --- streaks, the week, and the daily question ---
+{
+  const at = (daysBack: number, hour = 12) => new Date(2026, 10, 16 - daysBack, hour).getTime();
+  const nowH = at(0, 18);
+  assert.equal(streak([], nowH), 0);
+  assert.equal(streak([{ created_at: at(0) }, { created_at: at(1) }, { created_at: at(2) }, { created_at: at(4) }], nowH), 3);
+  assert.equal(streak([{ created_at: at(1) }, { created_at: at(2) }], nowH), 2, 'not having written yet today keeps yesterday\'s streak');
+  assert.equal(streak([{ created_at: at(2) }], nowH), 0, 'a missed day ends it');
+  const w = weekOf(
+    [
+      { created_at: at(0) },
+      { created_at: at(0) },
+      { created_at: at(6) },
+      { created_at: at(9), todo: 1, done_at: at(1) },
+      { created_at: at(9), todo: 1, done_at: null, remind_at: at(2) },
+      { created_at: at(30), todo: 1, done_at: null, remind_at: null },
+    ],
+    nowH,
+  );
+  assert.deepEqual([w.captured, w.done, w.open, w.overdue], [3, 1, 2, 1]);
+  assert.deepEqual(w.perDay, [1, 0, 0, 0, 0, 0, 2]);
+  assert.equal(questionFor(nowH), questionFor(at(0, 1)), 'one question for the whole day');
+  assert.notEqual(questionFor(nowH), questionFor(at(1)));
 }
 
 // --- a quick line is a title ---

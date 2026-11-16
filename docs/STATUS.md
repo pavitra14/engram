@@ -1,12 +1,26 @@
 # Status
 
-_Last updated: 16 Nov 2026, v0.4.0-beta.1. Update this file whenever you finish work._
+_Last updated: 16 Nov 2026, v0.5.0-beta.1. Update this file whenever you finish work._
 
 ## Where things are
 
-- The app is **0.4.0**. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
-- The old `v1.0.0` and `v2.0.0-beta.1` releases still need deleting by hand on GitHub (the agent environment cannot).
-- Issue #2 (Engram Cloud) is partly implemented: phase 1 and part of phase 2. `docs/CLOUD.md` has the table. The agent environment cannot comment on or close issues.
+- The app is **0.5.0**. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
+- **Engram Cloud is switched off** by the `cloud` feature flag (D37). The code and the server side from 0.4 are still there.
+- The old `v1.0.0` and `v2.0.0-beta.1` releases still need deleting by hand on GitHub.
+
+## What 0.5 changed
+
+1. Feature flags read from the server, default off; the cloud is behind one (D37).
+2. The microphone permission is declared again (D38). **Voice notes were broken from 0.2 to 0.4.**
+3. Optional translation into English on the phone (D39).
+4. A question a day, a weekly review, note templates (D40).
+
+### Not verified in 0.5
+
+- **The microphone on a real phone.** The fix was confirmed only by reading the generated manifest. No test has ever recorded audio.
+- **Translation.** `expo-translate-text` has never run here: language detection, the pack download, the result. Only the storage and search of an English version are tested (in Node).
+- That the flag request succeeds from a phone (the emulator screenshot will show whether the cloud section is hidden, which is also what a failed request looks like).
+- The templates' check-list markup in the editor.
 
 ## What 0.4 changed
 

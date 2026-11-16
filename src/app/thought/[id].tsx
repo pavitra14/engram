@@ -22,6 +22,7 @@ import { whyLinked } from '@/lib/linker';
 import { openFile } from '@/lib/open';
 import { type Assistant, chatWith, installedAssistants, planPrompt } from '@/lib/assistants';
 import { addTodo, pickDateTime, reminderPresets, removeTodo, setDone, setImportant } from '@/lib/reminders';
+import { languageName } from '@/lib/translate';
 import { clock, dueLabel, fileSize, hostOf, repeatLabel, when } from '@/lib/text';
 import { font, kindLabel, type, useTheme } from '@/theme';
 
@@ -301,6 +302,18 @@ export default function ThoughtScreen() {
           onFocusBody={setInBody}
           onActive={setActive}
         />
+
+        {thought.en_lang && (thought.en_title || thought.en_body) ? (
+          <View style={{ gap: 6, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.surface }}>
+            <Text style={[type.meta, { color: c.soft }]}>In English, translated on this phone from {languageName(thought.en_lang)}</Text>
+            {thought.en_title ? <Text style={[type.thoughtSmall, { color: c.ink }]}>{thought.en_title}</Text> : null}
+            {thought.en_body ? (
+              <Text selectable style={[type.body, { color: c.ink }]}>
+                {thought.en_body}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {thought.url ? (
           <Pressable

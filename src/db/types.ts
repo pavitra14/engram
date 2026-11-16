@@ -30,6 +30,10 @@ export type Thought = {
   event_at: number | null;
   created_at: number;
   updated_at: number;
+  /** The language this note was written in, when Engram has translated it; with its English title and body. */
+  en_lang?: string | null;
+  en_title?: string | null;
+  en_body?: string | null;
 };
 
 export type Link = {

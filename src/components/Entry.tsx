@@ -79,6 +79,11 @@ export function Entry({
           <Image source={{ uri: thought.media_path }} style={[styles.thumb, { backgroundColor: c.surface }]} accessibilityIgnoresInvertColors />
         ) : null}
       </View>
+      {thought.en_lang && (thought.en_title || thought.en_body) ? (
+        <Text style={[type.small, { color: c.soft }]} numberOfLines={2}>
+          In English: {(thought.en_title || thought.en_body || '').replace(/\s+/g, ' ').slice(0, 160)}
+        </Text>
+      ) : null}
       {thought.title?.trim() && thought.body.trim() ? (
         <Text style={[type.small, { color: c.soft }]} numberOfLines={2}>
           {thought.body.trim().replace(/\s+/g, ' ').slice(0, 180)}

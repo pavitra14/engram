@@ -4,6 +4,7 @@ An optional copy of your notes on a server, so they appear on your other devices
 
 ## The short version
 
+- **Currently switched off for everyone.** Engram Cloud is behind the `cloud` feature flag, which is off. While it is off the Settings section is hidden and the app neither signs in nor syncs. Switch it on with `update public.feature_flags set enabled = true where key = 'cloud';` in the Supabase SQL editor; phones notice at their next start.
 - **Off by default.** With no account, Engram makes no cloud request and records nothing for sending. Every existing feature works as before.
 - **Turn it on** in Settings, Engram Cloud: create an account with an email and password, or sign in. Sign out, or delete the account, in the same place.
 - **What is synced:** notes (title, body, formatting), to-do state and reminder times, tags, and links you make by hand.

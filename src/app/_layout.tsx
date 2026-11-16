@@ -81,6 +81,7 @@ function Screens() {
         <Stack.Screen name="handle-share" options={{ animation: 'slide_from_bottom', animationDuration: 200 }} />
         <Stack.Screen name="samples" options={{ animation: 'none' }} />
         <Stack.Screen name="latest" options={{ animation: 'none' }} />
+        <Stack.Screen name="review" options={{ animation: 'fade_from_bottom', animationDuration: 180 }} />
         <Stack.Screen name="tour" options={{ animation: 'fade', animationDuration: 160, gestureEnabled: false }} />
       </Stack>
       </ThoughtMenuProvider>

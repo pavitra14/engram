@@ -16,6 +16,7 @@ import { rebuildAllLinks } from '@/lib/capture';
 import { reconcileReminders } from '@/lib/reminders';
 
 import * as api from './api';
+import { flagOn, loadFlags } from './flags';
 import { type Remote, type RemoteRow, resetCursor, syncOnce } from './sync';
 
 export type CloudState = {
@@ -75,7 +76,7 @@ let quiet = false;
 
 /** Syncs now. If a sync is already running, waits for that one. */
 export function syncNow(db: Db): Promise<void> {
-  if (!session) return Promise.resolve();
+  if (!session || !flagOn('cloud')) return Promise.resolve();
   running ??= (async () => {
     set({ status: 'syncing', message: null });
     try {
@@ -122,6 +123,10 @@ let started = false;
 export async function startCloud(db: Db): Promise<void> {
   if (started || !api.cloudConfigured) return;
   started = true;
+  // Engram Cloud is behind a switch on the server. While it is off, this phone neither
+  // restores a session nor records changes for sending.
+  await loadFlags(db);
+  if (!flagOn('cloud')) return;
   try {
     const saved = await SecureStore.getItemAsync(KEY);
     if (saved) {

@@ -36,10 +36,6 @@ adb shell input text "Sourdough"; sleep 2; shot 03-typing
 adb shell input keyevent 4; sleep 2
 tap 953 2221; sleep 4; shot 04-captured
 
-# Hold a note in the list: its menu slides up. Back closes it.
-adb shell input swipe 500 800 500 800 700; sleep 2; shot 04b-hold-menu
-adb shell input keyevent 4; sleep 2
-
 # Open the newest thought with its to-do menu, and ask to be reminded in a week
 # (always the second choice from the bottom of the sheet).
 open "engram://latest?menu=todo"; sleep 6; shot 05-thought-todo-menu
@@ -84,6 +80,11 @@ adb shell input keyevent 4; sleep 1
 
 open "engram://map"; sleep 6; shot 16-map
 open "engram://group/largest"; sleep 5; shot 17-group
+# Hold the first note in the group: its menu slides up. Back closes it.
+adb shell input swipe 500 950 500 950 700; sleep 2; shot 17b-hold-menu
+adb shell input keyevent 4; sleep 2
+open "engram://review"; sleep 5; shot 17c-review
+adb shell input keyevent 4; sleep 2
 # A note with a title: type the title, save, and check it appears.
 open "engram://compose"; sleep 5
 adb shell input text "Notepad"; sleep 2; shot 18-compose

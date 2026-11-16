@@ -260,3 +260,14 @@ Reasons: [`DECISIONS.md`](DECISIONS.md) D33 to D36. Cloud details: [`CLOUD.md`](
 - **Clipboard.** A button between the plus button and the field, visible only while the clipboard has text and the field is empty.
 - **Tour.** Five pages: capture, notes, groups and the map, to-dos and resurfacing, privacy and the two optional services. Skip on every page but the last. Stored as `meta.tour_done`.
 - **Engram Cloud.** Settings section with the explanation, email, password, Sign in, Create account; when signed in: the account, a status line (syncing, up to date and when, N changes waiting, or not synced), Sync now, Sign out, Delete my cloud account. Syncs four seconds after a change, on returning to the app, and on demand.
+
+## 16. Version 0.5
+
+Reasons: [`DECISIONS.md`](DECISIONS.md) D37 to D40.
+
+- **Feature flags.** `feature_flags(key, enabled, description, updated_at)`, public read. Known flags: `cloud` (off). Stored on the phone in `meta.flags`.
+- **Engram Cloud** appears in Settings and runs only while `cloud` is on.
+- **Translation.** `meta.translate` = on|off. Table `translations(thought_id, lang, title, body)`; `lang = 'en'` with no text records "already English". Runs after a note is saved or edited, and over all notes when switched on. Switching off deletes the English versions.
+- **A question a day.** Twenty-one questions in rotation. Shown on Today above the to-dos until answered (a note created today whose title is the question) or "Not today" is tapped. `meta.daily_question` = off hides it for good.
+- **Your week** (`/review`): notes captured, to-dos done, still to do, overdue; a bar per day; the group with the most new notes; then older notes one at a time with Keep, Make it a to-do, Let it go (delete). The streak counts consecutive days with a note, ending today or yesterday.
+- **Templates** when starting a note: Idea, Meeting, Book or article, Decision, Day.

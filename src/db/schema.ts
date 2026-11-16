@@ -87,3 +87,7 @@ export const REVS_DDL = 'CREATE TABLE IF NOT EXISTS sync_revs (id TEXT PRIMARY K
 
 /** The thought columns that are sent to the cloud. Device file paths and alarm ids stay on the phone. */
 export const SYNCED_THOUGHT_COLUMNS = THOUGHT_COLUMNS.filter((c) => c !== 'media_path' && c !== 'notif_id');
+
+/** English versions of notes written in other languages, made on the phone when the person asks for them. Derived: never synced. lang 'en' with no text means "checked, already English". */
+export const TRANSLATIONS_DDL =
+  'CREATE TABLE IF NOT EXISTS translations (thought_id TEXT PRIMARY KEY NOT NULL, lang TEXT NOT NULL, title TEXT, body TEXT)';

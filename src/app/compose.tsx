@@ -4,7 +4,8 @@ import { Alert, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, V
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FormatBar, NoteEditor, type NoteEditorHandle } from '@/components/NoteEditor';
-import { RoundButton } from '@/components/ui';
+import { Pill, RoundButton } from '@/components/ui';
+import { TEMPLATES } from '@/lib/habits';
 import { useDb } from '@/db/provider';
 import { captureNote } from '@/lib/capture';
 import { when } from '@/lib/text';
@@ -22,6 +23,8 @@ export default function ComposeScreen() {
   const [saving, setSaving] = useState(false);
   const [inBody, setInBody] = useState(false);
   const [active, setActive] = useState({});
+  // Choosing a template restarts the editor with that outline in it.
+  const [seed, setSeed] = useState<{ key: number; title?: string; html?: string }>({ key: 0 });
   const eventAt = params.event_at ? Number(params.event_at) : null;
 
   const leave = () => (router.canGoBack() ? router.back() : router.replace('/'));
@@ -73,9 +76,27 @@ export default function ComposeScreen() {
         </Pressable>
       </View>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 48 }}>
+        {!typed && !params.text && !params.title ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.templates}>
+            <Text style={[type.meta, { color: c.soft }]}>Start from</Text>
+            {TEMPLATES.map((t) => (
+              <Pill
+                key={t.name}
+                label={t.name}
+                selected={seed.key > 0 && seed.html === t.html}
+                onPress={() => {
+                  setSeed({ key: seed.key + 1, title: t.title, html: t.html });
+                  setHas(true);
+                }}
+              />
+            ))}
+          </ScrollView>
+        ) : null}
         <NoteEditor
+          key={seed.key}
           ref={editor}
-          initialTitle={params.title}
+          initialTitle={seed.title ?? params.title}
+          initialHtml={seed.html}
           initialText={params.text}
           autoFocus={params.title ? 'body' : 'title'}
           bodyPlaceholder="Write here. Lists, headings and check boxes are in the bar above the keyboard."
@@ -93,6 +114,7 @@ export default function ComposeScreen() {
 }
 
 const styles = StyleSheet.create({
+  templates: { alignItems: 'center', gap: 8, paddingBottom: 16 },
   bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingBottom: 8 },
   save: { height: 48, paddingHorizontal: 22, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
 });

@@ -237,3 +237,30 @@ _16 Nov 2026, issue #2._
 - Holding a note in any list opens the same actions as its three-dot menu (`ThoughtMenu`).
 - The "Save what you copied" strip above the bar is gone. A clipboard button appears beside the plus button only while the clipboard holds text. It still reads the clipboard only when tapped.
 - A new install opens on a five-page tour. A phone that already holds thoughts skips it. Settings, Help shows it again.
+
+## D37. Feature flags on the server; Engram Cloud is behind one, off
+
+_16 Nov 2026, owner's request._
+
+**Decision.** A public `feature_flags` table in the project's Supabase database holds one row per flag. The app reads it at launch. Missing, false, or never fetched means off. `cloud` gates everything in Engram Cloud and ships off.
+**The fallback, precisely.** The owner asked for "off" as the fallback. A phone that has never reached the server treats every flag as off. A phone that has reached it remembers the last answer and uses that while offline, because switching the cloud off every time a signed-in phone loses signal would stop it recording changes to send later.
+**Cost.** The app now makes one request at launch even with no account. It carries the project's public key and nothing about the person. The privacy wording in the README and `AGENTS.md` says so.
+**To switch the cloud on:** `update public.feature_flags set enabled = true where key = 'cloud';` Phones pick it up the next time they start.
+**Not done.** Per-person or per-version targeting, percentages.
+
+## D38. Voice notes had no microphone permission
+
+**What happened.** `expo-image-picker` was configured with `microphonePermission: false` when attachments were added (0.2). That option does not mean "the picker does not need it"; it removes `RECORD_AUDIO` from the app. Voice notes could not ask for the microphone from then on. The emulator test cannot use a microphone, so nothing caught it.
+**Fix.** The option now carries the same permission text as the voice features. The generated manifest was read to confirm `RECORD_AUDIO` is declared.
+
+## D39. English versions of notes, on the phone, opt-in
+
+**Decision (owner's request).** Settings, Translation. When on, a note not in English gets an English version stored beside it: shown under the note and under its title in lists, searchable, and used when linking. The original is never changed.
+**How.** `expo-translate-text`, which on Android is Google's ML Kit: it identifies the language and translates on the device. The first note in each language downloads that language's pack (about 30 MB) from Google.
+**"Existing system libraries".** Android has no system translation API an app can call for its own text; ML Kit is the on-device library Google provides for it, and the one the system's own offline translation uses. It adds its native library to the APK.
+**Limits.** ML Kit's quality is "casual"; mixed-language notes are translated by whichever language it detects; formatting is not carried into the English version; nothing is translated out of English.
+
+## D40. A question a day, a weekly review, templates
+
+**Decision.** Three small additions aimed at coming back and at finishing things. Today shows one question a day that becomes a note's title when answered (hide it for the day, or switch it off in Settings). A weekly review shows the week in four numbers and a bar per day, the group most on your mind, and up to five notes untouched for two weeks to keep, turn into a to-do, or delete. A new note can start from one of five outlines.
+**Why these.** Each uses what is already stored and needs no new library or permission.

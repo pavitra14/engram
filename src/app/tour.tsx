@@ -4,6 +4,7 @@ import { type ComponentRef, type ReactNode, useRef, useState } from 'react';
 import { type NativeScrollEvent, type NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useFlag } from '@/cloud/flags';
 import { Button } from '@/components/ui';
 import { useDb } from '@/db/provider';
 import * as repo from '@/db/repo';
@@ -20,6 +21,7 @@ export default function TourScreen() {
   const { width } = useWindowDimensions();
   const pager = useRef<ComponentRef<typeof ScrollView>>(null);
   const [page, setPage] = useState(0);
+  const cloudOn = useFlag('cloud');
 
   const finish = async () => {
     await repo.setMeta(db, 'tour_done', '1');
@@ -105,12 +107,14 @@ export default function TourScreen() {
     },
     {
       title: 'Yours, on this phone',
-      body: 'Everything is stored here. There is no account to make. Two things are optional and off until you turn them on in Settings: Engram Cloud, which keeps a copy and syncs your other devices, and a language model that links notes by what they mean.',
+      body: cloudOn
+        ? 'Everything is stored here. There is no account to make. Two things are optional and off until you turn them on in Settings: Engram Cloud, which keeps a copy and syncs your other devices, and a language model that links notes by what they mean.'
+        : 'Everything is stored here. There is no account to make and nothing is uploaded. In Settings you can turn on two extras that also run on this phone: a language model that links notes by what they mean, and translation of other languages into English.',
       art: (
         <View style={styles.chips}>
           {chip('No account needed', 3)}
           {chip('Works offline', 1)}
-          {chip('Sync is optional', 2)}
+          {chip(cloudOn ? 'Sync is optional' : 'Nothing uploaded', 2)}
         </View>
       ),
     },

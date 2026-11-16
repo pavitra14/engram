@@ -6,6 +6,8 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useFlag } from '@/cloud/flags';
+import { translateAll } from '@/lib/translate';
 import { CloudSection } from '@/components/CloudSection';
 import { ActionSheet } from '@/components/ActionSheet';
 import { Header, Notice } from '@/components/ui';
@@ -107,6 +109,15 @@ export default function SettingsScreen() {
   const params = useLocalSearchParams<{ smart?: string; home?: string }>();
   const [calendar, setCalendar] = useState(false);
   const [choosingLang, setChoosingLang] = useState(false);
+  const cloudOn = useFlag('cloud');
+  const [translate, setTranslate] = useState(false);
+  const [dailyQ, setDailyQ] = useState(true);
+  useEffect(() => {
+    repo.getMeta(db, 'daily_question').then((v) => setDailyQ(v !== 'off'));
+  }, [db]);
+  useEffect(() => {
+    repo.getMeta(db, 'translate').then((v) => setTranslate(v === 'on'));
+  }, [db]);
   const [homeView, setHomeView] = useState<HomeView>('list');
   const [pack, setPack] = useState<'unknown' | 'missing' | 'downloading' | 'installed'>('unknown');
   const polling = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -269,6 +280,18 @@ export default function SettingsScreen() {
             </Text>
           </Section>
 
+          <Section title="Today">
+            <Row
+              title="A question a day"
+              sub={dailyQ ? 'On. Today shows one question you can answer as a note.' : 'Off.'}
+              action={dailyQ ? 'Turn off' : 'Turn on'}
+              onPress={() => {
+                setDailyQ(!dailyQ);
+                void repo.setMeta(db, 'daily_question', dailyQ ? 'off' : 'on');
+              }}
+            />
+          </Section>
+
           <Section title="Voice notes">
             <View>
               <Row title="Voice language" sub={langLabel} action="Change" onPress={() => setChoosingLang(true)} />
@@ -313,6 +336,40 @@ export default function SettingsScreen() {
             </Text>
           </Section>
 
+          <Section title="Translation">
+            <Row
+              title="Translate into English"
+              sub={
+                translate
+                  ? 'On. Notes in other languages get an English version under them.'
+                  : 'Off. Notes stay only in the language you wrote them in.'
+              }
+              action={translate ? 'Turn off' : 'Turn on'}
+              onPress={() =>
+                run(async () => {
+                  const next = !translate;
+                  setTranslate(next);
+                  await repo.setMeta(db, 'translate', next ? 'on' : 'off');
+                  if (!next) {
+                    await repo.dropTranslations(db);
+                    dataChanged();
+                    return 'English versions removed. Your notes are unchanged.';
+                  }
+                  try {
+                    const n = await translateAll(db);
+                    return n === 0 ? 'On. None of your notes needed translating.' : `On. ${n} ${n === 1 ? 'note has' : 'notes have'} an English version now.`;
+                  } catch {
+                    return 'On, but a language pack could not be downloaded just now. Notes will be translated as you save them once you are online.';
+                  }
+                })
+              }
+            />
+            <Text style={[type.meta, { color: c.soft }]}>
+              Translation happens on this phone. Your words are not sent anywhere; the first note in each language downloads a
+              language pack of about 30 MB from Google. The original is always kept.
+            </Text>
+          </Section>
+
           <Section title="Calendar">
             <View>
               <Row
@@ -328,9 +385,11 @@ export default function SettingsScreen() {
             <Row title="The tour" sub="Five short pages on what Engram does and how to use it" action="Show" onPress={() => router.push('/tour')} />
           </Section>
 
-          <Section title="Engram Cloud">
-            <CloudSection />
-          </Section>
+          {cloudOn ? (
+            <Section title="Engram Cloud">
+              <CloudSection />
+            </Section>
+          ) : null}
 
           <Section title="Your thoughts">
             <View>

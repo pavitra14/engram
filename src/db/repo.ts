@@ -10,7 +10,7 @@
 import { ftsQuery } from '@/lib/text';
 
 import type { Db } from './db';
-import { EMBEDDINGS_DDL, OUTBOX_DDL, REVS_DDL, SEARCH_DDL, SYNCED_THOUGHT_COLUMNS, THOUGHT_COLUMNS } from './schema';
+import { EMBEDDINGS_DDL, OUTBOX_DDL, REVS_DDL, SEARCH_DDL, TRANSLATIONS_DDL, SYNCED_THOUGHT_COLUMNS, THOUGHT_COLUMNS } from './schema';
 import type { Link, LinkKind, NewThought, Repeat, Tag, Thought, ThoughtKind } from './types';
 
 const order = (x: string, y: string): [string, string] => (x < y ? [x, y] : [y, x]);
@@ -37,6 +37,7 @@ export async function prepare(db: Db): Promise<void> {
   await db.run(EMBEDDINGS_DDL);
   await db.run(OUTBOX_DDL);
   await db.run(REVS_DDL);
+  await db.run(TRANSLATIONS_DDL);
   try {
     await db.run(SEARCH_DDL);
     searchIndex = true;
@@ -52,18 +53,19 @@ export function hasSearchIndex(): boolean {
 
 async function index(db: Db, id: string, title: string | null, body: string): Promise<void> {
   if (!searchIndex) return;
+  // The English version, when there is one, is searchable alongside the original words.
+  const en = await db.first<{ title: string | null; body: string | null }>('SELECT title, body FROM translations WHERE thought_id = ?', [id]);
+  const extra = en ? [en.title, en.body].filter(Boolean).join('\n') : '';
   await db.run('DELETE FROM thoughts_fts WHERE id = ?', [id]);
-  await db.run('INSERT INTO thoughts_fts (id, title, body) VALUES (?, ?, ?)', [id, title ?? '', body]);
+  await db.run('INSERT INTO thoughts_fts (id, title, body) VALUES (?, ?, ?)', [id, title ?? '', extra ? `${body}\n${extra}` : body]);
 }
 
 /** Rebuilds the search index from the thoughts. */
 export async function reindexSearch(db: Db): Promise<void> {
   if (!searchIndex) return;
   const rows = await db.all<{ id: string; title: string | null; body: string | null }>('SELECT id, title, body FROM thoughts');
-  await db.tx(async (t) => {
-    await t.run('DELETE FROM thoughts_fts');
-    for (const r of rows) await t.run('INSERT INTO thoughts_fts (id, title, body) VALUES (?, ?, ?)', [r.id, r.title ?? '', r.body ?? '']);
-  });
+  await db.run('DELETE FROM thoughts_fts');
+  for (const r of rows) await index(db, r.id, r.title, r.body ?? '');
 }
 
 // ---------- change tracking for Engram Cloud ----------
@@ -90,6 +92,9 @@ async function mark(db: Db, tbl: SyncTable, id: string, del = false): Promise<vo
 
 const COLS = ['id', ...THOUGHT_COLUMNS].join(', ');
 const T_COLS = ['id', ...THOUGHT_COLUMNS].map((c) => `t.${c}`).join(', ');
+// A note's English version, when it has one that differs from the original.
+const EN = `x.lang AS en_lang, x.title AS en_title, x.body AS en_body`;
+const EN_JOIN = `LEFT JOIN translations x ON x.thought_id = t.id AND x.lang <> 'en'`;
 
 /** PowerSync hands back null for a column never written; the app expects these two as numbers and body as text. */
 function tidy<T extends Thought>(t: T): T {
@@ -137,7 +142,7 @@ export async function insertThought(db: Db, t: NewThought): Promise<Thought> {
 }
 
 export async function getThought(db: Db, id: string): Promise<Thought | null> {
-  const t = await db.first<Thought>(`SELECT ${COLS} FROM thoughts WHERE id = ?`, [id]);
+  const t = await db.first<Thought>(`SELECT ${T_COLS}, ${EN} FROM thoughts t ${EN_JOIN} WHERE t.id = ?`, [id]);
   return t ? tidy(t) : null;
 }
 
@@ -147,8 +152,8 @@ export async function listThoughts(
 ): Promise<Thought[]> {
   return tidyAll(
     kind
-      ? await db.all<Thought>(`SELECT ${COLS} FROM thoughts WHERE kind = ? ORDER BY created_at DESC LIMIT ?`, [kind, limit])
-      : await db.all<Thought>(`SELECT ${COLS} FROM thoughts ORDER BY created_at DESC LIMIT ?`, [limit]),
+      ? await db.all<Thought>(`SELECT ${T_COLS}, ${EN} FROM thoughts t ${EN_JOIN} WHERE t.kind = ? ORDER BY t.created_at DESC LIMIT ?`, [kind, limit])
+      : await db.all<Thought>(`SELECT ${T_COLS}, ${EN} FROM thoughts t ${EN_JOIN} ORDER BY t.created_at DESC LIMIT ?`, [limit]),
   );
 }
 
@@ -204,6 +209,7 @@ async function eraseThought(t: Db, id: string): Promise<void> {
   await t.run('DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM thought_tags)');
   await t.run('DELETE FROM embeddings WHERE thought_id = ?', [id]);
   await t.run('DELETE FROM sync_revs WHERE id = ?', [id]);
+  await t.run('DELETE FROM translations WHERE thought_id = ?', [id]);
   if (searchIndex) await t.run('DELETE FROM thoughts_fts WHERE id = ?', [id]);
   await t.run('DELETE FROM thoughts WHERE id = ?', [id]);
 }
@@ -331,6 +337,33 @@ export async function dropEmbeddings(db: Db): Promise<void> {
   await db.run('DELETE FROM embeddings');
 }
 
+// ---------- English versions ----------
+
+/** Saves a note's English version (or, with lang 'en', records that it needs none) and makes it searchable. */
+export async function saveTranslation(db: Db, id: string, lang: string, title: string | null, body: string | null): Promise<void> {
+  await db.run(
+    `INSERT INTO translations (thought_id, lang, title, body) VALUES (?, ?, ?, ?)
+     ON CONFLICT (thought_id) DO UPDATE SET lang = excluded.lang, title = excluded.title, body = excluded.body`,
+    [id, lang, title, body],
+  );
+  const t = await db.first<{ title: string | null; body: string | null }>('SELECT title, body FROM thoughts WHERE id = ?', [id]);
+  if (t) await index(db, id, t.title, t.body ?? '');
+}
+
+export async function idsWithoutTranslation(db: Db, limit = 300): Promise<string[]> {
+  const rows = await db.all<{ id: string }>(
+    `SELECT t.id FROM thoughts t LEFT JOIN translations x ON x.thought_id = t.id
+     WHERE x.thought_id IS NULL ORDER BY t.created_at DESC LIMIT ?`,
+    [limit],
+  );
+  return rows.map((r) => r.id);
+}
+
+export async function dropTranslations(db: Db): Promise<void> {
+  await db.run('DELETE FROM translations');
+  await reindexSearch(db);
+}
+
 // ---------- links ----------
 
 export function listLinks(db: Db): Promise<Link[]> {
@@ -450,7 +483,7 @@ export async function wipeAll(db: Db): Promise<void> {
         for (const r of await t.all<{ id: string }>(`SELECT id FROM ${tbl}${where}`)) await mark(t, tbl, r.id, true);
       }
     }
-    for (const table of ['links', 'thought_tags', 'tags', 'embeddings', 'sync_revs', 'thoughts']) await t.run(`DELETE FROM ${table}`);
+    for (const table of ['links', 'thought_tags', 'tags', 'embeddings', 'sync_revs', 'translations', 'thoughts']) await t.run(`DELETE FROM ${table}`);
     if (searchIndex) await t.run('DELETE FROM thoughts_fts');
   });
 }

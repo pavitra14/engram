@@ -100,7 +100,7 @@ export function rpc<T>(name: string, args: Record<string, unknown>, token: strin
   return call(`/rest/v1/rpc/${name}`, { token, body: args }) as Promise<T>;
 }
 
-export function select<T>(query: string, token: string): Promise<T> {
+export function select<T>(query: string, token?: string): Promise<T> {
   return call(`/rest/v1/${query}`, { method: 'GET', token }) as Promise<T>;
 }
 
