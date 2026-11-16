@@ -20,6 +20,9 @@ adb shell settings put global hide_error_dialogs 1 || true
 sleep 20
 adb install -r "$APK" || exit 1
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS || true
+# A share started from adb cannot hand over read access the way a real app does,
+# so the test lets Engram read shared storage. Real shares do not need this.
+adb shell appops set "$PKG" MANAGE_EXTERNAL_STORAGE allow || true
 adb logcat -c
 adb shell cmd uimode night no
 
@@ -35,7 +38,7 @@ adb shell input keyevent 4; sleep 2
 tap 953 2221; sleep 4; shot 04-captured
 
 # Open it (first in the stream), put it on the to-do list with a reminder in a week.
-tap 500 900; sleep 4; shot 05-thought
+tap 500 720; sleep 4; shot 05-thought
 tap 195 585; sleep 2; shot 06-todo-menu
 tap 540 2084; sleep 4; shot 07-thought-reminder
 adb shell input keyevent 4; sleep 3; shot 08-home-todo
@@ -65,6 +68,7 @@ for i in $(seq 1 30); do
   sleep 10
   if adb logcat -d -s ReactNativeJS | grep -q "engram: meaning ready"; then break; fi
   if adb logcat -d -s ReactNativeJS | grep -q "engram: meaning error"; then break; fi
+  if adb logcat -d -s ReactNativeJS | grep -q "engram: model check"; then sleep 20; break; fi
 done
 sleep 3; shot 14-meaning-done
 open "engram://search?q=garage"; sleep 5; shot 15-after-meaning

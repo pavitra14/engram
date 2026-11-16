@@ -1,6 +1,13 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { type SharePayload, useIncomingShare } from 'expo-sharing';
+import {
+  clearSharedPayloads,
+  getResolvedSharedPayloadsAsync,
+  getSharedPayloads,
+  type ResolvedSharePayload,
+  type SharePayload,
+} from 'expo-sharing';
+import { File } from 'expo-file-system';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useRef, useState } from 'react';
 import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -17,15 +24,34 @@ import { type, useTheme } from '@/theme';
 
 type State = { phase: 'saving' } | { phase: 'saved'; first: Thought; count: number; where: string } | { phase: 'failed'; message: string };
 
-async function savePayload(db: ReturnType<typeof useSQLiteContext>, p: SharePayload): Promise<Thought | null> {
+const isWords = (p: SharePayload) => p.shareType === 'text' || p.shareType === 'url';
+
+/** The copy of a shared file that the share library made in Engram's cache, if it made one. */
+function cachedCopy(r: ResolvedSharePayload | undefined): string | null {
+  const uri = r?.contentUri;
+  if (!uri || !uri.startsWith('file:')) return null;
+  try {
+    return new File(uri).exists ? uri : null;
+  } catch {
+    return null;
+  }
+}
+
+async function savePayload(
+  db: ReturnType<typeof useSQLiteContext>,
+  p: SharePayload,
+  resolved: ResolvedSharePayload | undefined,
+): Promise<Thought | null> {
   const value = p.value?.trim();
   if (!value) return null;
-  const kind = p.shareType ?? 'text';
+  const kind = p.shareType;
   if (kind === 'text' || kind === 'url') return captureText(db, value, 'share');
   if (kind === 'image' || kind === 'video' || kind === 'audio' || kind === 'file') {
     // A shared "file" whose value is really a web address is kept as a link.
     if (kind === 'file' && /^https?:\/\//i.test(value)) return captureText(db, value, 'share');
-    return captureFile(db, value, { mimeType: p.mimeType ?? undefined, source: 'share' });
+    const mimeType = resolved?.contentMimeType ?? p.mimeType ?? undefined;
+    const name = resolved?.originalName && resolved.originalName !== 'unknown' ? resolved.originalName : undefined;
+    return captureFile(db, cachedCopy(resolved) ?? value, { mimeType, name, source: 'share' });
   }
   return firstUrl(value) ? captureText(db, value, 'share') : null;
 }
@@ -38,7 +64,9 @@ export default function HandleShareScreen() {
   const db = useSQLiteContext();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
-  const { sharedPayloads, clearSharedPayloads } = useIncomingShare();
+  // Read once, directly. The library's hook also "resolves" every share, which for a shared
+  // web address means fetching it. Engram never goes online with what you share.
+  const [sharedPayloads] = useState<SharePayload[]>(() => getSharedPayloads());
   const [state, setState] = useState<State>({ phase: 'saving' });
   const [stay, setStay] = useState(false);
   const handled = useRef(false);
@@ -54,9 +82,15 @@ export default function HandleShareScreen() {
     handled.current = true;
     (async () => {
       try {
+        // Files are copied into Engram's cache by the share library; that step is local.
+        // It is skipped when the share is words or a web address, because there it would go online.
+        let resolved: ResolvedSharePayload[] = [];
+        if (!sharedPayloads.some(isWords)) {
+          resolved = await getResolvedSharedPayloadsAsync().catch(() => []);
+        }
         const saved: Thought[] = [];
         for (const p of sharedPayloads) {
-          const t = await savePayload(db, p);
+          const t = await savePayload(db, p, resolved.find((r) => r.value === p.value));
           if (t) saved.push(t);
         }
         clearSharedPayloads();
@@ -71,7 +105,7 @@ export default function HandleShareScreen() {
         setState({ phase: 'failed', message: 'The item could not be copied into Engram. Try sharing it again.' });
       }
     })();
-  }, [db, sharedPayloads, clearSharedPayloads]);
+  }, [db, sharedPayloads]);
 
   const leave = () => {
     router.replace('/');
