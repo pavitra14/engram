@@ -62,7 +62,10 @@ export function loadModel(): Promise<void> {
       const rne = require('react-native-executorch') as typeof import('react-native-executorch');
       // The library reports model downloads to its maker by default. Engram does not.
       rne.setTelemetryEnabled(false);
-      const model = rne.models.textEmbeddings.DISTILUSE_BASE_MULTILINGUAL_CASED_V2.DEFAULT;
+      // The processor build, chosen by name. The library's DEFAULT on Android is the
+      // graphics-chip (Vulkan) build, which returned the same vector for every sentence
+      // on the test emulator and depends on each phone's graphics driver.
+      const model = rne.models.textEmbeddings.DISTILUSE_BASE_MULTILINGUAL_CASED_V2.XNNPACK_8DA4W;
       setSemanticState({ status: 'downloading', progress: 0, message: undefined });
       const local = await rne.download(model, { onProgress: (p) => setSemanticState({ progress: p }) });
       const made: Embedder = await rne.createTextEmbedder(local);
