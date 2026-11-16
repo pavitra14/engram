@@ -9,6 +9,7 @@ This file is the entry point for any coding agent (Claude Code, Codex, Cursor, C
 | Read | When |
 |---|---|
 | [`docs/STATUS.md`](docs/STATUS.md) | Always. What works, what is unverified, and the prioritised backlog. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Before building anything new. What the owner has committed to, and ideas not yet chosen. |
 | [`docs/SPEC.md`](docs/SPEC.md) | Before changing behaviour. The product and technical spec as built. |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | Before touching UI. Palette, type, motion, copy rules, logo. |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Before reversing a choice. Why things are the way they are. |

@@ -120,21 +120,17 @@ On the Android 14 emulator, from the 0.3.0-beta.1 run's screenshots and log:
 
 ## Backlog
 
-Ordered by priority. Each item has a done-when line so any agent can pick it up.
+New features are in [`ROADMAP.md`](ROADMAP.md). This list is for fixing and checking what exists. Each item has a done-when line.
 
-0. **Tune linking by meaning on real notes.** The self-check passes on the emulator with a narrow margin. Collect the similarity spread from the owner's phone (logged as `engram: meaning ready; …`) and adjust `MEANING_*` in `linker.ts`.
+0. **Check 0.5 on the owner's phone.** Microphone prompt and recording, translation, the clipboard button, the weekly review, templates.
+   _Done when:_ each is confirmed or has an issue filed.
+1. **Tune linking by meaning on real notes.** The self-check passes on the emulator with a narrow margin. Collect the similarity spread from the owner's phone (logged as `engram: meaning ready; …`) and adjust `MEANING_*` in `linker.ts`.
    _Done when:_ the car and garage pair in the sample data links on a real phone and unrelated notes do not.
-1. **Verify on a real device.** Install v2 on the owner's phone and go through "Not yet verified". Fix what breaks.
-   _Done when:_ every item is checked off or has an issue filed.
-2. **Semantic linking.** Add an on-device text-embedding model (candidate: `react-native-executorch` with all-MiniLM-L6-v2) behind the `related` / `relateAll` interface in `src/lib/linker.ts`, stored with `sqlite-vec`. Keep word overlap as the fallback until the model has downloaded. Groups and their names improve for free.
-   _Done when:_ two paraphrased thoughts link and land in the same group, and the app works fully before the model has downloaded.
-3. **Editable groups.** Rename a group, move a thought between groups, pin a group. Needs a `groups` table and a rule for how hand edits and automatic grouping coexist.
-4. **Translucent share target.** A native transparent activity (config plugin) so the share sheet appears over the app you shared from, as in the mock.
-5. **Faster capture surfaces.** Quick Settings tile, home-screen widget, app-icon shortcuts.
-6. **Media in backups.** Export a zip with the database rows and the `media/` folder.
-7. **Accessibility pass.** Test at 200% text size and with TalkBack; fix what truncates.
-8. **Release signing and size.** Real keystore via CI secrets; enable R8.
-9. **iOS.** Share extension, Apple's on-device speech recogniser, a TestFlight build. The design already follows the HIG's target sizes, safe areas and back conventions.
+2. **Try Engram Cloud end to end**, then switch its flag on. See `CLOUD.md`, "Things only the owner can do".
+   _Done when:_ sign-up, confirmation, sign-in, sync between two devices and account deletion each work once.
+3. **Translucent share target.** A native transparent activity (config plugin) so the share sheet appears over the app you shared from.
+4. **Backups include files and recordings.**
+5. **A real signing key** before any Play Store submission.
 
 ## Open questions for the owner
 
