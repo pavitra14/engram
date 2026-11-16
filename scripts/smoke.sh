@@ -9,20 +9,15 @@ PKG=com.pavitra14.engram
 OUT=smoke
 mkdir -p "$OUT"
 
-# The emulator's own launcher sometimes hangs and puts a "not responding" dialog
-# over everything. Tap Wait so it does not swallow the test's taps.
-calm() {
-  if adb shell dumpsys window 2>/dev/null | grep -q "Application Not Responding"; then
-    adb shell input tap 540 1360; sleep 1
-  fi
-}
-shot() { calm; adb exec-out screencap -p > "$OUT/$1.png"; }
-tap() { calm; tap "$1" "$2"; }
+shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
+tap() { adb shell input tap "$1" "$2"; }
 open() { adb shell am start -W -a android.intent.action.VIEW -d "$1" "$PKG" >/dev/null; }
 launch() { adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null; }
 
+# The emulator's own launcher sometimes hangs and puts a "not responding" dialog over
+# everything, swallowing the test's taps. Hide such dialogs and let the system settle.
 adb shell settings put global hide_error_dialogs 1 || true
-sleep 15
+sleep 20
 adb install -r "$APK" || exit 1
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS || true
 adb logcat -c
