@@ -16,7 +16,18 @@ _Last updated: 16 Nov 2026, v0.4.0-beta.1. Update this file whenever you finish 
 4. The clipboard prompt is a button beside the plus button.
 5. A first-run tour.
 
+### Verified in 0.4 on the emulator (run for `release/v0.4.0-beta.1`, screenshots on `smoke-shots-release-v0.4.0-beta.1`)
+
+- A new install opens on the tour; Next moves to the second page
+- A typed line is saved as the note's title, with "Write here" in the empty body
+- Holding a note opens its menu (Open, Add to my to-do list, Remind me tomorrow, Add to calendar, Copy text, Delete)
+- The "Map and list" and "Map" home layouts (unverified in 0.3, now seen)
+- Settings shows Help and the Engram Cloud sign-in form, so the build picked up the cloud address from the repository secrets
+- No crash, no `engram:` error lines
+
 ### Not verified in 0.4
+
+- The clipboard button: the emulator's clipboard was empty, so it never appeared.
 
 - Everything in Engram Cloud beyond the database tests and the two-simulated-phones test: the HTTP calls, sign-up and its email, sign-in, session refresh, sync from a device, account deletion.
 - The `delete-account` Edge Function has been deployed and never called.
@@ -62,7 +73,6 @@ On the Android 14 emulator, from the 0.3.0-beta.1 run's screenshots and log:
 
 ## Not verified by anyone
 
-- **The two new home layouts.** The walkthrough photographed the wrong screen for both (it was still on a group screen); `smoke.sh` is fixed for the next run. They reuse the map drawing that is verified on the Map screen.
 - **The old-database import on a phone.** The emulator starts empty, so only the Node tests cover it.
 - **Formatting buttons, drawn widgets, notification buttons, how the transitions feel.** The walkthrough types and takes still pictures; it does not press these.
 - **Does a PowerSync table behave like the plain tables the tests use?** The tests cannot tell. Watch for errors mentioning views or triggers.

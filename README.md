@@ -8,7 +8,7 @@ Everything stays on your phone. There is no account to make. If you want your no
 
 <p>
   <img src="docs/screenshots/today.jpg" width="200" alt="Today: your thoughts as a list, with to-dos on top">
-  <img src="docs/screenshots/map.jpg" width="200" alt="The map: groups of related thoughts as named circles">
+  <img src="docs/screenshots/home-split.jpg" width="200" alt="Home with the map of groups above the list">
   <img src="docs/screenshots/note.jpg" width="200" alt="A note, linked by meaning to another that shares no words with it">
   <img src="docs/screenshots/today-black.jpg" width="200" alt="Today in the true-black theme">
 </p>
