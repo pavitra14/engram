@@ -66,14 +66,18 @@ jobs:
       - name: Build the emulator APK (x86_64)
         working-directory: android
         run: |
-          ./gradlew assembleRelease --no-daemon --build-cache -PreactNativeArchitectures=x86_64
+          # One retry: the runner's download of the Android NDK sometimes arrives corrupt.
+          ./gradlew assembleRelease --no-daemon --build-cache -PreactNativeArchitectures=x86_64 \
+            || { echo "The build failed; trying once more."; ./gradlew assembleRelease --no-daemon --build-cache -PreactNativeArchitectures=x86_64; }
           mkdir -p ../out
           cp app/build/outputs/apk/release/app-release.apk ../out/engram-x86_64.apk
       - name: Build the phone APK (arm64)
         if: env.RELEASING == 'true'
         working-directory: android
         run: |
-          ./gradlew assembleRelease --no-daemon --build-cache -PreactNativeArchitectures=arm64-v8a
+          # One retry: the runner's download of the Android NDK sometimes arrives corrupt.
+          ./gradlew assembleRelease --no-daemon --build-cache -PreactNativeArchitectures=arm64-v8a \
+            || { echo "The build failed; trying once more."; ./gradlew assembleRelease --no-daemon --build-cache -PreactNativeArchitectures=arm64-v8a; }
           cp app/build/outputs/apk/release/app-release.apk ../out/engram.apk
           ls -lh ../out
       - uses: actions/upload-artifact@v4
