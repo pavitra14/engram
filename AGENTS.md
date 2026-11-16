@@ -108,6 +108,8 @@ These caught the first build out. The installed versions behave this way:
 - **`StyleSheet.absoluteFillObject` does not exist** in RN 0.88 types. Use `StyleSheet.absoluteFill` or spell out `position: 'absolute', top: 0, ...`.
 - **`expo-file-system`** uses the `File` / `Directory` / `Paths` classes. `new File(contentUri).copy(dest)` imports a shared `content://` file.
 - **`expo-sharing`** receives shares on Android via its config plugin (`android.enabled`, MIME type lists) and `useIncomingShare()`. Payloads have `value`, `shareType` and `mimeType`.
+- **`expo-sharing`'s `useIncomingShare()` hook goes online**: it resolves every share, and for a shared web address that is an HTTP request to it. Use `getSharedPayloads()` and call `getResolvedSharedPayloadsAsync()` only for file shares, as `handle-share.tsx` does.
+- **`new File(uri).copy()` rejects `content://` addresses.** Import with `copyAsync` from `expo-file-system/legacy`.
 - **`expo-speech-recognition`** emits `result`, `volumechange`, `audioend` (with the saved WAV URI when `recordingOptions.persist` is true), `error` and `end`. On-device recognition needs Android 13+ and an installed offline speech pack.
 - **React Compiler is off.** The template enabled `experiments.reactCompiler`; it was removed during the first build and has not been re-tested since. Its lint rules still run, so code must pass them.
 

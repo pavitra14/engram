@@ -1,61 +1,52 @@
 # Status
 
-_Last updated: 16 Nov 2026, v2 redesign on the `redesign-v2` branch. Update this file whenever you finish work._
+_Last updated: 16 Nov 2026, v2.0.0-beta.1 on `main`. Update this file whenever you finish work._
 
 ## Where things are
 
-- **v1.0.0** (released 15 Nov 2026) is the original dark graph design: <https://github.com/pavitra14/engram/releases/tag/v1.0.0>.
-- **v2.0.0** is the redesign: light and true-black themes, a readable stream as home, a map of named groups, a notepad editor, a clipboard prompt, and a new icon. It lives on `redesign-v2` and is not released yet.
+- **v1.0.0** (15 Nov 2026) is the original dark graph design: <https://github.com/pavitra14/engram/releases/tag/v1.0.0>.
+- **v2.0.0-beta.1** is the redesign plus files, to-dos and reminders, calendar, and experimental linking by meaning. Work is pushed straight to `main`; every release is a beta (pre-release) until the owner says otherwise.
 
-## What works in v2
+## What works
 
-Verified by the CI emulator run on Android 14:
+Verified by the CI emulator run on Android 14 (screenshots on the `smoke-shots` branch):
 
-- Launch, empty state, loading sample thoughts
-- Today: stream sectioned by day, group pills, placement line on every thought
-- Typing a thought in the capture bar saves it, links it and places it in a group
-- Thought screen: text, group pill, linked thoughts with reasons
-- Map: six named groups laid out without overlapping, ungrouped count, latest thought
-- Group screen with nearby groups
-- Search: counts per kind, a matching group first, matches highlighted
-- Note editor: typing and word count (saving from it was not exercised)
-- Settings renders; the Black override switches the theme
-- Sharing text from another app: saved, placed, sheet shown, app closes
-- The app follows the phone into dark and back to light, including when the switch happens while Engram is closed
+- Launch, empty state, loading sample thoughts, upgrade-safe database migration 2
+- Today: stream by day, group pills, a To do section, four header buttons, the attach (+) button
+- Typing a thought saves it, links it and places it in a group
+- Thought screen: To do pill and its menu; "Remind me: in a week" puts the thought on the list, shows the time, and schedules an alarm with Android (seen in `dumpsys alarm`)
+- To do screen: open items with their reminder time
+- Map, group screen, search (with a `q` parameter), note editor, settings
+- Sharing text in from another app
+- The model self-check: a model that cannot tell a paraphrase from an unrelated sentence is refused and Settings says so
+- Light and true-black themes following the phone
 - No crashes in the log across the run
 
-Screenshots are in [`screenshots/`](screenshots/).
+Verified in Node (`npm run check`): migrations including the v1 to v2 upgrade (thoughts, links, tags and search survive), full-text search, cascades, the linker, meaning-based linking with made-up vectors (three topics stay three groups even when every pair looks similar), grouping, reminder labels, file sizes.
 
-Verified in Node (`npm run check`): migrations, full-text search, cascade deletes, the linker, link explanations, grouping and group naming (including that results do not depend on input order), day labels and search highlighting.
+## Not working or not verified
 
-## Not yet verified
-
-Nobody has run these; treat them as untested, not broken:
-
-- **Install on a real phone** (only the emulator has run it)
-- **Voice notes**: microphone permission, live transcription, the audio-only fallback, playback
-- **The clipboard prompt** (the emulator's clipboard was empty during the test)
-- **Sharing images and audio** (only text was tested)
-- **Backup export and import** round trip
-- **Large text sizes** (200% scaling) and screen readers
-- **Performance** with thousands of thoughts: groups are recomputed on every change
+- **Linking by meaning has never produced good links.** On the x86_64 emulator, `react-native-executorch` 0.11 with `DISTILUSE_BASE_MULTILINGUAL_CASED_V2.DEFAULT` returns nearly the same vector for every sentence (self-check: pair 0.937, unrelated 0.936; on a second load all 1.0). The app detects this and stays on word linking. Unknown: whether a real arm64 phone behaves the same, and whether another model variant works. A `redesign-diag` branch tries the variants on the emulator; see its `smoke-shots-redesign-diag` log.
+- **Sharing a picture in** failed in the emulator test until run of 16 Nov; the test's share did not carry read access the way a real app's does. Check the latest `10-share-image` screenshot before trusting it.
+- Never run by anyone: install on a real phone; voice notes; the clipboard prompt; the photo, video and file pickers; opening a saved video or document in another app; the date and time picker; a reminder notification arriving and being tapped; "Add to calendar"; today's events on Today; backup export and import; large text sizes and screen readers; performance with thousands of thoughts.
 
 ## Known issues and limits
 
-- Linking and grouping compare words, not meaning. Paraphrases do not link.
-- Group names are one word taken from the thoughts, and can be odd. Groups cannot be renamed or edited by hand.
-- A group's identity can change when links change, so an open group screen may say the group has changed.
+- Group names are one word taken from the thoughts, and can be odd. Groups cannot be renamed.
+- Files are not read: a PDF or picture links only by its name and any note added to it.
+- No repeating reminders. Reminders are not rescheduled after a backup is restored on another phone.
 - The share sheet appears over a dimmed Engram screen, not over the app you shared from.
-- The voice screen has no pause.
-- The clipboard prompt cannot preview the content (by design, see `DECISIONS.md` D17).
-- Backups exclude recordings and images.
+- Backups exclude files, pictures and recordings.
 - Signed with the debug keystore. Fine for sideloading, not for the Play Store.
 - The smoke test's tap coordinates are hard-coded for 1080×2400.
+- Until 16 Nov the share screen used `useIncomingShare`, which fetches any shared web address to "resolve" it. That broke the nothing-leaves-the-device rule (v1.0.0 has it). `handle-share.tsx` now reads shares directly; do not reintroduce the hook.
 
 ## Backlog
 
 Ordered by priority. Each item has a done-when line so any agent can pick it up.
 
+0. **Make linking by meaning work, or remove it.** Find out from the `redesign-diag` run and the owner's phone whether any model variant passes the self-check. If one does, switch `semantic.ts` to it and tune `MEANING_*` in `linker.ts` on real notes. If none does, try another runtime or drop the dependency (it adds native libraries to the APK).
+   _Done when:_ the paraphrase pair in the sample data links on a real phone, or the feature and dependency are gone.
 1. **Verify on a real device.** Install v2 on the owner's phone and go through "Not yet verified". Fix what breaks.
    _Done when:_ every item is checked off or has an issue filed.
 2. **Semantic linking.** Add an on-device text-embedding model (candidate: `react-native-executorch` with all-MiniLM-L6-v2) behind the `related` / `relateAll` interface in `src/lib/linker.ts`, stored with `sqlite-vec`. Keep word overlap as the fallback until the model has downloaded. Groups and their names improve for free.

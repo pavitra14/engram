@@ -20,9 +20,6 @@ adb shell settings put global hide_error_dialogs 1 || true
 sleep 20
 adb install -r "$APK" || exit 1
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS || true
-# A share started from adb cannot hand over read access the way a real app does,
-# so the test lets Engram read shared storage. Real shares do not need this.
-adb shell appops set "$PKG" MANAGE_EXTERNAL_STORAGE allow || true
 adb logcat -c
 adb shell cmd uimode night no
 
@@ -51,7 +48,10 @@ adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:
 IMG_ID=$(adb shell content query --uri content://media/external/images/media --projection _id | tr -d '\r' | sed -n 's/.*_id=\([0-9]*\).*/\1/p' | tail -1)
 echo "image id: ${IMG_ID:-none}"
 if [ -n "${IMG_ID:-}" ]; then
+  # Read access is only handed over for the intent's own address, so it is set as well as
+  # the extra. (A real app's share carries it automatically.)
   adb shell am start -W -a android.intent.action.SEND -t image/png \
+    -d "content://media/external/images/media/$IMG_ID" \
     --eu android.intent.extra.STREAM "content://media/external/images/media/$IMG_ID" \
     --grant-read-uri-permission "$PKG" >/dev/null
   sleep 3; shot 10-share-image
