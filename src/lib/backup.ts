@@ -1,7 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { Db } from '@/db/db';
 
 import * as repo from '@/db/repo';
 import type { Link, Thought } from '@/db/types';
@@ -18,7 +18,7 @@ type Backup = {
 };
 
 /** Writes every thought, link and tag to a JSON file and opens the share sheet. */
-export async function exportBackup(db: SQLiteDatabase): Promise<number> {
+export async function exportBackup(db: Db): Promise<number> {
   const [thoughts, links, tags] = await Promise.all([
     repo.listThoughts(db, { limit: 100000 }),
     repo.listLinks(db),
@@ -35,7 +35,7 @@ export async function exportBackup(db: SQLiteDatabase): Promise<number> {
 }
 
 /** Merges a backup file into this device. Existing thoughts (same id) are kept as they are. */
-export async function importBackup(db: SQLiteDatabase): Promise<{ added: number; skipped: number } | null> {
+export async function importBackup(db: Db): Promise<{ added: number; skipped: number } | null> {
   const picked = await DocumentPicker.getDocumentAsync({
     type: ['application/json', 'text/plain', '*/*'],
     copyToCacheDirectory: true,

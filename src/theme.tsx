@@ -1,4 +1,4 @@
-import { useSQLiteContext } from 'expo-sqlite';
+import { useDb } from '@/db/provider';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Appearance, AppState } from 'react-native';
 
@@ -136,7 +136,7 @@ function readSystemScheme(): 'light' | 'dark' {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const [system, setSystem] = useState<'light' | 'dark'>(readSystemScheme);
   const [appearance, setState] = useState<AppearanceSetting>('system');
 

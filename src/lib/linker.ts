@@ -32,12 +32,13 @@ export const LINK_TOP_K = 4;
  * neighbours) and the pair stands out from that thought's usual similarity.
  */
 export const MEANING_NEIGHBOURS = 3;
-export const MEANING_FLOOR = 0.35;
+/** Measured on the test emulator with the model in semantic.ts: unrelated notes score about 0.08, the 90th percentile is 0.28, and a clear paraphrase 0.28 to 0.6. */
+export const MEANING_FLOOR = 0.25;
 /** Below this many thoughts there is no "usual similarity" to compare with, so a fixed bar is used. */
 const MEANING_SMALL_CORPUS = 20;
-const MEANING_SMALL_BAR = 0.5;
+const MEANING_SMALL_BAR = 0.25;
 /** How many standard deviations above a thought's average similarity a neighbour must be. */
-const MEANING_STAND_OUT = 1;
+const MEANING_STAND_OUT = 1.25;
 
 const STOP = new Set(
   (

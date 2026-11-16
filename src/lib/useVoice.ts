@@ -5,7 +5,7 @@ import {
   useAudioRecorder,
 } from 'expo-audio';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useDb } from '@/db/provider';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
@@ -59,7 +59,7 @@ const join = (a: string, b: string) => (a && b ? `${a} ${b}` : a || b).trim();
  * recorded. Audio is never sent to a server.
  */
 export function useVoice(onNotice: (message: string) => void) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   const [phase, setPhase] = useState<Phase>('idle');

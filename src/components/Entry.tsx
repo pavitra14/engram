@@ -73,6 +73,11 @@ export function Entry({
           <Image source={{ uri: thought.media_path }} style={[styles.thumb, { backgroundColor: c.surface }]} accessibilityIgnoresInvertColors />
         ) : null}
       </View>
+      {thought.title?.trim() && thought.body.trim() ? (
+        <Text style={[type.small, { color: c.soft }]} numberOfLines={2}>
+          {thought.body.trim().replace(/\s+/g, ' ').slice(0, 180)}
+        </Text>
+      ) : null}
       {host && thought.body.trim() ? <Text style={[type.small, { color: c.soft }]}>{host}</Text> : null}
       {thought.todo === 1 ? (
         <View style={styles.meta}>

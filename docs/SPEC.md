@@ -210,3 +210,43 @@ The kind is taken from the MIME type, falling back to the file extension. Videos
 - Scoring: `max(word score, cosine)` when cosine ≥ 0.5, otherwise the word score. Website and tag boosts still apply. Top 4 neighbours above 0.12 are kept, as before.
 - A link with no shared words is explained as "Similar meaning".
 - On launch, if the setting is on, the model is loaded in the background; until it is ready, new thoughts link by words and are embedded on the next launch.
+
+## 14. Version 0.3
+
+Reasons are in [`DECISIONS.md`](DECISIONS.md) D25 to D32. Where this section and earlier ones disagree, this one is current.
+
+### Data
+
+PowerSync, local-only. Tables: `thoughts`, `links`, `tags`, `thought_tags`, `meta`, each with a text `id`. `thoughts` adds `body_html`, `repeat`, `priority`, `event_id`, `event_title`, `event_at`. Beside them, two ordinary SQLite tables that are rebuilt from the thoughts: `embeddings` (vector as hex text) and `thoughts_fts`. If the SQLite build has no FTS5, search falls back to matching every word with `LIKE`.
+
+### Notes
+
+A note is a title (optional) and a body. Lists show the title, or the body's first line when there is none, and a two-line preview of the body under a title. The formatting bar appears above the keyboard while the body has focus. Edits are saved when the field or the screen is left.
+
+### Home
+
+| Layout | What is on screen |
+|---|---|
+| List | Header, group pills, today's events, three to-dos, "Worth another look", then the stream by day |
+| Map and list | Header, the map in a panel about a third of the screen tall, then the list without group pills |
+| Map | Header, the whole map, to-dos, the five latest thoughts |
+
+### Map
+
+Groups are circles sized by member count and joined to their nearest groups. Up to 18 ungrouped thoughts are small circles with their first words, joined to nothing; the rest are behind an "N more on their own" pill.
+
+### To-dos
+
+Sections in order: Overdue, Today, Tomorrow, This week, Later, No date; important first within each. Repeat choices: every day, every week, every month (the same day, or the month's last day when it is shorter). Finishing a repeating to-do reschedules it. Notification buttons: Done; In an hour.
+
+### Outcomes
+
+Group screen: Chat with Claude and Chat with ChatGPT (only when installed), Make one note of these. The message lists each thought's words (up to about 6,000 characters) and asks what the person seems to be trying to do, the three most useful next actions, and what is missing or contradictory.
+
+### Widgets
+
+Quick thought (4×1): the field opens a new note, the tick opens the to-do list, the dot starts a voice note. To do (3×2): up to four open to-dos with their due labels; each opens its thought; + opens a new note.
+
+### Test hooks
+
+`engram://samples`, `engram://group/largest`, `engram://latest?menu=todo`, `engram://settings?smart=on`, `engram://settings?home=list|split|map`, `engram://search?q=…`.

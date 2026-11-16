@@ -1,7 +1,7 @@
 import { randomUUID } from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import { copyAsync } from 'expo-file-system/legacy';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { Db } from '@/db/db';
 
 import * as repo from '@/db/repo';
 import type { NewThought, Thought, ThoughtKind } from '@/db/types';
@@ -11,7 +11,7 @@ import { type Doc, relateAll, related } from './linker';
 import { embedText, MODEL_ID, modelReady } from './semantic';
 import { firstUrl } from './text';
 
-async function corpus(db: SQLiteDatabase): Promise<Doc[]> {
+async function corpus(db: Db): Promise<Doc[]> {
   const [thoughts, pairs, vectors] = await Promise.all([
     repo.listThoughts(db, { limit: 5000 }),
     repo.allTagPairs(db),
@@ -29,7 +29,7 @@ async function corpus(db: SQLiteDatabase): Promise<Doc[]> {
 }
 
 /** Refreshes a thought's meaning vector, when the language model is switched on and loaded. */
-async function understand(db: SQLiteDatabase, id: string): Promise<void> {
+async function understand(db: Db, id: string): Promise<void> {
   if (!modelReady()) return;
   try {
     const t = await repo.getThought(db, id);
@@ -41,7 +41,7 @@ async function understand(db: SQLiteDatabase, id: string): Promise<void> {
 }
 
 /** Recomputes the auto links for one thought (after create, edit or retag). */
-export async function relink(db: SQLiteDatabase, id: string): Promise<number> {
+export async function relink(db: Db, id: string): Promise<number> {
   await understand(db, id);
   const docs = await corpus(db);
   const target = docs.find((d) => d.id === id);
@@ -54,7 +54,7 @@ export async function relink(db: SQLiteDatabase, id: string): Promise<number> {
   return hits.length;
 }
 
-export async function rebuildAllLinks(db: SQLiteDatabase): Promise<number> {
+export async function rebuildAllLinks(db: Db): Promise<number> {
   const links = relateAll(await corpus(db));
   await repo.replaceAutoLinks(db, links);
   dataChanged();
@@ -62,7 +62,7 @@ export async function rebuildAllLinks(db: SQLiteDatabase): Promise<number> {
 }
 
 /** Save first, then link. Capture never waits on anything slower than one insert. */
-export async function capture(db: SQLiteDatabase, input: NewThought): Promise<Thought> {
+export async function capture(db: Db, input: NewThought): Promise<Thought> {
   const thought = await repo.insertThought(db, input);
   try {
     await relink(db, thought.id);
@@ -72,7 +72,7 @@ export async function capture(db: SQLiteDatabase, input: NewThought): Promise<Th
   return thought;
 }
 
-export function captureText(db: SQLiteDatabase, raw: string, source?: string | null): Promise<Thought> {
+export function captureText(db: Db, raw: string, source?: string | null): Promise<Thought> {
   const body = raw.trim();
   const url = firstUrl(body);
   const isBareLink = !!url && body.replace(url, '').trim().length < 3;
@@ -82,6 +82,34 @@ export function captureText(db: SQLiteDatabase, raw: string, source?: string | n
     url,
     source: source ?? null,
   });
+}
+
+/** Saves a note written in the editor: a title, a body, and the body's formatting if it has any. */
+export function captureNote(
+  db: Db,
+  note: { title: string; text: string; html: string | null },
+  extra: Pick<NewThought, 'event_id' | 'event_title' | 'event_at' | 'source'> = {},
+): Promise<Thought> {
+  const title = note.title.trim();
+  const body = note.text.trim();
+  const url = firstUrl(body) ?? firstUrl(title);
+  // A note that is only a web address is kept as a link, as it is from the capture bar.
+  if (!title && !note.html && !extra.event_id) return captureText(db, body, extra.source);
+  return capture(db, {
+    kind: url ? 'link' : 'text',
+    body,
+    body_html: note.html,
+    title: title || null,
+    url,
+    ...extra,
+  });
+}
+
+/** Saves an edit to a note, then links it again. */
+export async function saveNote(db: Db, id: string, note: { title: string; text: string; html: string | null }): Promise<void> {
+  await repo.updateThought(db, id, { title: note.title.trim() || null, body: note.text.trim(), body_html: note.html });
+  await relink(db, id);
+  dataChanged();
 }
 
 // ---------- media files ----------
@@ -133,7 +161,7 @@ function nameFromUri(uri: string): string | null {
  * original is deleted. Its name is searchable.
  */
 export async function captureFile(
-  db: SQLiteDatabase,
+  db: Db,
   uri: string,
   { mimeType, name, source, durationMs }: { mimeType?: string; name?: string | null; source?: string; durationMs?: number | null } = {},
 ): Promise<Thought> {
@@ -171,7 +199,7 @@ export function deleteMedia(uri: string | null): void {
   }
 }
 
-export async function removeThought(db: SQLiteDatabase, thought: Thought): Promise<void> {
+export async function removeThought(db: Db, thought: Thought): Promise<void> {
   await repo.deleteThought(db, thought.id);
   deleteMedia(thought.media_path);
   dataChanged();

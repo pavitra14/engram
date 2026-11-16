@@ -1,52 +1,64 @@
 # Status
 
-_Last updated: 16 Nov 2026, v2.0.0-beta.1 on `main`. Update this file whenever you finish work._
+_Last updated: 16 Nov 2026, v0.3.0-beta.1 on `main`. Update this file whenever you finish work._
 
 ## Where things are
 
-- **v1.0.0** (15 Nov 2026) is the original dark graph design: <https://github.com/pavitra14/engram/releases/tag/v1.0.0>.
-- **v2.0.0-beta.1** is the redesign plus files, to-dos and reminders, calendar, and experimental linking by meaning. Work is pushed straight to `main`; every release is a beta (pre-release) until the owner says otherwise.
+- The app is **0.3.0**. Work is pushed straight to `main`; every release is a `0.x` beta (pre-release) until the owner says otherwise.
+- Two earlier releases were numbered `v1.0.0` and `v2.0.0-beta.1`. The owner has asked for them to be removed; that has to be done by hand on GitHub's Releases page (the agent environment cannot delete releases or tags).
+- 0.3.0 was written and checked locally as one batch and pushed once. **Everything native in it compiled for the first time in CI**, so read the latest run before trusting any line below marked "new in 0.3".
 
-## What works
+## What 0.3 changed
 
-Verified by the CI emulator run on Android 14 (screenshots on the `smoke-shots` branch):
+1. **Database:** `expo-sqlite` replaced by PowerSync on op-sqlite, local-only (D25). Old installs are carried over once from `engram.db`.
+2. **Notes:** every entry has a title and a formatted body, edited with one shared editor (D26). "Long note" is gone.
+3. **Home:** three layouts, set in Settings: list, map above list, map (D27).
+4. **Map:** thoughts in no group are drawn as small circles of their own.
+5. **Motion:** each screen has its own transition; sheets slide up (D28).
+6. **To-dos:** due-date sections, quick add, repeats, an important mark, Done and In an hour buttons on the notification, the week's calendar (D29).
+7. **Outcomes:** "Make one note of these" and Chat with Claude / ChatGPT on a group; a daily "Worth another look" thought (D30).
+8. **Widgets:** Quick thought and To do (D31).
+9. **Speech pack:** shows that it is downloading and disappears once installed.
+10. **Linking by meaning** uses the processor build of the model and now passes its self-check on the emulator (D23, revised).
+11. **CI:** document-only pushes start no run; the phone APK is built only for releases; an optional self-hosted runner (D32, `docs/CI.md`).
 
-- Launch, empty state, loading sample thoughts, upgrade-safe database migration 2
-- Today: stream by day, group pills, a To do section, four header buttons, the attach (+) button
-- Typing a thought saves it, links it and places it in a group
-- Thought screen: To do pill and its menu; "Remind me: in a week" puts the thought on the list, shows the time, and schedules an alarm with Android (seen in `dumpsys alarm`)
-- To do screen: open items with their reminder time
-- Map, group screen, search (with a `q` parameter), note editor, settings
-- Sharing text in from another app
-- The model self-check: a model that cannot tell a paraphrase from an unrelated sentence is refused and Settings says so
-- Light and true-black themes following the phone
-- No crashes in the log across the run
+## Verified
 
-Verified in Node (`npm run check`): migrations including the v1 to v2 upgrade (thoughts, links, tags and search survive), full-text search, cascades, the linker, meaning-based linking with made-up vectors (three topics stay three groups even when every pair looks similar), grouping, reminder labels, file sizes.
+In Node (`npm run check`), running the app's own `repo.ts`: inserts, search and its index following edits, links stored once and never downgraded from manual, tags, settings, to-dos with repeats and importance, vectors stored as text, deleting a thought removing everything attached, wiping, and the import from both a version 1 and a version 2 old database. Also the linker (words and meaning), grouping, formatted-note helpers, repeat dates and to-do sections.
 
-## Not working or not verified
+Locally: typecheck, lint, a full Android JS bundle, and `expo prebuild` generating the widget receivers and the app-visibility queries.
 
-- **Linking by meaning has never produced good links.** On the x86_64 emulator, `react-native-executorch` 0.11 with `DISTILUSE_BASE_MULTILINGUAL_CASED_V2.DEFAULT` returns nearly the same vector for every sentence (self-check: pair 0.937, unrelated 0.936; on a second load all 1.0). The app detects this and stays on word linking. Unknown: whether a real arm64 phone behaves the same, and whether another model variant works. A `redesign-diag` branch tries the variants on the emulator; see its `smoke-shots-redesign-diag` log.
-- **Sharing a picture in** failed in the emulator test until run of 16 Nov; the test's share did not carry read access the way a real app's does. Check the latest `10-share-image` screenshot before trusting it.
-- Never run by anyone: install on a real phone; voice notes; the clipboard prompt; the photo, video and file pickers; opening a saved video or document in another app; the date and time picker; a reminder notification arriving and being tapped; "Add to calendar"; today's events on Today; backup export and import; large text sizes and screen readers; performance with thousands of thoughts.
+On the emulator before 0.3 (still expected to hold, re-check in the latest run): capture, sharing text and a picture in, a reminder scheduled with Android, search, the map, both themes, the model self-check passing with the processor build.
+
+## Not verified by anyone
+
+- **Everything "new in 0.3" on a device**, until the first CI run's screenshots are read: PowerSync opening and the old-database import, the rich text editor, the home layouts, transitions, widgets, notification buttons.
+- **Does a PowerSync table behave like the plain tables the tests use?** The tests cannot tell. Watch for errors mentioning views or triggers.
+- **Linking by meaning on real notes.** On the emulator the sample paraphrase pair scored 0.28 against 0.19 for an unrelated pair, which is a narrow margin. The thresholds in `linker.ts` were set from that one run.
+- **The Claude and ChatGPT links.** They open `https://claude.ai/new?q=…` and `https://chatgpt.com/?q=…`. Whether each app opens with the draft filled in has not been tried; the draft is also put on the clipboard for that reason.
+- Never run by anyone: install on a real phone; voice notes; the clipboard prompt; pickers; opening a saved file; the date and time picker; a reminder arriving; calendar features; backup export and import; large text sizes and screen readers; performance with thousands of thoughts.
 
 ## Known issues and limits
 
 - Group names are one word taken from the thoughts, and can be odd. Groups cannot be renamed.
 - Files are not read: a PDF or picture links only by its name and any note added to it.
-- No repeating reminders. Reminders are not rescheduled after a backup is restored on another phone.
+- Formatting is not shown in lists, search results or widgets; they show the plain words.
+- A repeating to-do has no end date. Reminders are not rescheduled after a backup is restored on another phone.
+- Widgets use fixed colours and refresh when the app changes data, or every 30 minutes.
 - The share sheet appears over a dimmed Engram screen, not over the app you shared from.
 - Backups exclude files, pictures and recordings.
 - Signed with the debug keystore. Fine for sideloading, not for the Play Store.
 - The smoke test's tap coordinates are hard-coded for 1080×2400.
-- Until 16 Nov the share screen used `useIncomingShare`, which fetches any shared web address to "resolve" it. That broke the nothing-leaves-the-device rule (v1.0.0 has it). `handle-share.tsx` now reads shares directly; do not reintroduce the hook.
+- Do not reintroduce `useIncomingShare` from `expo-sharing`: it fetches any shared web address.
 
 ## Backlog
 
 Ordered by priority. Each item has a done-when line so any agent can pick it up.
 
-0. **Make linking by meaning work, or remove it.** Find out from the `redesign-diag` run and the owner's phone whether any model variant passes the self-check. If one does, switch `semantic.ts` to it and tune `MEANING_*` in `linker.ts` on real notes. If none does, try another runtime or drop the dependency (it adds native libraries to the APK).
-   _Done when:_ the paraphrase pair in the sample data links on a real phone, or the feature and dependency are gone.
+0. **Read the first 0.3 CI run and fix what it shows.** Screenshots are on `smoke-shots`. Then refresh `docs/screenshots/` and the README from them.
+   _Done when:_ every screenshot shows the screen it is named for and the log has no `engram:` error lines.
+0. **Tune linking by meaning on real notes.** The self-check passes on the emulator with a narrow margin. Collect the similarity spread from the owner's phone (logged as `engram: meaning ready; …`) and adjust `MEANING_*` in `linker.ts`.
+   _Done when:_ the car and garage pair in the sample data links on a real phone and unrelated notes do not.
 1. **Verify on a real device.** Install v2 on the owner's phone and go through "Not yet verified". Fix what breaks.
    _Done when:_ every item is checked off or has an issue filed.
 2. **Semantic linking.** Add an on-device text-embedding model (candidate: `react-native-executorch` with all-MiniLM-L6-v2) behind the `related` / `relateAll` interface in `src/lib/linker.ts`, stored with `sqlite-vec`. Keep word overlap as the fallback until the model has downloaded. Groups and their names improve for free.

@@ -1,8 +1,8 @@
 import Constants from 'expo-constants';
 import { useLocalSearchParams } from 'expo-router';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
-import { useSQLiteContext } from 'expo-sqlite';
-import { type ReactNode, useEffect, useState } from 'react';
+import { useDb } from '@/db/provider';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -69,6 +69,24 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+type HomeView = 'list' | 'split' | 'map';
+const HOME_VIEWS: { value: HomeView; label: string }[] = [
+  { value: 'list', label: 'List' },
+  { value: 'split', label: 'Map and list' },
+  { value: 'map', label: 'Map' },
+];
+
+/** Whether Android has the offline speech pack for a language. Null when it cannot be told. */
+async function packInstalled(locale: string): Promise<boolean | null> {
+  try {
+    const r = await ExpoSpeechRecognitionModule.getSupportedLocales({ androidRecognitionServicePackage: 'com.google.android.as' });
+    const want = locale.toLowerCase();
+    return r.installedLocales.some((l) => l.toLowerCase() === want);
+  } catch {
+    return null;
+  }
+}
+
 const APPEARANCES: { value: AppearanceSetting; label: string }[] = [
   { value: 'system', label: 'System' },
   { value: 'light', label: 'Light' },
@@ -76,7 +94,7 @@ const APPEARANCES: { value: AppearanceSetting; label: string }[] = [
 ];
 
 export default function SettingsScreen() {
-  const db = useSQLiteContext();
+  const db = useDb();
   const { c, appearance, setAppearance } = useTheme();
   const insets = useSafeAreaInsets();
   const version = useDataVersion();
@@ -85,9 +103,74 @@ export default function SettingsScreen() {
   const [status, setStatus] = useState<string | null>(null);
   const onDevice = canTranscribeOnDevice();
   const smart = useSemanticState();
-  const params = useLocalSearchParams<{ smart?: string }>();
+  const params = useLocalSearchParams<{ smart?: string; home?: string }>();
   const [calendar, setCalendar] = useState(false);
   const [choosingLang, setChoosingLang] = useState(false);
+  const [homeView, setHomeView] = useState<HomeView>('list');
+  const [pack, setPack] = useState<'unknown' | 'missing' | 'downloading' | 'installed'>('unknown');
+  const polling = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // engram://settings?home=split sets the home layout (used by the automated test).
+  useEffect(() => {
+    const asked = params.home === 'split' || params.home === 'map' || params.home === 'list' ? params.home : null;
+    if (asked) {
+      void repo.setMeta(db, 'home_view', asked).then(() => setHomeView(asked));
+      return;
+    }
+    repo.getMeta(db, 'home_view').then((v) => setHomeView(v === 'split' || v === 'map' ? v : 'list'));
+  }, [db, params.home]);
+
+  const checkPack = useCallback(async (locale: string) => {
+    const has = await packInstalled(locale);
+    if (has) {
+      if (polling.current) clearInterval(polling.current);
+      polling.current = null;
+      setPack('installed');
+    }
+    return has;
+  }, []);
+
+  useEffect(() => {
+    if (!lang || !onDevice) return;
+    let live = true;
+    void packInstalled(lang).then((has) => {
+      if (live) setPack((p) => (has ? 'installed' : p === 'downloading' ? p : 'missing'));
+    });
+    return () => {
+      live = false;
+    };
+  }, [lang, onDevice]);
+
+  useEffect(
+    () => () => {
+      if (polling.current) clearInterval(polling.current);
+    },
+    [],
+  );
+
+  // Android does not say how far a speech pack download has got, so Engram asks every few seconds whether it has arrived.
+  const downloadPack = () =>
+    run(async () => {
+      if (!lang) return null;
+      setPack('downloading');
+      const r = await ExpoSpeechRecognitionModule.androidTriggerOfflineModelDownload({ locale: lang });
+      if (r.status === 'download_success' && (await checkPack(lang)) !== false) {
+        setPack('installed');
+        return 'Speech pack installed.';
+      }
+      if (polling.current) clearInterval(polling.current);
+      let tries = 0;
+      polling.current = setInterval(() => {
+        tries += 1;
+        void checkPack(lang);
+        if (tries > 90 && polling.current) {
+          clearInterval(polling.current);
+          polling.current = null;
+          setPack((p) => (p === 'downloading' ? 'missing' : p));
+        }
+      }, 4000);
+      return r.status === 'opened_dialog' ? 'Finish the download in the Android window that opened.' : null;
+    });
 
   // engram://settings?smart=on switches meaning-based linking on (used by the automated test).
   useEffect(() => {
@@ -167,22 +250,42 @@ export default function SettingsScreen() {
             <Text style={[type.meta, { color: c.soft }]}>Black uses true black to save power on AMOLED screens. System follows your phone.</Text>
           </Section>
 
+          <Section title="Home screen">
+            <Segments
+              options={HOME_VIEWS}
+              value={homeView}
+              onChange={(v) => {
+                setHomeView(v);
+                void repo.setMeta(db, 'home_view', v);
+              }}
+            />
+            <Text style={[type.meta, { color: c.soft }]}>
+              {homeView === 'list'
+                ? 'Your thoughts as a list, newest first.'
+                : homeView === 'split'
+                  ? 'The map of your groups on top, the list below.'
+                  : 'The map of your groups fills the screen. The list is one tap away.'}
+            </Text>
+          </Section>
+
           <Section title="Voice notes">
             <View>
               <Row title="Voice language" sub={langLabel} action="Change" onPress={() => setChoosingLang(true)} />
               {onDevice ? (
-                <Row
-                  title="Offline speech pack"
-                  sub="Needed to transcribe on this phone"
-                  action="Download"
-                  onPress={() =>
-                    run(async () => {
-                      if (!lang) return null;
-                      const r = await ExpoSpeechRecognitionModule.androidTriggerOfflineModelDownload({ locale: lang });
-                      return r.status === 'download_success' ? 'Speech pack installed.' : 'Android is handling the download. Try a voice note once it finishes.';
-                    })
-                  }
-                />
+                pack === 'installed' ? (
+                  <Text style={[type.meta, { color: c.soft, paddingTop: 4 }]}>The offline speech pack for {langLabel} is installed.</Text>
+                ) : (
+                  <Row
+                    title="Offline speech pack"
+                    sub={
+                      pack === 'downloading'
+                        ? 'Downloading. Android does not report progress; this row goes away once the pack is installed.'
+                        : 'Needed to turn speech into text on this phone'
+                    }
+                    action={pack === 'downloading' ? 'Working' : 'Download'}
+                    onPress={() => (pack === 'downloading' ? undefined : void downloadPack())}
+                  />
+                )
               ) : (
                 <Text style={[type.meta, { color: c.soft, paddingTop: 4 }]}>
                   This phone cannot transcribe speech offline, so voice notes are saved as audio only.

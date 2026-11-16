@@ -1,6 +1,6 @@
 # Engram — instructions for agents
 
-Engram is a local-first "second brain" for Android, built with Expo and React Native. You capture thoughts by typing, speaking or sharing from any app, and they link themselves into an interactive graph. There is no server and no account; everything is stored in SQLite on the phone.
+Engram is a local-first "second brain" for Android, built with Expo and React Native. You capture thoughts by typing, speaking or sharing from any app, and they link themselves into an interactive graph. There is no server and no account; everything is stored in a database on the phone.
 
 This file is the entry point for any coding agent (Claude Code, Codex, Cursor, Copilot and others). Read it fully before changing anything. Humans can read it too.
 
@@ -14,6 +14,7 @@ This file is the entry point for any coding agent (Claude Code, Codex, Cursor, C
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Before reversing a choice. Why things are the way they are. |
 | [`docs/original-plan.md`](docs/original-plan.md) | Background only. The pre-build plan; superseded where SPEC differs. |
 | [`docs/research.md`](docs/research.md) | When choosing libraries or revisiting design inspiration. |
+| [`docs/CI.md`](docs/CI.md) | Before changing the workflow, or to make builds faster. |
 
 When you finish a piece of work, update `docs/STATUS.md` (and `DECISIONS.md` if you made a choice someone might later question). These files are the shared memory between agents and sessions; if they are stale, the next agent starts wrong.
 
@@ -22,37 +23,44 @@ When you finish a piece of work, update `docs/STATUS.md` (and `DECISIONS.md` if 
 - **Owner:** pavitra14 on GitHub. Repo: `pavitra14/engram`. Default branch: `main`.
 - **Platform:** Android first. iOS is out of scope for now, but avoid Android-only code where a cross-platform option is equally good.
 - **Package id:** `com.pavitra14.engram`. App name: Engram. URL scheme: `engram://`.
-- **Stack:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript, Expo Router, `expo-sqlite`, `d3-force` (layout only), Reanimated 4.7, `expo-clipboard`, `expo-speech-recognition`, `expo-notifications`, `expo-calendar`, `expo-image-picker`, `react-native-executorch` (text embeddings only). Skia was removed in v2; nothing draws on a canvas.
-- **Release:** v1.0.0 (the dark graph design) is at <https://github.com/pavitra14/engram/releases/tag/v1.0.0>. v2 (the redesign) is described in `docs/STATUS.md`.
+- **Stack:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript, Expo Router, PowerSync (`@powersync/react-native` on `@op-engineering/op-sqlite`, local-only), `react-native-enriched-html` (the note editor), `react-native-android-widget`, `d3-force` (layout only), Reanimated 4.7, `expo-clipboard`, `expo-speech-recognition`, `expo-notifications`, `expo-calendar`, `expo-image-picker`, `react-native-executorch` (text embeddings only). Skia was removed in v2; nothing draws on a canvas.
+- **Versions are 0.x.** The app is `0.3.0` (`versionCode` 3). Two earlier releases were numbered 1.0.0 and 2.0.0-beta.1 by mistake; the owner asked for them to be removed. Never number a release 1.0 or higher unless the owner says so.
 
 ## Repository map
 
 ```
 src/
   app/                 Expo Router screens (every file is a route)
-    _layout.tsx        fonts, SQLite provider + migrations, theme, stack
-    index.tsx          Today: the stream, group pills, capture bar
-    map.tsx            map of groups (circles laid out with d3-force)
+    _layout.tsx        fonts, database provider, theme, the stack and each screen's transition
+    index.tsx          Today, in one of three layouts: list, map above list, or map
+    map.tsx            the map screen (drawing is in components/GroupMap.tsx)
     group/[id].tsx     one group's thoughts ("loose" = ungrouped, "largest" = test hook)
-    thought/[id].tsx   detail: edit in place, audio, group, tags, linked thoughts
+    thought/[id].tsx   a note: title and formatted body edited in place, file, to-do, tags, links
+    latest.tsx         engram://latest opens the newest thought (test hook)
     search.tsx         full-text search with kind filters and group matches
     voice.tsx          full-screen voice capture with live transcript
-    compose.tsx        the notepad: full-page note editor
-    todo.tsx           the to-do list: open items, then done
+    compose.tsx        a new note (title + formatted body); also opened by widgets and calendar events
+    todo.tsx           the to-do list by due date, quick add, the week's calendar, done
     settings.tsx       appearance, voice, linking by meaning, calendar, backup, data
     handle-share.tsx   sheet shown when another app shares to Engram
     samples.tsx        engram://samples loads demo data (used by the smoke test)
     +native-intent.ts  routes incoming share intents to /handle-share
-  components/          CaptureBar (text, mic, attach, clipboard prompt), Entry, TodoRow,
-                       ActionSheet (bottom-sheet menu), ui.tsx primitives
-  db/                  schema.ts (migrations), migrate.ts, repo.ts (all SQL), types.ts
+  components/          CaptureBar, NoteEditor (+ FormatBar), GroupMap, Entry, TodoRow,
+                       ActionSheet (slide-up menu), ui.tsx primitives
+  db/                  schema.ts (tables and columns), powersync.ts (opens the database),
+                       provider.tsx (useDb), db.ts (the Db interface), repo.ts (all SQL),
+                       legacy.ts (the pre-0.3 database and its one-time import), types.ts
+  widgets/             home-screen widgets, their task handler and data snapshot
   lib/                 brain.ts (shared data loader + groups), groups.ts, linker.ts,
                        capture.ts (save + link pipeline, file import), semantic.ts (language model),
                        smart.ts (switching meaning on and off), reminders.ts, calendar.ts,
-                       open.ts, useVoice.ts, backup.ts, samples.ts, bus.ts, text.ts
+                       assistants.ts (Chat with Claude / ChatGPT), open.ts, useVoice.ts,
+                       backup.ts, samples.ts, bus.ts, text.ts
   theme.tsx            light and black palettes, type scale, ThemeProvider, useTheme()
 assets/brand/          SVG sources for the mark and wordmark; PNGs in assets/images are rendered from them
-scripts/check.ts       Node-only logic tests (migrations, FTS, linker, groups, dates)
+index.ts               entry point: expo-router plus the widget task handler
+plugins/               local config plugins (app visibility queries)
+scripts/check.ts       Node-only tests: repo.ts against node:sqlite, old-database import, linker, groups, dates
 scripts/smoke.sh       emulator walkthrough run by CI, in both themes
 .github/workflows/android.yml   CI: checks, APK builds, emulator test, releases
 docs/                  spec, design (with mocks), status, decisions, research, screenshots
@@ -64,7 +72,7 @@ docs/                  spec, design (with mocks), status, decisions, research, s
 npm ci                     # install (use npm; there is a package-lock.json)
 npm run typecheck          # tsc --noEmit
 npm run lint               # expo lint (ESLint flat config, eslint-config-expo)
-npm run check              # Node tests: migrations, FTS, cascades, linker
+npm run check              # Node tests: the database layer, search, import, linker
 npx expo run:android       # dev build on a device or emulator (Expo Go will NOT work)
 npx expo export --platform android   # bundles JS; a quick "does it compile for Android" check
 npx expo install <pkg>     # ALWAYS use this to add packages; it picks SDK-compatible versions
@@ -81,7 +89,10 @@ You do not need the Android SDK locally. CI builds the APK.
 ## Rules
 
 - **Never create or edit `android/` or `ios/`.** They are generated by `expo prebuild` and gitignored. Change native behaviour through `app.json` and config plugins.
-- **Never edit a shipped migration** in `src/db/schema.ts`. Append a new entry to `MIGRATIONS`. The array index + 1 is the `PRAGMA user_version`.
+- **The database is PowerSync, local-only.** Tables are declared in `src/db/schema.ts` and need no migrations: adding a column is adding a line. They cannot have constraints, foreign keys, cascades, BLOB columns or `ON CONFLICT`, so `repo.ts` enforces the rules by hand (read, then insert or update; delete what hangs off a thought). Every row has a text `id`. Keep the tables in a shape a Postgres/Supabase backend could hold.
+- **Derived data is not a PowerSync table.** Meaning vectors and the search index are ordinary SQLite tables created by `repo.prepare()`. They are rebuilt from the thoughts, never synced.
+- **Never call the outer `db` inside `db.tx(...)`**; use the `Db` the callback receives. The outer one would wait for the transaction it is inside.
+- **`legacy.ts` is frozen.** It describes the pre-0.3 database so old installs can be carried over. Do not edit its SQL.
 - **All SQL lives in `src/db/repo.ts`.** Screens call repo functions; they do not write SQL.
 - **Every write must call `dataChanged()`** from `src/lib/bus.ts` (directly or via `capture()` / `removeThought()`), or screens will not refresh. Pass the new id to animate it into the graph.
 - **Capture is save-first.** Insert the row, then link. Never make capture wait on anything slower than one insert.
@@ -89,7 +100,9 @@ You do not need the Android SDK locally. CI builds the APK.
 - **Nothing leaves the device.** No analytics, no network calls for user data, no cloud speech. Voice uses `requiresOnDeviceRecognition: true`. The one download the app ever makes is the language model, and only after the person turns on "Understand meaning". `react-native-executorch` reports downloads to its maker by default; `semantic.ts` switches that off and it must stay off.
 - **Menus with more than three choices use `ActionSheet`.** Android's `Alert.alert` silently drops buttons beyond three. Use alerts only for confirmations.
 - **`react-native-executorch` is loaded with a lazy `require`** inside `semantic.ts`, never a top-level import, so a fault in its native library cannot stop the app from starting. Its native libraries are fetched by its postinstall script, limited to text embeddings by the `react-native-executorch.features` key in `package.json`.
-- **Changing the `thoughts` table means rebuilding it** (see migration 2). `migrate.ts` turns foreign keys off around migrations so the rebuild does not cascade deletes. Add a case to the upgrade test in `scripts/check.ts`.
+- **A note's body is stored twice**: `body` is its plain words (what search, linking and lists read) and `body_html` its formatting, or null when it has none. Always write both through `repo.updateThought` or `capture`.
+- **Screens choose their own transition** in `_layout.tsx`: going deeper pushes from the side, glance-and-leave screens fade, things you start and finish rise from the bottom. Sheets slide up. Keep durations at or under 240 ms.
+- **Widgets cannot use app components or the theme.** They are drawn by `react-native-android-widget` from `src/widgets/widgets.tsx` and read `widgets.json`, which `refreshWidgets` writes on every data change.
 - **Follow `docs/DESIGN.md`** for UI. Never hard-code a colour: take every one from `useTheme().c` so both the light and the black theme work. Newsreader for the person's words and titles, Inter for the app's own text, sentence case, 48 pt minimum targets, no decorative animation.
 - **Screens read through `useBrain(db)`** (`src/lib/brain.ts`), which loads thoughts and links once per data change and computes groups. Do not query thoughts and recompute groups per screen.
 - **Groups are derived, not stored.** `computeGroups` runs label propagation over the links and names each group from its shared words. A group's id is its smallest member id and can change when links change; screens must cope with a group id that no longer exists.
@@ -106,26 +119,29 @@ These caught the first build out. The installed versions behave this way:
 - **React Native styles do not accept `oklch()`**. The group colours in `src/theme.tsx` are hex values computed from the oklch recipe in `docs/DESIGN.md`.
 - **Typed routes** are generated into `.expo/types` by `expo start` or `expo export`. If `tsc` complains that a new route is not assignable, that folder is stale: delete it or regenerate.
 - **`StyleSheet.absoluteFillObject` does not exist** in RN 0.88 types. Use `StyleSheet.absoluteFill` or spell out `position: 'absolute', top: 0, ...`.
-- **`expo-file-system`** uses the `File` / `Directory` / `Paths` classes. `new File(contentUri).copy(dest)` imports a shared `content://` file.
-- **`expo-sharing`** receives shares on Android via its config plugin (`android.enabled`, MIME type lists) and `useIncomingShare()`. Payloads have `value`, `shareType` and `mimeType`.
+- **`expo-file-system`** uses the `File` / `Directory` / `Paths` classes.
+- **`expo-sharing`** receives shares on Android via its config plugin (`android.enabled`, MIME type lists). Payloads have `value`, `shareType` and `mimeType`.
 - **`expo-sharing`'s `useIncomingShare()` hook goes online**: it resolves every share, and for a shared web address that is an HTTP request to it. Use `getSharedPayloads()` and call `getResolvedSharedPayloadsAsync()` only for file shares, as `handle-share.tsx` does.
 - **`new File(uri).copy()` rejects `content://` addresses.** Import with `copyAsync` from `expo-file-system/legacy`.
 - **`expo-speech-recognition`** emits `result`, `volumechange`, `audioend` (with the saved WAV URI when `recordingOptions.persist` is true), `error` and `end`. On-device recognition needs Android 13+ and an installed offline speech pack.
+- **`react-native-executorch`'s `DEFAULT` model variant on Android is the Vulkan (graphics chip) build.** On the emulator it returned the same vector for every sentence. `semantic.ts` names the XNNPACK (processor) build and checks the model on a fixed paraphrase pair after loading.
+- **`expo-intent-launcher` ignores `packageName` unless `className` is given**, so it cannot aim a share at one app. `assistants.ts` opens the app's own web link instead.
+- **`react-hooks/set-state-in-effect`** rejects calling a state setter straight from an effect body, including through a helper. Set state in the promise callback, or derive it during render.
 - **React Compiler is off.** The template enabled `experiments.reactCompiler`; it was removed during the first build and has not been re-tested since. Its lint rules still run, so code must pass them.
 
 ## Testing
 
-- `npm run check` covers the database and linker in Node using `node:sqlite`. Add a case there for any SQL or linker change.
-- CI's emulator job (`scripts/smoke.sh`) installs the x86_64 APK on an Android 14 Pixel 6 emulator, loads sample data via `engram://samples`, types a thought, sets a reminder on it, shares a picture and text in, switches on linking by meaning (`engram://settings?smart=on`) and waits for the model, opens the map, a group, search, the note editor and settings, repeats the main screens in the black theme, and fails on any crash. **Tap coordinates assume 1080×2400.** If you move the top bar or dock, update them.
+- `npm run check` runs `repo.ts` itself against `node:sqlite` (plain tables with the same columns), plus the old-database import and the linker. Add a case there for any SQL or linker change. It cannot catch a difference between PowerSync's tables and plain ones; the emulator run does.
+- CI's emulator job (`scripts/smoke.sh`) installs the x86_64 APK on an Android 14 Pixel 6 emulator, loads sample data via `engram://samples`, types a thought, sets a reminder on it (`engram://latest?menu=todo`), shares a picture and text in, saves a titled note, shows the split and map home layouts (`engram://settings?home=split`), switches on linking by meaning (`engram://settings?smart=on`) and waits for the model, opens the map, a group, search, the note editor and settings, repeats the main screens in the black theme, and fails on any crash. **Tap coordinates assume 1080×2400.** If you move the top bar or dock, update them.
 - Screenshots from each pushed branch's latest run are force-pushed to `smoke-shots` (for `main`) or `smoke-shots-<branch>`. CI runs on `main`, `release/**` and `redesign-**` branches and on pull requests; add your branch pattern to the workflow if you need screenshots from it. Look at them after any UI change: `git clone --depth 1 -b smoke-shots https://github.com/pavitra14/engram`.
-- Not covered by automation: microphone, speech recognition, the clipboard prompt, the attach pickers, opening files in other apps, the date and time picker, a reminder actually firing, calendar events, real-device performance. Say so when you report work in those areas.
+- Not covered by automation: home-screen widgets (only that Android registered them), formatting buttons in the note editor, the Chat with Claude/ChatGPT buttons, notification buttons, the speech pack download, microphone, speech recognition, the clipboard prompt, the attach pickers, opening files in other apps, the date and time picker, a reminder actually firing, calendar events, real-device performance. Say so when you report work in those areas.
 
 ## Releasing
 
 1. Bump `expo.version` and `expo.android.versionCode` in `app.json`.
 2. Update `docs/release-notes.md` (it becomes the GitHub release body) and `docs/STATUS.md`.
 3. Merge to `main` and wait for CI to pass.
-4. Push a branch named `release/vX.Y.Z` from that commit, or a tag `vX.Y.Z` if your environment allows pushing tags (Claude Code cloud sessions cannot). A version with a hyphen, such as `v2.0.0-beta.1`, is published as a pre-release.
+4. Push a branch named `release/vX.Y.Z-beta.N` from that commit, or a tag of the same name if your environment allows pushing tags (Claude Code cloud sessions cannot). The hyphen makes it a pre-release. The phone APK is only built for these refs.
 5. CI builds, runs the emulator test, and publishes the release with `engram-vX.Y.Z.apk` (arm64) attached.
 
 The APK is signed with the React Native template's debug keystore, which is the same on every build, so new versions install over old ones. Replace it with a real keystore (via a config plugin and CI secrets) before any Play Store submission.
@@ -137,4 +153,5 @@ The APK is signed with the React Native template's debug keystore, which is the 
 - Name things for what the user sees.
 - Commits: imperative subject under 72 characters, a body explaining why when it is not obvious.
 - Branches: the owner is the sole maintainer and has asked for work to be pushed straight to `main`. No pull request is needed.
-- Releases: every release is a beta until the owner says otherwise. Name them `vX.Y.Z-beta.N`; the hyphen makes CI publish a pre-release.
+- Releases: every release is a beta until the owner says otherwise. Name them `v0.Y.Z-beta.N`; the hyphen makes CI publish a pre-release.
+- One push per batch of work. A CI run takes around twenty minutes, so finish and check locally (typecheck, lint, check, `npx expo export --platform android`, and `npx expo prebuild` in a scratch copy for plugin changes) before pushing. Document-only pushes start no run.

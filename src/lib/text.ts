@@ -148,3 +148,68 @@ export function dueLabel(ts: number, now: number = Date.now()): string {
   const d = new Date(ts);
   return `${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}, ${time}`;
 }
+
+// ---------- formatted notes ----------
+
+const ENTITIES: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ' };
+
+/** The words of a formatted note, one line per paragraph or list item. Search and linking read this. */
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|h[1-6]|li|blockquote|codeblock|div)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (m) => ENTITIES[m] ?? m)
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** Plain words as the simplest formatted note: one paragraph per line. */
+export function textToHtml(text: string): string {
+  if (!text) return '';
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return `<html>${text.split('\n').map((line) => (line ? `<p>${esc(line)}</p>` : '<br>')).join('')}</html>`;
+}
+
+/** Whether a note uses any formatting. Plain notes are stored as words alone. */
+export function isFormatted(html: string | null | undefined): boolean {
+  return !!html && /<(b|i|u|s|strong|em|h[1-6]|ul|ol|li|blockquote|code|codeblock|a)\b/i.test(html);
+}
+
+// ---------- to-dos ----------
+
+/** The next time a repeating reminder is due after `now`, keeping its time of day. */
+export function nextRepeat(at: number, repeat: 'daily' | 'weekly' | 'monthly', now: number = Date.now()): number {
+  const d = new Date(at);
+  const day = d.getDate();
+  for (let i = 0; i < 1000 && d.getTime() <= now; i++) {
+    if (repeat === 'daily') d.setDate(d.getDate() + 1);
+    else if (repeat === 'weekly') d.setDate(d.getDate() + 7);
+    else {
+      // The same day next month, or that month's last day when it is shorter.
+      d.setDate(1);
+      d.setMonth(d.getMonth() + 1);
+      d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+    }
+  }
+  return d.getTime();
+}
+
+export type DueBucket = 'Overdue' | 'Today' | 'Tomorrow' | 'This week' | 'Later' | 'No date';
+export const DUE_ORDER: DueBucket[] = ['Overdue', 'Today', 'Tomorrow', 'This week', 'Later', 'No date'];
+
+/** Which part of the to-do list a reminder time belongs in. */
+export function dueBucket(at: number | null, now: number = Date.now()): DueBucket {
+  if (at == null) return 'No date';
+  if (at < now) return 'Overdue';
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const days = Math.floor((at - start.getTime()) / 86_400_000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  if (days < 7) return 'This week';
+  return 'Later';
+}
+
+export const repeatLabel = { daily: 'Every day', weekly: 'Every week', monthly: 'Every month' } as const;

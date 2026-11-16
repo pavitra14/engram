@@ -1,11 +1,24 @@
 name: Android
 
+# Speed notes (see docs/CI.md):
+#  - Changes that only touch documents do not start a run.
+#  - A push to main builds one APK (x86_64, for the emulator test). The phone APK
+#    (arm64) is built only for a release, or when a run is started by hand.
+#  - Set the repository variable ENGRAM_RUNNER to the label of your own runner
+#    (for example "self-hosted") and the build job runs there, keeping its
+#    Gradle and C++ caches between runs. Pull requests always use GitHub's runners.
 on:
   push:
     branches: [main, 'release/**', 'redesign-**']
     tags: ['v*']
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
   workflow_dispatch:
+
+env:
+  # More memory and parallel workers for Gradle; reuse task outputs between runs.
+  GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.parallel=true -Dorg.gradle.caching=true
 
 concurrency:
   group: android-${{ github.ref }}
@@ -17,10 +30,15 @@ permissions:
 jobs:
   build:
     name: Check and build APK
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.ENGRAM_RUNNER) || 'ubuntu-latest' }}
     timeout-minutes: 60
+    env:
+      RELEASING: ${{ startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/v') || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # On your own runner, keep node_modules and the previous build so the next one is incremental.
+          clean: ${{ !vars.ENGRAM_RUNNER || github.event_name == 'pull_request' }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -30,6 +48,9 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Release branches read and write the cache too, not only main.
+          cache-read-only: false
       - run: npm ci
       - name: Typecheck, lint and logic checks
         run: |
@@ -41,13 +62,14 @@ jobs:
       - name: Build the emulator APK (x86_64)
         working-directory: android
         run: |
-          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=x86_64
+          ./gradlew assembleRelease --no-daemon --build-cache -PreactNativeArchitectures=x86_64
           mkdir -p ../out
           cp app/build/outputs/apk/release/app-release.apk ../out/engram-x86_64.apk
       - name: Build the phone APK (arm64)
+        if: env.RELEASING == 'true'
         working-directory: android
         run: |
-          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+          ./gradlew assembleRelease --no-daemon --build-cache -PreactNativeArchitectures=arm64-v8a
           cp app/build/outputs/apk/release/app-release.apk ../out/engram.apk
           ls -lh ../out
       - uses: actions/upload-artifact@v4

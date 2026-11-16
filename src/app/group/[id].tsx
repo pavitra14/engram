@@ -1,14 +1,17 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useDb } from '@/db/provider';
+import { useEffect, useState } from 'react';
 import { FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CAPTURE_BAR_SPACE, CaptureBar } from '@/components/CaptureBar';
 import { Entry } from '@/components/Entry';
 import { Header, Pill } from '@/components/ui';
+import { type Assistant, chatWith, installedAssistants, outline, planPrompt } from '@/lib/assistants';
+import { capture } from '@/lib/capture';
 import type { Thought } from '@/db/types';
 import { useBrain } from '@/lib/brain';
-import { when } from '@/lib/text';
+import { htmlToText, when } from '@/lib/text';
 import { type, useTheme } from '@/theme';
 
 /**
@@ -17,10 +20,16 @@ import { type, useTheme } from '@/theme';
  */
 export default function GroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const db = useSQLiteContext();
+  const db = useDb();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const brain = useBrain(db);
+  const [assistants, setAssistants] = useState<Assistant[]>([]);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    void installedAssistants().then(setAssistants);
+  }, []);
 
   const loose = id === 'loose';
   const group = brain ? (id === 'largest' ? brain.groups[0] : brain.groupById.get(id)) : undefined;
@@ -54,6 +63,32 @@ export default function GroupScreen() {
                 Groups follow your links, so this one merged or split. Go back to the map to find its thoughts.
               </Text>
             ) : null}
+            {group && thoughts.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.near}>
+                {assistants.map((a) => (
+                  <Pill
+                    key={a.id}
+                    icon="message-circle"
+                    label={`Chat with ${a.name}`}
+                    selected
+                    onPress={() => {
+                      setNote(`Opening ${a.name} with these thoughts as a draft message. It is on your clipboard too.`);
+                      void chatWith(a, planPrompt(group.name, thoughts)).catch(() => setNote(`${a.name} could not be opened. The message is on your clipboard.`));
+                    }}
+                  />
+                ))}
+                <Pill
+                  icon="list"
+                  label="Make one note of these"
+                  onPress={async () => {
+                    const html = `<html><ul>${outline(thoughts)}</ul><p>Next step: </p></html>`;
+                    const made = await capture(db, { kind: 'text', title: `${group.name}: where this stands`, body: htmlToText(html), body_html: html });
+                    router.push({ pathname: '/thought/[id]', params: { id: made.id } });
+                  }}
+                />
+              </ScrollView>
+            ) : null}
+            {note ? <Text style={[type.small, styles.note, { color: c.soft }]}>{note}</Text> : null}
             {group && group.near.length > 0 && brain ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.near}>
                 <Text style={[type.meta, { color: c.soft }]}>Near</Text>

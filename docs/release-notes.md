@@ -1,33 +1,35 @@
 This is a **beta** for testing. Expect rough edges, and please report what breaks.
 
-**Install:** download the APK below on an Android phone (Android 7 or newer, 64-bit) and open it. It installs over version 1 and keeps your thoughts.
+**Install:** download the APK below on an Android phone (Android 7 or newer, 64-bit) and open it. It installs over earlier versions and brings your thoughts across.
 
-**New since version 1**
+**New in 0.3**
 
-- **A new design.** Home is a readable stream of your thoughts; a map shows them as named groups that form on their own. Light and true-black themes.
-- **Any kind of thought.** Text, voice, links, photos, videos and documents, from the + button or shared from any app.
-- **To-dos and reminders.** Open a thought and tap To do. Today shows what is open.
-- **Calendar.** Add a thought to your calendar from its menu. In Settings you can show today's events on Today and take notes on them.
-- **Links by meaning (experimental, optional).** In Settings, turn on "Understand meaning". Engram downloads a language model once (about 130 MB) and links thoughts that mean similar things, in 50+ languages. It runs on your phone; your thoughts are never sent anywhere. **This has not yet worked in testing:** on the test emulator the model gave unusable results, and Engram detected that and kept linking by words. It may behave differently on a real phone. Engram checks the model each time it loads and tells you in Settings if it cannot be used.
-- **Notepad.** A full-page editor for longer notes.
-- **Save what you copied.** Home offers to save your clipboard when it has text.
-- **Search** with highlights and filters, **full-screen voice notes**, and a reason shown for every link.
+- **Every entry is a note.** A title and a body with bold, headings, lists, check boxes and quotes. One editor everywhere; "Long note" is gone.
+- **Three home screens.** List, map above list, or map. Choose in Settings.
+- **Thoughts in no group** now appear on the map as small circles of their own.
+- **Faster, more fitting movement.** Screens fade, push or rise depending on what they are. Menus slide up.
+- **A fuller to-do list.** Sections by due date, a line to add a to-do, repeating reminders, an important mark, and Done / In an hour buttons on the reminder itself.
+- **Calendar.** The to-do list shows the week ahead; a note started from an event remembers the event.
+- **From ideas to a next step.** On a group: "Make one note of these", and Chat with Claude or ChatGPT if you have them. Today shows one older thought a day under "Worth another look".
+- **Home-screen widgets.** Quick thought, and To do.
+- **Speech pack.** Shows that it is downloading and disappears from Settings once installed.
+- **Linking by meaning** now works in testing (it did not in the last beta). Turn on "Understand meaning" in Settings.
+- **A new database underneath** (PowerSync, still entirely on your phone), ready for syncing to your own backend later.
 
-**Please test these on your phone; an emulator could not**
+**Please try these on your phone; they could not be tested automatically**
 
-- Voice notes: recording, live transcription, playback
-- A reminder actually arriving, and tapping it
-- Picking photos, videos and files; opening a saved video or document
-- The date and time picker for reminders
-- Calendar: adding an event, and today's events on Today
-- "Understand meaning": whether Settings ends on "On. Thoughts link by meaning." or reports that the model could not be used, and if it is on, whether the links make sense
-- The clipboard prompt
+- Your existing thoughts are all there after updating
+- Adding the widgets from your home screen, and what each tap does
+- Formatting a note, closing it, and opening it again
+- A reminder arriving, and its Done and In an hour buttons
+- Chat with Claude / ChatGPT: does the app open with the message filled in? (It is on your clipboard either way.)
+- "Understand meaning": whether the links it adds make sense on your own notes
+- Voice notes, the speech pack download, the clipboard prompt, attaching files, calendar features
 
 **Known limits**
 
 - Group names are single words and can be odd; groups cannot be renamed.
+- Formatting shows in the note itself, not in lists or widgets.
 - Files are not read: a PDF links only by its name and any note you add.
-- No repeating reminders.
-- The share sheet appears over Engram, not over the app you shared from.
 - Backups do not include files or recordings.
 - Signed with a development key: fine for installing directly, not for the Play Store.

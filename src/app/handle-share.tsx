@@ -8,7 +8,7 @@ import {
   type SharePayload,
 } from 'expo-sharing';
 import { File } from 'expo-file-system';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useDb } from '@/db/provider';
 import { useEffect, useRef, useState } from 'react';
 import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
@@ -18,6 +18,7 @@ import { entryMeta } from '@/components/Entry';
 import { Button, KindGlyph } from '@/components/ui';
 import type { Thought } from '@/db/types';
 import { loadBrain, placement } from '@/lib/brain';
+import type { Db } from '@/db/db';
 import { captureFile, captureText } from '@/lib/capture';
 import { firstUrl, titleOf } from '@/lib/text';
 import { type, useTheme } from '@/theme';
@@ -38,7 +39,7 @@ function cachedCopy(r: ResolvedSharePayload | undefined): string | null {
 }
 
 async function savePayload(
-  db: ReturnType<typeof useSQLiteContext>,
+  db: Db,
   p: SharePayload,
   resolved: ResolvedSharePayload | undefined,
 ): Promise<Thought | null> {
@@ -61,7 +62,7 @@ async function savePayload(
  * the item landed, then steps out of the way so you return to what you were doing.
  */
 export default function HandleShareScreen() {
-  const db = useSQLiteContext();
+  const db = useDb();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   // Read once, directly. The library's hook also "resolves" every share, which for a shared

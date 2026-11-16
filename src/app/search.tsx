@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useDb } from '@/db/provider';
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,7 +22,7 @@ const PLURAL: Record<ThoughtKind, string> = {
 };
 
 export default function SearchScreen() {
-  const db = useSQLiteContext();
+  const db = useDb();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const brain = useBrain(db);

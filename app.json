@@ -2,7 +2,7 @@
   "expo": {
     "name": "Engram",
     "slug": "engram",
-    "version": "2.0.0",
+    "version": "0.3.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "engram",
@@ -10,7 +10,7 @@
     "backgroundColor": "#F3F4F1",
     "android": {
       "package": "com.pavitra14.engram",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#1F3FBF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -34,7 +34,6 @@
           }
         }
       ],
-      "expo-sqlite",
       [
         "expo-audio",
         {
@@ -94,6 +93,44 @@
           "photosPermission": "Engram saves the photos and videos you choose.",
           "cameraPermission": false,
           "microphonePermission": false
+        }
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "QuickThought",
+              "label": "Quick thought",
+              "description": "Write or speak a thought without opening Engram first",
+              "minWidth": "250dp",
+              "minHeight": "56dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "resizeMode": "horizontal",
+              "updatePeriodMillis": 0
+            },
+            {
+              "name": "Todo",
+              "label": "To do",
+              "description": "Your next to-dos, and a button to add a thought",
+              "minWidth": "180dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 3,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ],
+      [
+        "./plugins/withAppQueries",
+        {
+          "packages": [
+            "com.anthropic.claude",
+            "com.openai.chatgpt"
+          ]
         }
       ]
     ],

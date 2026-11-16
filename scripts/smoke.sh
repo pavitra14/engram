@@ -34,13 +34,14 @@ adb shell input text "Sourdough"; sleep 2; shot 03-typing
 adb shell input keyevent 4; sleep 2
 tap 953 2221; sleep 4; shot 04-captured
 
-# Open it (first in the stream), put it on the to-do list with a reminder in a week.
-tap 500 720; sleep 4; shot 05-thought
-tap 195 585; sleep 2; shot 06-todo-menu
+# Open the newest thought with its to-do menu, and ask to be reminded in a week
+# (always the second choice from the bottom of the sheet).
+open "engram://latest?menu=todo"; sleep 6; shot 05-thought-todo-menu
 tap 540 2084; sleep 4; shot 07-thought-reminder
 adb shell input keyevent 4; sleep 3; shot 08-home-todo
 open "engram://todo"; sleep 4; shot 09-todo
 adb shell dumpsys alarm | grep -i "$PKG" | head -5 > "$OUT/alarms.txt" || true
+adb shell dumpsys appwidget | grep -i -A2 "provider.*$PKG" | head -12 > "$OUT/widgets.txt" || true
 
 # Share a picture in from "another app".
 adb shell screencap -p /sdcard/Pictures/engram-test.png
@@ -68,7 +69,6 @@ for i in $(seq 1 30); do
   sleep 10
   if adb logcat -d -s ReactNativeJS | grep -q "engram: meaning ready"; then break; fi
   if adb logcat -d -s ReactNativeJS | grep -q "engram: meaning error"; then break; fi
-  if adb logcat -d -s ReactNativeJS | grep -q "engram: model check"; then sleep 20; break; fi
 done
 sleep 3; shot 14-meaning-done
 open "engram://search?q=garage"; sleep 5; shot 15-after-meaning
@@ -78,9 +78,20 @@ adb shell input keyevent 4; sleep 1
 
 open "engram://map"; sleep 6; shot 16-map
 open "engram://group/largest"; sleep 5; shot 17-group
-open "engram://compose"; sleep 4
+# A note with a title: type the title, save, and check it appears.
+open "engram://compose"; sleep 5
 adb shell input text "Notepad"; sleep 2; shot 18-compose
-adb shell input keyevent 4; sleep 1
+tap 930 212; sleep 5; shot 18b-note-saved
+
+# The two other home layouts, then back to the list.
+open "engram://settings?home=split"; sleep 3
+adb shell input keyevent 4; sleep 2
+launch; sleep 6; shot 18c-home-split
+open "engram://settings?home=map"; sleep 3
+adb shell input keyevent 4; sleep 2
+launch; sleep 6; shot 18d-home-map
+open "engram://settings?home=list"; sleep 3
+adb shell input keyevent 4; sleep 2
 open "engram://settings"; sleep 5; shot 19-settings
 
 # Share text in from "another app".
@@ -108,4 +119,5 @@ if ! adb shell pidof "$PKG" >/dev/null; then
 fi
 grep -E "ReactNativeJS" "$OUT/logcat.txt" | tail -40 || true
 cat "$OUT/alarms.txt" || true
+cat "$OUT/widgets.txt" || true
 echo "Smoke test passed."

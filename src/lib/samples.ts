@@ -1,4 +1,4 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { Db } from '@/db/db';
 
 import * as repo from '@/db/repo';
 import type { NewThought } from '@/db/types';
@@ -50,7 +50,7 @@ const SAMPLES: (Omit<NewThought, 'created_at'> & { ago: number })[] = [
 ];
 
 /** Loads a small demo brain. Does nothing if the brain already has thoughts. */
-export async function loadSamples(db: SQLiteDatabase): Promise<boolean> {
+export async function loadSamples(db: Db): Promise<boolean> {
   if ((await repo.countThoughts(db)) > 0) return false;
   const now = Date.now();
   for (const { ago, ...t } of SAMPLES) {

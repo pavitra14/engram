@@ -1,20 +1,90 @@
-import { randomUUID } from 'expo-crypto';
-import type { SQLiteDatabase } from 'expo-sqlite';
-
+/**
+ * All SQL lives here. Nothing in this file imports React Native, so the Node
+ * tests run the same code against node:sqlite.
+ *
+ * The tables are PowerSync tables (see schema.ts): no constraints, no cascades,
+ * no "ON CONFLICT". The rules those would have enforced are written out below:
+ * a link is stored once with a_id < b_id, deleting a thought removes what hangs
+ * off it, and "insert or update" is a read followed by one or the other.
+ */
 import { ftsQuery } from '@/lib/text';
 
-import type { Link, LinkKind, NewThought, Tag, Thought, ThoughtKind } from './types';
+import type { Db } from './db';
+import { EMBEDDINGS_DDL, SEARCH_DDL, THOUGHT_COLUMNS } from './schema';
+import type { Link, LinkKind, NewThought, Repeat, Tag, Thought, ThoughtKind } from './types';
 
 const order = (x: string, y: string): [string, string] => (x < y ? [x, y] : [y, x]);
 
+let makeId: () => string = () => {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = Math.floor(Math.random() * 16);
+    return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+};
+/** The app passes in the phone's secure random UUID maker. */
+export function setIdMaker(fn: () => string): void {
+  makeId = fn;
+}
+
+// ---------- setup ----------
+
+let searchIndex = false;
+
+/** Creates the tables that are worked out from the thoughts. Safe to call on every launch. */
+export async function prepare(db: Db): Promise<void> {
+  await db.run(EMBEDDINGS_DDL);
+  try {
+    await db.run(SEARCH_DDL);
+    searchIndex = true;
+  } catch {
+    // This SQLite build has no full-text search. Search still works, by plain matching.
+    searchIndex = false;
+  }
+}
+
+export function hasSearchIndex(): boolean {
+  return searchIndex;
+}
+
+async function index(db: Db, id: string, title: string | null, body: string): Promise<void> {
+  if (!searchIndex) return;
+  await db.run('DELETE FROM thoughts_fts WHERE id = ?', [id]);
+  await db.run('INSERT INTO thoughts_fts (id, title, body) VALUES (?, ?, ?)', [id, title ?? '', body]);
+}
+
+/** Rebuilds the search index from the thoughts. */
+export async function reindexSearch(db: Db): Promise<void> {
+  if (!searchIndex) return;
+  const rows = await db.all<{ id: string; title: string | null; body: string | null }>('SELECT id, title, body FROM thoughts');
+  await db.tx(async (t) => {
+    await t.run('DELETE FROM thoughts_fts');
+    for (const r of rows) await t.run('INSERT INTO thoughts_fts (id, title, body) VALUES (?, ?, ?)', [r.id, r.title ?? '', r.body ?? '']);
+  });
+}
+
 // ---------- thoughts ----------
 
-export async function insertThought(db: SQLiteDatabase, t: NewThought & { id?: string }): Promise<Thought> {
+const COLS = ['id', ...THOUGHT_COLUMNS].join(', ');
+const T_COLS = ['id', ...THOUGHT_COLUMNS].map((c) => `t.${c}`).join(', ');
+
+/** PowerSync hands back null for a column never written; the app expects these two as numbers and body as text. */
+function tidy<T extends Thought>(t: T): T {
+  t.body = t.body ?? '';
+  t.todo = t.todo ?? 0;
+  t.priority = t.priority ?? 0;
+  return t;
+}
+const tidyAll = <T extends Thought>(rows: T[]): T[] => rows.map(tidy);
+
+export async function insertThought(db: Db, t: NewThought): Promise<Thought> {
   const now = Date.now();
   const row: Thought = {
-    id: t.id ?? randomUUID(),
+    id: t.id ?? makeId(),
     kind: t.kind,
     body: t.body,
+    body_html: t.body_html ?? null,
     title: t.title ?? null,
     url: t.url ?? null,
     source: t.source ?? null,
@@ -25,297 +95,292 @@ export async function insertThought(db: SQLiteDatabase, t: NewThought & { id?: s
     file_size: t.file_size ?? null,
     todo: 0,
     remind_at: null,
+    repeat: null,
+    priority: 0,
     done_at: null,
     notif_id: null,
+    event_id: t.event_id ?? null,
+    event_title: t.event_title ?? null,
+    event_at: t.event_at ?? null,
     created_at: t.created_at ?? now,
     updated_at: now,
   };
-  await db.runAsync(
-    `INSERT INTO thoughts (id, kind, body, title, url, source, media_path, duration_ms, file_name, mime_type, file_size, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    row.id,
-    row.kind,
-    row.body,
-    row.title,
-    row.url,
-    row.source,
-    row.media_path,
-    row.duration_ms,
-    row.file_name,
-    row.mime_type,
-    row.file_size,
-    row.created_at,
-    row.updated_at,
+  await db.run(
+    `INSERT INTO thoughts (${COLS}) VALUES (${['id', ...THOUGHT_COLUMNS].map(() => '?').join(', ')})`,
+    [row.id, ...THOUGHT_COLUMNS.map((c) => row[c])],
   );
+  await index(db, row.id, row.title, row.body);
   return row;
 }
 
-const COLS =
-  'id, kind, body, title, url, source, media_path, duration_ms, file_name, mime_type, file_size, todo, remind_at, done_at, notif_id, created_at, updated_at';
-
-export function getThought(db: SQLiteDatabase, id: string): Promise<Thought | null> {
-  return db.getFirstAsync<Thought>(`SELECT ${COLS} FROM thoughts WHERE id = ?`, id);
+export async function getThought(db: Db, id: string): Promise<Thought | null> {
+  const t = await db.first<Thought>(`SELECT ${COLS} FROM thoughts WHERE id = ?`, [id]);
+  return t ? tidy(t) : null;
 }
 
-export function listThoughts(
-  db: SQLiteDatabase,
+export async function listThoughts(
+  db: Db,
   { kind, limit = 500 }: { kind?: ThoughtKind | null; limit?: number } = {},
 ): Promise<Thought[]> {
-  return kind
-    ? db.getAllAsync<Thought>(
-        `SELECT ${COLS} FROM thoughts WHERE kind = ? ORDER BY created_at DESC LIMIT ?`,
-        kind,
-        limit,
-      )
-    : db.getAllAsync<Thought>(`SELECT ${COLS} FROM thoughts ORDER BY created_at DESC LIMIT ?`, limit);
+  return tidyAll(
+    kind
+      ? await db.all<Thought>(`SELECT ${COLS} FROM thoughts WHERE kind = ? ORDER BY created_at DESC LIMIT ?`, [kind, limit])
+      : await db.all<Thought>(`SELECT ${COLS} FROM thoughts ORDER BY created_at DESC LIMIT ?`, [limit]),
+  );
 }
 
 export async function searchThoughts(
-  db: SQLiteDatabase,
+  db: Db,
   query: string,
   { kind, limit = 200 }: { kind?: ThoughtKind | null; limit?: number } = {},
 ): Promise<Thought[]> {
   const match = ftsQuery(query);
   if (!match) return listThoughts(db, { kind, limit });
-  const cols = COLS.split(', ')
-    .map((c) => `t.${c}`)
-    .join(', ');
-  return db.getAllAsync<Thought>(
-    `SELECT ${cols} FROM thoughts_fts f JOIN thoughts t ON t.pk = f.rowid
-     WHERE thoughts_fts MATCH ? ${kind ? 'AND t.kind = ?' : ''}
-     ORDER BY bm25(thoughts_fts, 4.0, 1.0) LIMIT ?`,
-    ...(kind ? [match, kind, limit] : [match, limit]),
+  if (searchIndex) {
+    return tidyAll(
+      await db.all<Thought>(
+        `SELECT ${T_COLS} FROM thoughts_fts f JOIN thoughts t ON t.id = f.id
+         WHERE thoughts_fts MATCH ? ${kind ? 'AND t.kind = ?' : ''}
+         ORDER BY bm25(thoughts_fts, 0.0, 4.0, 1.0) LIMIT ?`,
+        kind ? [match, kind, limit] : [match, limit],
+      ),
+    );
+  }
+  // No index: every word must appear somewhere in the title, body or file name.
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
+  const where = words.map(() => "(lower(coalesce(title, '') || ' ' || coalesce(body, '') || ' ' || coalesce(file_name, '')) LIKE ?)");
+  return tidyAll(
+    await db.all<Thought>(
+      `SELECT ${COLS} FROM thoughts WHERE ${where.join(' AND ')} ${kind ? 'AND kind = ?' : ''} ORDER BY created_at DESC LIMIT ?`,
+      [...words.map((w) => `%${w.replace(/[%_]/g, '')}%`), ...(kind ? [kind] : []), limit],
+    ),
   );
 }
 
-export async function updateThoughtBody(db: SQLiteDatabase, id: string, body: string): Promise<void> {
-  await db.runAsync('UPDATE thoughts SET body = ?, updated_at = ? WHERE id = ?', body, Date.now(), id);
+/** Saves a note's title and body. `body` is the plain words; `body_html` the formatted version, if any. */
+export async function updateThought(
+  db: Db,
+  id: string,
+  { title, body, body_html }: { title: string | null; body: string; body_html: string | null },
+): Promise<void> {
+  await db.run('UPDATE thoughts SET title = ?, body = ?, body_html = ?, updated_at = ? WHERE id = ?', [
+    title,
+    body,
+    body_html,
+    Date.now(),
+    id,
+  ]);
+  await index(db, id, title, body);
 }
 
-export async function deleteThought(db: SQLiteDatabase, id: string): Promise<void> {
-  await db.runAsync('DELETE FROM thoughts WHERE id = ?', id);
+/** Removes a thought and everything that hangs off it. */
+export async function deleteThought(db: Db, id: string): Promise<void> {
+  await db.tx(async (t) => {
+    await t.run('DELETE FROM links WHERE a_id = ? OR b_id = ?', [id, id]);
+    await t.run('DELETE FROM thought_tags WHERE thought_id = ?', [id]);
+    await t.run('DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM thought_tags)');
+    await t.run('DELETE FROM embeddings WHERE thought_id = ?', [id]);
+    if (searchIndex) await t.run('DELETE FROM thoughts_fts WHERE id = ?', [id]);
+    await t.run('DELETE FROM thoughts WHERE id = ?', [id]);
+  });
 }
 
-export async function countThoughts(db: SQLiteDatabase): Promise<number> {
-  const r = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM thoughts');
+export async function countThoughts(db: Db): Promise<number> {
+  const r = await db.first<{ n: number }>('SELECT COUNT(*) AS n FROM thoughts');
   return r?.n ?? 0;
 }
 
 // ---------- to-dos and reminders ----------
 
-/** Puts a thought on the to-do list, optionally with a reminder time. Clears any "done" state. */
+/** Puts a thought on the to-do list, optionally with a reminder time and a repeat. Clears any "done" state. */
 export async function setTodo(
-  db: SQLiteDatabase,
+  db: Db,
   id: string,
-  { remindAt, notifId }: { remindAt: number | null; notifId: string | null },
+  { remindAt, notifId, repeat = null }: { remindAt: number | null; notifId: string | null; repeat?: Repeat | null },
 ): Promise<void> {
-  await db.runAsync(
-    'UPDATE thoughts SET todo = 1, remind_at = ?, notif_id = ?, done_at = NULL, updated_at = ? WHERE id = ?',
-    remindAt,
-    notifId,
-    Date.now(),
-    id,
+  await db.run(
+    'UPDATE thoughts SET todo = 1, remind_at = ?, notif_id = ?, repeat = ?, done_at = NULL, updated_at = ? WHERE id = ?',
+    [remindAt, notifId, remindAt ? repeat : null, Date.now(), id],
   );
 }
 
-export async function clearTodo(db: SQLiteDatabase, id: string): Promise<void> {
-  await db.runAsync(
-    'UPDATE thoughts SET todo = 0, remind_at = NULL, notif_id = NULL, done_at = NULL, updated_at = ? WHERE id = ?',
-    Date.now(),
-    id,
+export async function clearTodo(db: Db, id: string): Promise<void> {
+  await db.run(
+    'UPDATE thoughts SET todo = 0, remind_at = NULL, notif_id = NULL, repeat = NULL, priority = 0, done_at = NULL, updated_at = ? WHERE id = ?',
+    [Date.now(), id],
   );
 }
 
-export async function setDone(db: SQLiteDatabase, id: string, done: boolean): Promise<void> {
-  await db.runAsync(
-    'UPDATE thoughts SET done_at = ?, notif_id = CASE WHEN ? THEN NULL ELSE notif_id END, updated_at = ? WHERE id = ?',
-    done ? Date.now() : null,
-    done ? 1 : 0,
-    Date.now(),
-    id,
-  );
-}
-
-/** Open to-dos: those with a time first, soonest first; then the rest, newest first. */
-export function listOpenTodos(db: SQLiteDatabase): Promise<Thought[]> {
-  return db.getAllAsync<Thought>(
-    `SELECT ${COLS} FROM thoughts WHERE todo = 1 AND done_at IS NULL
-     ORDER BY (remind_at IS NULL), remind_at ASC, created_at DESC`,
-  );
-}
-
-export function listDoneTodos(db: SQLiteDatabase, limit = 100): Promise<Thought[]> {
-  return db.getAllAsync<Thought>(
-    `SELECT ${COLS} FROM thoughts WHERE todo = 1 AND done_at IS NOT NULL ORDER BY done_at DESC LIMIT ?`,
-    limit,
-  );
-}
-
-// ---------- embeddings ----------
-
-export async function saveEmbedding(db: SQLiteDatabase, id: string, model: string, vector: Float32Array): Promise<void> {
-  const bytes = new Uint8Array(vector.buffer, vector.byteOffset, vector.byteLength);
-  await db.runAsync(
-    `INSERT INTO embeddings (thought_id, model, vector) VALUES (?, ?, ?)
-     ON CONFLICT (thought_id) DO UPDATE SET model = excluded.model, vector = excluded.vector`,
-    id,
-    model,
-    bytes,
-  );
-}
-
-export async function loadEmbeddings(db: SQLiteDatabase, model: string): Promise<Map<string, Float32Array>> {
-  const rows = await db.getAllAsync<{ thought_id: string; vector: Uint8Array }>(
-    'SELECT thought_id, vector FROM embeddings WHERE model = ?',
-    model,
-  );
-  const out = new Map<string, Float32Array>();
-  for (const r of rows) {
-    // Copy so the floats are aligned whatever offset the driver handed back.
-    const copy = new Uint8Array(r.vector);
-    out.set(r.thought_id, new Float32Array(copy.buffer, 0, Math.floor(copy.byteLength / 4)));
+export async function setDone(db: Db, id: string, done: boolean): Promise<void> {
+  if (done) {
+    await db.run('UPDATE thoughts SET done_at = ?, notif_id = NULL, updated_at = ? WHERE id = ?', [Date.now(), Date.now(), id]);
+  } else {
+    await db.run('UPDATE thoughts SET done_at = NULL, updated_at = ? WHERE id = ?', [Date.now(), id]);
   }
+}
+
+export async function setPriority(db: Db, id: string, important: boolean): Promise<void> {
+  await db.run('UPDATE thoughts SET priority = ?, updated_at = ? WHERE id = ?', [important ? 1 : 0, Date.now(), id]);
+}
+
+/** Open to-dos: important first, then those with a time (soonest first), then the rest, newest first. */
+export async function listOpenTodos(db: Db): Promise<Thought[]> {
+  return tidyAll(
+    await db.all<Thought>(
+      `SELECT ${COLS} FROM thoughts WHERE todo = 1 AND done_at IS NULL
+       ORDER BY (remind_at IS NULL), remind_at ASC, created_at DESC`,
+    ),
+  );
+}
+
+export async function listDoneTodos(db: Db, limit = 100): Promise<Thought[]> {
+  return tidyAll(
+    await db.all<Thought>(`SELECT ${COLS} FROM thoughts WHERE todo = 1 AND done_at IS NOT NULL ORDER BY done_at DESC LIMIT ?`, [limit]),
+  );
+}
+
+// ---------- meaning vectors ----------
+
+const HEX = '0123456789abcdef';
+
+/** A vector as hex text. PowerSync tables hold text, whole numbers and decimals only, and hex needs no helper library. */
+export function vectorToHex(v: Float32Array): string {
+  const bytes = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) out += HEX[bytes[i] >> 4] + HEX[bytes[i] & 15];
   return out;
 }
 
-export async function idsWithoutEmbedding(db: SQLiteDatabase, model: string): Promise<string[]> {
-  const rows = await db.getAllAsync<{ id: string }>(
+export function hexToVector(hex: string): Float32Array {
+  const bytes = new Uint8Array(hex.length >> 1);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return new Float32Array(bytes.buffer, 0, bytes.length >> 2);
+}
+
+export async function saveEmbedding(db: Db, id: string, model: string, vector: Float32Array): Promise<void> {
+  await db.run(
+    `INSERT INTO embeddings (thought_id, model, vector) VALUES (?, ?, ?)
+     ON CONFLICT (thought_id) DO UPDATE SET model = excluded.model, vector = excluded.vector`,
+    [id, model, vectorToHex(vector)],
+  );
+}
+
+export async function loadEmbeddings(db: Db, model: string): Promise<Map<string, Float32Array>> {
+  const rows = await db.all<{ thought_id: string; vector: string }>('SELECT thought_id, vector FROM embeddings WHERE model = ?', [model]);
+  const out = new Map<string, Float32Array>();
+  for (const r of rows) if (typeof r.vector === 'string') out.set(r.thought_id, hexToVector(r.vector));
+  return out;
+}
+
+export async function idsWithoutEmbedding(db: Db, model: string): Promise<string[]> {
+  const rows = await db.all<{ id: string }>(
     `SELECT t.id FROM thoughts t LEFT JOIN embeddings e ON e.thought_id = t.id AND e.model = ?
      WHERE e.thought_id IS NULL ORDER BY t.created_at DESC`,
-    model,
+    [model],
   );
   return rows.map((r) => r.id);
 }
 
-export async function dropEmbeddings(db: SQLiteDatabase): Promise<void> {
-  await db.runAsync('DELETE FROM embeddings');
+export async function dropEmbeddings(db: Db): Promise<void> {
+  await db.run('DELETE FROM embeddings');
 }
 
 // ---------- links ----------
 
-export function listLinks(db: SQLiteDatabase): Promise<Link[]> {
-  return db.getAllAsync<Link>('SELECT a_id, b_id, kind, weight FROM links');
+export function listLinks(db: Db): Promise<Link[]> {
+  return db.all<Link>('SELECT a_id, b_id, kind, weight FROM links');
 }
 
-export async function upsertLink(
-  db: SQLiteDatabase,
-  x: string,
-  y: string,
-  kind: LinkKind,
-  weight: number,
-): Promise<void> {
+/** Adds a link or updates its weight. A manual link is never downgraded to an automatic one. */
+export async function upsertLink(db: Db, x: string, y: string, kind: LinkKind, weight: number): Promise<void> {
   if (x === y) return;
   const [a, b] = order(x, y);
-  // A manual link is never downgraded to an auto one.
-  await db.runAsync(
-    `INSERT INTO links (a_id, b_id, kind, weight) VALUES (?, ?, ?, ?)
-     ON CONFLICT (a_id, b_id) DO UPDATE SET
-       weight = CASE WHEN links.kind = 'manual' AND excluded.kind = 'auto' THEN links.weight ELSE excluded.weight END,
-       kind   = CASE WHEN links.kind = 'manual' THEN 'manual' ELSE excluded.kind END`,
-    a,
-    b,
-    kind,
-    weight,
-  );
+  const id = `${a}:${b}`;
+  const existing = await db.first<{ kind: LinkKind }>('SELECT kind FROM links WHERE id = ?', [id]);
+  if (!existing) {
+    await db.run('INSERT INTO links (id, a_id, b_id, kind, weight) VALUES (?, ?, ?, ?, ?)', [id, a, b, kind, weight]);
+  } else if (existing.kind === 'manual' && kind === 'auto') {
+    // Keep the person's own link exactly as it is.
+  } else {
+    await db.run('UPDATE links SET kind = ?, weight = ? WHERE id = ?', [kind, weight, id]);
+  }
 }
 
-export async function removeLink(db: SQLiteDatabase, x: string, y: string): Promise<void> {
+export async function removeLink(db: Db, x: string, y: string): Promise<void> {
   const [a, b] = order(x, y);
-  await db.runAsync('DELETE FROM links WHERE a_id = ? AND b_id = ?', a, b);
+  await db.run('DELETE FROM links WHERE id = ?', [`${a}:${b}`]);
 }
 
 export type Neighbour = Thought & { link_kind: LinkKind; weight: number };
 
-export function neighboursOf(db: SQLiteDatabase, id: string): Promise<Neighbour[]> {
-  const cols = COLS.split(', ')
-    .map((c) => `t.${c}`)
-    .join(', ');
-  return db.getAllAsync<Neighbour>(
-    `SELECT ${cols}, l.kind AS link_kind, l.weight AS weight
-     FROM links l JOIN thoughts t ON t.id = CASE WHEN l.a_id = ?1 THEN l.b_id ELSE l.a_id END
-     WHERE l.a_id = ?1 OR l.b_id = ?1
-     ORDER BY (l.kind = 'manual') DESC, l.weight DESC`,
-    id,
+export async function neighboursOf(db: Db, id: string): Promise<Neighbour[]> {
+  return tidyAll(
+    await db.all<Neighbour>(
+      `SELECT ${T_COLS}, l.kind AS link_kind, l.weight AS weight
+       FROM links l JOIN thoughts t ON t.id = CASE WHEN l.a_id = ? THEN l.b_id ELSE l.a_id END
+       WHERE l.a_id = ? OR l.b_id = ?
+       ORDER BY (l.kind = 'manual') DESC, l.weight DESC`,
+      [id, id, id],
+    ),
   );
 }
 
-export async function replaceAutoLinks(
-  db: SQLiteDatabase,
-  links: { a: string; b: string; score: number }[],
-): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(`DELETE FROM links WHERE kind = 'auto'`);
-    for (const l of links) await upsertLink(db, l.a, l.b, 'auto', l.score);
+export async function replaceAutoLinks(db: Db, links: { a: string; b: string; score: number }[]): Promise<void> {
+  await db.tx(async (t) => {
+    await t.run(`DELETE FROM links WHERE kind = 'auto'`);
+    for (const l of links) await upsertLink(t, l.a, l.b, 'auto', l.score);
   });
 }
 
 // ---------- tags ----------
 
-export function tagsOf(db: SQLiteDatabase, thoughtId: string): Promise<Tag[]> {
-  return db.getAllAsync<Tag>(
+export function tagsOf(db: Db, thoughtId: string): Promise<Tag[]> {
+  return db.all<Tag>(
     `SELECT g.id, g.name FROM thought_tags tt JOIN tags g ON g.id = tt.tag_id
      WHERE tt.thought_id = ? ORDER BY g.name`,
-    thoughtId,
+    [thoughtId],
   );
 }
 
-export function allTagPairs(db: SQLiteDatabase): Promise<{ thought_id: string; name: string }[]> {
-  return db.getAllAsync(`SELECT tt.thought_id, g.name FROM thought_tags tt JOIN tags g ON g.id = tt.tag_id`);
+export function allTagPairs(db: Db): Promise<{ thought_id: string; name: string }[]> {
+  return db.all(`SELECT tt.thought_id, g.name FROM thought_tags tt JOIN tags g ON g.id = tt.tag_id`);
 }
 
-export async function addTag(db: SQLiteDatabase, thoughtId: string, rawName: string): Promise<void> {
+export async function addTag(db: Db, thoughtId: string, rawName: string): Promise<void> {
   const name = rawName.trim().replace(/^#+/, '').slice(0, 32);
   if (!name) return;
-  await db.runAsync('INSERT OR IGNORE INTO tags (id, name) VALUES (?, ?)', randomUUID(), name);
-  const tag = await db.getFirstAsync<{ id: string }>('SELECT id FROM tags WHERE name = ?', name);
-  if (tag) {
-    await db.runAsync('INSERT OR IGNORE INTO thought_tags (thought_id, tag_id) VALUES (?, ?)', thoughtId, tag.id);
+  let tag = await db.first<{ id: string }>('SELECT id FROM tags WHERE lower(name) = lower(?)', [name]);
+  if (!tag) {
+    tag = { id: makeId() };
+    await db.run('INSERT INTO tags (id, name) VALUES (?, ?)', [tag.id, name]);
   }
+  const id = `${thoughtId}:${tag.id}`;
+  const has = await db.first<{ id: string }>('SELECT id FROM thought_tags WHERE id = ?', [id]);
+  if (!has) await db.run('INSERT INTO thought_tags (id, thought_id, tag_id) VALUES (?, ?, ?)', [id, thoughtId, tag.id]);
 }
 
-export async function removeTag(db: SQLiteDatabase, thoughtId: string, tagId: string): Promise<void> {
-  await db.runAsync('DELETE FROM thought_tags WHERE thought_id = ? AND tag_id = ?', thoughtId, tagId);
-  await db.runAsync('DELETE FROM tags WHERE id = ? AND id NOT IN (SELECT tag_id FROM thought_tags)', tagId);
-}
-
-// ---------- layout ----------
-
-export function loadLayout(db: SQLiteDatabase): Promise<{ thought_id: string; x: number; y: number }[]> {
-  return db.getAllAsync('SELECT thought_id, x, y FROM graph_layout');
-}
-
-export async function saveLayout(db: SQLiteDatabase, points: { id: string; x: number; y: number }[]): Promise<void> {
-  if (points.length === 0) return;
-  await db.withTransactionAsync(async () => {
-    for (const p of points) {
-      await db.runAsync(
-        `INSERT INTO graph_layout (thought_id, x, y) VALUES (?, ?, ?)
-         ON CONFLICT (thought_id) DO UPDATE SET x = excluded.x, y = excluded.y`,
-        p.id,
-        p.x,
-        p.y,
-      );
-    }
-  });
+export async function removeTag(db: Db, thoughtId: string, tagId: string): Promise<void> {
+  await db.run('DELETE FROM thought_tags WHERE id = ?', [`${thoughtId}:${tagId}`]);
+  await db.run('DELETE FROM tags WHERE id = ? AND id NOT IN (SELECT tag_id FROM thought_tags)', [tagId]);
 }
 
 // ---------- settings ----------
 
-export async function getMeta(db: SQLiteDatabase, key: string): Promise<string | null> {
-  const r = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', key);
+export async function getMeta(db: Db, key: string): Promise<string | null> {
+  const r = await db.first<{ value: string }>('SELECT value FROM meta WHERE id = ?', [key]);
   return r?.value ?? null;
 }
 
-export async function setMeta(db: SQLiteDatabase, key: string, value: string): Promise<void> {
-  await db.runAsync(
-    'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
-    key,
-    value,
-  );
+export async function setMeta(db: Db, key: string, value: string): Promise<void> {
+  const has = await db.first<{ id: string }>('SELECT id FROM meta WHERE id = ?', [key]);
+  if (has) await db.run('UPDATE meta SET value = ? WHERE id = ?', [value, key]);
+  else await db.run('INSERT INTO meta (id, value) VALUES (?, ?)', [key, value]);
 }
 
-export async function wipeAll(db: SQLiteDatabase): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    await db.execAsync('DELETE FROM thoughts; DELETE FROM tags;');
+/** Deletes every thought and what hangs off them. Settings stay. */
+export async function wipeAll(db: Db): Promise<void> {
+  await db.tx(async (t) => {
+    for (const table of ['links', 'thought_tags', 'tags', 'embeddings', 'thoughts']) await t.run(`DELETE FROM ${table}`);
+    if (searchIndex) await t.run('DELETE FROM thoughts_fts');
   });
 }

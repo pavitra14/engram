@@ -1,4 +1,4 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { Db } from '@/db/db';
 
 import * as repo from '@/db/repo';
 
@@ -13,7 +13,7 @@ let running = false;
  * time), gives every thought that lacks one a vector, then rebuilds the links.
  * Safe to call on every launch; it does nothing when the setting is off.
  */
-export async function startSmartLinking(db: SQLiteDatabase): Promise<void> {
+export async function startSmartLinking(db: Db): Promise<void> {
   if (running || (await repo.getMeta(db, 'semantic')) !== 'on') return;
   running = true;
   try {
@@ -49,13 +49,13 @@ export async function startSmartLinking(db: SQLiteDatabase): Promise<void> {
   }
 }
 
-export async function enableSmartLinking(db: SQLiteDatabase): Promise<void> {
+export async function enableSmartLinking(db: Db): Promise<void> {
   await repo.setMeta(db, 'semantic', 'on');
   await startSmartLinking(db);
 }
 
 /** Switches meaning-based linking off and returns links to word matching only. */
-export async function disableSmartLinking(db: SQLiteDatabase): Promise<void> {
+export async function disableSmartLinking(db: Db): Promise<void> {
   await repo.setMeta(db, 'semantic', 'off');
   unloadModel();
   await repo.dropEmbeddings(db);

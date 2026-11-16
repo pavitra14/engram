@@ -3,44 +3,76 @@ import { Newsreader_400Regular, Newsreader_500Medium, useFonts } from '@expo-goo
 import * as Notifications from 'expo-notifications';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
+import { DbProvider, useDb } from '@/db/provider';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { migrate } from '@/db/migrate';
-import { thoughtIdFrom } from '@/lib/reminders';
+import * as repo from '@/db/repo';
+import { ACTION_DONE, ACTION_LATER, actionFrom, setDone, snooze, thoughtIdFrom } from '@/lib/reminders';
 import { startSmartLinking } from '@/lib/smart';
 import { ThemeProvider, useTheme } from '@/theme';
+import { useDataVersion } from '@/lib/bus';
+import { refreshWidgets } from '@/widgets/snapshot';
 
 void SplashScreen.preventAutoHideAsync();
 
 function Screens() {
   const { c, dark } = useTheme();
-  const db = useSQLiteContext();
+  const db = useDb();
   const lastResponse = Notifications.useLastNotificationResponse();
+
+  // Keep the home-screen widgets in step with the to-do list and the theme.
+  const version = useDataVersion();
+  useEffect(() => {
+    void refreshWidgets(db);
+  }, [db, version, dark]);
 
   // Load the language model in the background if meaning-based linking is on.
   useEffect(() => {
     void startSmartLinking(db);
   }, [db]);
 
-  // Tapping a reminder opens its thought.
+  // Tapping a reminder opens its thought. Its two buttons finish it or move it an hour on.
   useEffect(() => {
     const id = thoughtIdFrom(lastResponse);
     if (!id) return;
+    const action = actionFrom(lastResponse);
+    if (action) {
+      void repo.getThought(db, id).then((t) => {
+        if (!t) return;
+        if (action === ACTION_DONE) void setDone(db, t, true);
+        if (action === ACTION_LATER) void snooze(db, t, 3_600_000);
+      });
+      return;
+    }
     const t = setTimeout(() => router.push({ pathname: '/thought/[id]', params: { id } }), 50);
     return () => clearTimeout(t);
-  }, [lastResponse]);
+  }, [db, lastResponse]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.bg }}>
       <StatusBar style={dark ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg }, animation: 'slide_from_right' }}>
-        <Stack.Screen name="voice" options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
-        <Stack.Screen name="compose" options={{ animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="search" options={{ animation: 'fade' }} />
-        <Stack.Screen name="handle-share" options={{ animation: 'fade' }} />
+      {/*
+        Each screen arrives the way that matches what it is. Going deeper into your
+        thoughts (a thought, a group) pushes in from the side and swipes back.
+        Places you glance at and leave (the map, search, to-dos, settings) fade
+        through quickly. Things you start and finish (a note, a recording, a share)
+        rise from the bottom like a sheet. Durations are short on purpose.
+      */}
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg }, animation: 'ios_from_right', animationDuration: 220 }}>
+        <Stack.Screen name="index" options={{ animation: 'fade', animationDuration: 140 }} />
+        <Stack.Screen name="thought/[id]" options={{ animation: 'ios_from_right', animationDuration: 220 }} />
+        <Stack.Screen name="group/[id]" options={{ animation: 'ios_from_right', animationDuration: 220 }} />
+        <Stack.Screen name="map" options={{ animation: 'fade', animationDuration: 160 }} />
+        <Stack.Screen name="todo" options={{ animation: 'fade_from_bottom', animationDuration: 180 }} />
+        <Stack.Screen name="settings" options={{ animation: 'fade_from_bottom', animationDuration: 180 }} />
+        <Stack.Screen name="search" options={{ animation: 'fade', animationDuration: 120 }} />
+        <Stack.Screen name="compose" options={{ animation: 'slide_from_bottom', animationDuration: 240, gestureDirection: 'vertical' }} />
+        <Stack.Screen name="voice" options={{ animation: 'slide_from_bottom', animationDuration: 240, gestureEnabled: false }} />
+        <Stack.Screen name="handle-share" options={{ animation: 'slide_from_bottom', animationDuration: 200 }} />
+        <Stack.Screen name="samples" options={{ animation: 'none' }} />
+        <Stack.Screen name="latest" options={{ animation: 'none' }} />
       </Stack>
     </GestureHandlerRootView>
   );
@@ -62,10 +94,10 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
-    <SQLiteProvider databaseName="engram.db" onInit={migrate}>
+    <DbProvider>
       <ThemeProvider>
         <Screens />
       </ThemeProvider>
-    </SQLiteProvider>
+    </DbProvider>
   );
 }

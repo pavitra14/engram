@@ -98,3 +98,25 @@ Plain and specific. Buttons name the action ("Save what you copied", "Export"). 
 - Every icon button has a spoken label; notices are live regions.
 - Kind and group are never shown by colour alone.
 - Layouts are stacks and wrapping rows so they reflow at large text sizes. This has not yet been tested at 200%.
+
+## Motion, as of 0.3
+
+Movement says what kind of place you are going to.
+
+| Going to | Movement | Length |
+|---|---|---|
+| A thought or a group (deeper) | In from the side; swipe back | 220 ms |
+| Map, search, home (a glance) | Fade | 120 to 160 ms |
+| To-dos, settings | Fade up from just below | 180 ms |
+| A new note, a recording, a share (start and finish) | Up from the bottom | 200 to 240 ms |
+| A menu | Slides up as the screen dims; down again faster | 220 in, 160 out |
+
+Nothing is longer than 240 ms. Nothing bounces. There is still no decorative animation.
+
+## The note editor
+
+Title in Newsreader Medium 28, body in Newsreader 19. The formatting bar is a single row of 48 pt round buttons that scrolls sideways; an active format is shown as a filled button, not by colour alone. Order: bold, italic, underline, heading, check list, bullets, numbers, quote, strike.
+
+## Widgets
+
+Widgets cannot load the app's fonts or theme. They use the same palette values as fixed colours, the system font, the 28 dp and 24 dp corner radii, and one accent-filled button each.

@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useDb } from '@/db/provider';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Image, KeyboardAvoidingView, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,17 +10,19 @@ import { Feather } from '@expo/vector-icons';
 
 import { ActionSheet, type SheetOption } from '@/components/ActionSheet';
 import { Entry, entryMeta } from '@/components/Entry';
+import { FormatBar, NoteEditor, type NoteEditorHandle, type NoteValue } from '@/components/NoteEditor';
 import { Button, KindGlyph, Pill, RoundButton } from '@/components/ui';
 import * as repo from '@/db/repo';
 import type { Tag, Thought } from '@/db/types';
 import { useBrain } from '@/lib/brain';
 import { dataChanged } from '@/lib/bus';
 import { addToCalendar } from '@/lib/calendar';
-import { relink, removeThought } from '@/lib/capture';
+import { relink, removeThought, saveNote } from '@/lib/capture';
 import { whyLinked } from '@/lib/linker';
 import { openFile } from '@/lib/open';
-import { addTodo, pickDateTime, reminderPresets, removeTodo, setDone } from '@/lib/reminders';
-import { clock, dueLabel, fileSize, hostOf } from '@/lib/text';
+import { type Assistant, chatWith, installedAssistants, planPrompt } from '@/lib/assistants';
+import { addTodo, pickDateTime, reminderPresets, removeTodo, setDone, setImportant } from '@/lib/reminders';
+import { clock, dueLabel, fileSize, hostOf, repeatLabel, when } from '@/lib/text';
 import { font, kindLabel, type, useTheme } from '@/theme';
 
 function AudioPlayer({ uri }: { uri: string }) {
@@ -58,24 +60,33 @@ function AudioPlayer({ uri }: { uri: string }) {
 }
 
 export default function ThoughtScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const db = useSQLiteContext();
+  const { id, menu: startMenu } = useLocalSearchParams<{ id: string; menu?: string }>();
+  const db = useDb();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const brain = useBrain(db);
 
   const [thought, setThought] = useState<Thought | null | undefined>(undefined);
   const [body, setBody] = useState('');
+  const [titleNow, setTitleNow] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
   const [neighbours, setNeighbours] = useState<repo.Neighbour[]>([]);
   const [tagDraft, setTagDraft] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
   const [linkQuery, setLinkQuery] = useState('');
   const [candidates, setCandidates] = useState<Thought[]>([]);
-  const [menu, setMenu] = useState<'more' | 'todo' | null>(null);
+  const [menu, setMenu] = useState<'more' | 'todo' | 'repeat' | null>(startMenu === 'todo' ? 'todo' : null);
+  const [assistants, setAssistants] = useState<Assistant[]>([]);
+
+  useEffect(() => {
+    void installedAssistants().then(setAssistants);
+  }, []);
   const [note, setNote] = useState<string | null>(null);
+  const editor = useRef<NoteEditorHandle | null>(null);
   const saved = useRef<string | null>(null);
-  const latest = useRef('');
+  const latest = useRef<NoteValue>({ title: '', text: '', html: null });
+  const [inBody, setInBody] = useState(false);
+  const [active, setActive] = useState({});
 
   useEffect(() => {
     let live = true;
@@ -85,9 +96,10 @@ export default function ThoughtScreen() {
       setThought(t);
       if (!t) return;
       if (saved.current === null) {
-        saved.current = t.body;
-        latest.current = t.body;
+        latest.current = { title: t.title ?? '', text: t.body, html: t.body_html };
+        saved.current = JSON.stringify(latest.current);
         setBody(t.body);
+        setTitleNow(t.title ?? '');
       }
       const [g, n] = await Promise.all([repo.tagsOf(db, id), repo.neighboursOf(db, id)]);
       if (!live) return;
@@ -101,12 +113,12 @@ export default function ThoughtScreen() {
   }, [db, id, brain]);
 
   const commit = useCallback(async () => {
-    const next = latest.current;
-    if (saved.current === null || next === saved.current) return;
-    saved.current = next;
-    await repo.updateThoughtBody(db, id, next.trim());
-    await relink(db, id);
-    dataChanged();
+    if (saved.current === null) return;
+    const next = editor.current ? await editor.current.value() : latest.current;
+    const key = JSON.stringify(next);
+    if (key === saved.current) return;
+    saved.current = key;
+    await saveNote(db, id, next);
   }, [db, id]);
 
   // Edits are saved when you leave the field or the screen.
@@ -176,7 +188,7 @@ export default function ThoughtScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          latest.current = saved.current ?? '';
+          saved.current = null;
           await removeThought(db, thought);
           if (router.canGoBack()) router.back();
           else router.replace('/');
@@ -208,19 +220,42 @@ export default function ThoughtScreen() {
             });
           },
         },
+        ...(thought.remind_at
+          ? [{ label: thought.repeat ? `Repeats: ${repeatLabel[thought.repeat].toLowerCase()}` : 'Repeat', icon: 'repeat' as const, onPress: () => setTimeout(() => setMenu('repeat'), 260) }]
+          : []),
+        ...(thought.todo
+          ? [{ label: thought.priority ? 'Not important after all' : 'Mark as important', icon: 'star' as const, onPress: () => void setImportant(db, thought, !thought.priority) }]
+          : []),
         ...(thought.todo ? [{ label: 'Remove from to-do', icon: 'x' as const, onPress: () => void removeTodo(db, thought) }] : []),
       ];
 
+  const repeatOptions: SheetOption[] = [
+    ...(['daily', 'weekly', 'monthly'] as const).map((r) => ({
+      label: repeatLabel[r],
+      icon: 'repeat' as const,
+      onPress: () => void addTodo(db, thought, thought.remind_at, r),
+    })),
+    { label: 'Does not repeat', icon: 'x' as const, onPress: () => void addTodo(db, thought, thought.remind_at, null) },
+  ];
+
   const moreOptions: SheetOption[] = [
     { label: 'Add to calendar', icon: 'calendar', onPress: () => void addToCalendar(thought).catch(() => setNote('The calendar could not be opened.')) },
-    { label: 'Copy text', icon: 'copy', onPress: () => void Clipboard.setStringAsync(latest.current || thought.url || thought.file_name || '') },
+    ...assistants.map((a) => ({
+      label: `Think this through with ${a.name}`,
+      icon: 'message-circle' as const,
+      onPress: () => {
+        const linked = neighbours.slice(0, 12);
+        void chatWith(a, planPrompt(null, [thought, ...linked])).catch(() => setNote(`${a.name} could not be opened. The message is on your clipboard.`));
+      },
+    })),
+    { label: 'Copy text', icon: 'copy', onPress: () => void Clipboard.setStringAsync([latest.current.title, latest.current.text].filter(Boolean).join('\n\n') || thought.url || thought.file_name || '') },
     { label: 'Delete', icon: 'trash-2', danger: true, onPress: confirmDelete },
   ];
 
   const todoLabel = thought.done_at ? 'Done' : thought.remind_at ? dueLabel(thought.remind_at) : thought.todo ? 'On your to-do list' : 'To do';
   const hasFile = (thought.kind === 'video' || thought.kind === 'file') && !!thought.media_path;
 
-  const me = { id, text: body, url: thought.url, tags: tags.map((t) => t.name) };
+  const me = { id, text: `${titleNow} ${body}`, url: thought.url, tags: tags.map((t) => t.name) };
 
   return (
     <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.bg }}>
@@ -231,7 +266,7 @@ export default function ThoughtScreen() {
           tone="plain"
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
         />
-        <RoundButton icon="more-horizontal" label="More actions: calendar, copy or delete" onPress={() => setMenu('more')} />
+        <RoundButton icon="more-horizontal" label="More actions" onPress={() => setMenu('more')} />
       </View>
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 40, gap: 16 }}>
@@ -240,24 +275,31 @@ export default function ThoughtScreen() {
           <Text style={[type.meta, { color: c.soft }]}>{entryMeta(thought)}</Text>
         </View>
 
+        {thought.event_id && thought.event_at ? (
+          <Text style={[type.small, { color: c.soft }]}>
+            Notes for {thought.event_title ?? 'a calendar event'}, {when(thought.event_at)}
+          </Text>
+        ) : null}
+
         {thought.kind === 'image' && thought.media_path ? (
           <Image source={{ uri: thought.media_path }} style={[styles.image, { backgroundColor: c.surface }]} resizeMode="cover" accessibilityLabel="Saved image" />
         ) : null}
 
-        <TextInput
-          value={body}
-          onChangeText={(v) => {
+        <NoteEditor
+          ref={editor}
+          initialTitle={thought.title}
+          initialText={thought.body}
+          initialHtml={thought.body_html}
+          minHeight={56}
+          bodyPlaceholder={thought.kind === 'voice' ? 'No transcript. Add a note about this recording.' : thought.kind === 'text' ? 'Write here' : 'Add a note about this'}
+          onChange={(v) => {
             latest.current = v;
-            setBody(v);
+            setBody(v.text);
+            setTitleNow(v.title);
           }}
           onBlur={() => void commit()}
-          placeholder={thought.kind === 'voice' ? 'No transcript. Add a note about this recording.' : thought.kind === 'text' ? 'Write something' : 'Add a note about this'}
-          placeholderTextColor={c.faint}
-          accessibilityLabel="Thought text"
-          multiline
-          scrollEnabled={false}
-          style={[styles.body, { color: c.ink }]}
-          selectionColor={c.accent}
+          onFocusBody={setInBody}
+          onActive={setActive}
         />
 
         {thought.url ? (
@@ -407,10 +449,11 @@ export default function ThoughtScreen() {
           ))}
         </View>
       </ScrollView>
+      {inBody ? <FormatBar active={active} onFormat={(k) => editor.current?.format(k)} /> : null}
       <ActionSheet
         visible={menu !== null}
-        title={menu === 'todo' ? 'To do' : undefined}
-        options={menu === 'todo' ? todoOptions : moreOptions}
+        title={menu === 'todo' ? 'To do' : menu === 'repeat' ? 'Repeat this reminder' : undefined}
+        options={menu === 'todo' ? todoOptions : menu === 'repeat' ? repeatOptions : moreOptions}
         onClose={() => setMenu(null)}
       />
     </KeyboardAvoidingView>
@@ -422,7 +465,6 @@ const styles = StyleSheet.create({
   bar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, paddingBottom: 8 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   image: { width: '100%', aspectRatio: 4 / 3, borderRadius: 20 },
-  body: { ...type.thoughtLarge, padding: 0, minHeight: 40 },
   link: { padding: 16, gap: 4, borderRadius: 20, borderWidth: 1 },
   file: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 20, borderWidth: 1 },
   fileIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },

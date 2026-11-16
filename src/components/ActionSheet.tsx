@@ -1,5 +1,6 @@
 import { Feather } from '@expo/vector-icons';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { type, useTheme } from '@/theme';
@@ -8,9 +9,13 @@ import type { IconName } from './ui';
 
 export type SheetOption = { label: string; icon?: IconName; danger?: boolean; onPress: () => void };
 
+const IN = 220;
+const OUT = 160;
+
 /**
- * A menu that rises from the bottom. Used wherever there are more choices than
- * a system alert can hold (Android alerts show three buttons at most).
+ * A menu that slides up from the bottom while the screen behind it dims. Used
+ * wherever there are more choices than a system alert can hold (Android alerts
+ * show three buttons at most).
  */
 export function ActionSheet({
   visible,
@@ -25,11 +30,34 @@ export function ActionSheet({
 }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
+  // The modal stays mounted until the sheet has slid back down.
+  const [shown, setShown] = useState(visible);
+  const [height, setHeight] = useState(480);
+  const [progress] = useState(() => new Animated.Value(0));
+  if (visible && !shown) setShown(true);
+
+  useEffect(() => {
+    if (visible) {
+      Animated.timing(progress, { toValue: 1, duration: IN, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    } else {
+      Animated.timing(progress, { toValue: 0, duration: OUT, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+        if (finished) setShown(false);
+      });
+    }
+  }, [visible, progress]);
+
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-      <View style={[styles.screen, { backgroundColor: c.scrim }]}>
+    <Modal visible={shown} transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+      <View style={styles.screen}>
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim, opacity: progress }]} />
         <Pressable style={{ flex: 1 }} accessibilityLabel="Close menu" onPress={onClose} />
-        <View style={[styles.sheet, { backgroundColor: c.bg, borderColor: c.line, paddingBottom: insets.bottom + 12 }]}>
+        <Animated.View
+          onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
+          style={[
+            styles.sheet,
+            { backgroundColor: c.bg, borderColor: c.line, paddingBottom: insets.bottom + 12 },
+            { transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }) }] },
+          ]}>
           <View style={[styles.handle, { backgroundColor: c.line }]} />
           {title ? <Text style={[type.labelStrong, styles.title, { color: c.ink }]}>{title}</Text> : null}
           {options.map((o) => (
@@ -45,7 +73,7 @@ export function ActionSheet({
               <Text style={[type.body, { color: o.danger ? c.danger : c.ink }]}>{o.label}</Text>
             </Pressable>
           ))}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );

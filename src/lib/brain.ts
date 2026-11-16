@@ -1,4 +1,4 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { Db } from '@/db/db';
 import { useEffect, useState } from 'react';
 
 import * as repo from '@/db/repo';
@@ -18,7 +18,7 @@ export type Brain = Grouping & {
 
 let cache: { version: number; brain: Promise<Brain> } | null = null;
 
-async function build(db: SQLiteDatabase): Promise<Brain> {
+async function build(db: Db): Promise<Brain> {
   const [thoughts, links] = await Promise.all([repo.listThoughts(db, { limit: 5000 }), repo.listLinks(db)]);
   const grouping = computeGroups(
     thoughts.map((t) => ({ id: t.id, text: `${t.title ?? ''} ${t.body}`, created_at: t.created_at })),
@@ -39,13 +39,13 @@ async function build(db: SQLiteDatabase): Promise<Brain> {
   };
 }
 
-export function loadBrain(db: SQLiteDatabase, version: number): Promise<Brain> {
+export function loadBrain(db: Db, version: number): Promise<Brain> {
   if (!cache || cache.version !== version) cache = { version, brain: build(db) };
   return cache.brain;
 }
 
 /** Null while the first load is in flight. */
-export function useBrain(db: SQLiteDatabase): Brain | null {
+export function useBrain(db: Db): Brain | null {
   const version = useDataVersion();
   const [brain, setBrain] = useState<Brain | null>(null);
   useEffect(() => {

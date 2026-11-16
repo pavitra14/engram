@@ -1,16 +1,20 @@
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
 import { AndroidImportance, SchedulableTriggerInputTypes } from 'expo-notifications';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { Db } from '@/db/db';
 import { Platform } from 'react-native';
 
 import * as repo from '@/db/repo';
-import type { Thought } from '@/db/types';
+import type { Repeat, Thought } from '@/db/types';
 
 import { dataChanged } from './bus';
-import { titleOf } from './text';
+import { nextRepeat, titleOf } from './text';
 
 const CHANNEL = 'reminders';
+/** Reminders carry two buttons: Done, and In an hour. */
+const CATEGORY = 'todo';
+export const ACTION_DONE = 'done';
+export const ACTION_LATER = 'later';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -28,6 +32,10 @@ async function allowed(): Promise<boolean> {
       importance: AndroidImportance.HIGH,
     });
   }
+  await Notifications.setNotificationCategoryAsync(CATEGORY, [
+    { identifier: ACTION_DONE, buttonTitle: 'Done' },
+    { identifier: ACTION_LATER, buttonTitle: 'In an hour' },
+  ]).catch(() => {});
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;
   if (!current.canAskAgain) return false;
@@ -44,38 +52,59 @@ async function cancel(notifId: string | null): Promise<void> {
 }
 
 /**
- * Puts a thought on the to-do list. With a time, the phone reminds you then.
+ * Puts a thought on the to-do list. With a time, the phone reminds you then;
+ * with a repeat, it comes back each time you finish it.
  * Returns false when a time was asked for but notifications are not allowed:
  * the to-do and its time are still saved, there is just no alert.
  */
-export async function addTodo(db: SQLiteDatabase, thought: Thought, remindAt: number | null): Promise<boolean> {
+export async function addTodo(db: Db, thought: Thought, remindAt: number | null, repeat: Repeat | null = thought.repeat): Promise<boolean> {
   await cancel(thought.notif_id);
   let notifId: string | null = null;
   let alerting = true;
   if (remindAt && remindAt > Date.now()) {
     if (await allowed()) {
       notifId = await Notifications.scheduleNotificationAsync({
-        content: { title: titleOf(thought), body: 'A reminder from Engram', data: { thoughtId: thought.id } },
+        content: { title: titleOf(thought), body: 'A reminder from Engram', data: { thoughtId: thought.id }, categoryIdentifier: CATEGORY },
         trigger: { type: SchedulableTriggerInputTypes.DATE, date: remindAt, channelId: CHANNEL },
       });
     } else {
       alerting = false;
     }
   }
-  await repo.setTodo(db, thought.id, { remindAt, notifId });
+  await repo.setTodo(db, thought.id, { remindAt, notifId, repeat });
   dataChanged();
   return alerting;
 }
 
-export async function removeTodo(db: SQLiteDatabase, thought: Thought): Promise<void> {
+export async function removeTodo(db: Db, thought: Thought): Promise<void> {
   await cancel(thought.notif_id);
   await repo.clearTodo(db, thought.id);
   dataChanged();
 }
 
-export async function setDone(db: SQLiteDatabase, thought: Thought, done: boolean): Promise<void> {
+/**
+ * Marks a to-do done or not done. A repeating to-do is not finished for good:
+ * it moves to its next time and stays on the list. Returns that next time, if so.
+ */
+export async function setDone(db: Db, thought: Thought, done: boolean): Promise<number | null> {
+  if (done && thought.repeat && thought.remind_at) {
+    const next = nextRepeat(thought.remind_at, thought.repeat);
+    await addTodo(db, thought, next, thought.repeat);
+    return next;
+  }
   if (done) await cancel(thought.notif_id);
   await repo.setDone(db, thought.id, done);
+  dataChanged();
+  return null;
+}
+
+/** Moves a reminder to later, by a number of milliseconds from now. */
+export function snooze(db: Db, thought: Thought, ms: number): Promise<boolean> {
+  return addTodo(db, thought, Date.now() + ms, thought.repeat);
+}
+
+export async function setImportant(db: Db, thought: Thought, important: boolean): Promise<void> {
+  await repo.setPriority(db, thought.id, important);
   dataChanged();
 }
 
@@ -125,6 +154,12 @@ export function pickDateTime(initial: number = Date.now() + 3_600_000): Promise<
       },
     });
   });
+}
+
+/** Which button on a reminder was pressed: "done", "later", or null for a plain tap. */
+export function actionFrom(response: Notifications.NotificationResponse | null | undefined): string | null {
+  const a = response?.actionIdentifier;
+  return a === ACTION_DONE || a === ACTION_LATER ? a : null;
 }
 
 /** The thought a tapped reminder points at, if the app was opened that way. */

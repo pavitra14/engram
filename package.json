@@ -1,11 +1,13 @@
 {
   "name": "engram",
-  "version": "1.0.0",
-  "main": "expo-router/entry",
+  "version": "0.3.0",
+  "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/newsreader": "^0.4.1",
     "@expo/vector-icons": "^15.0.2",
+    "@op-engineering/op-sqlite": "^18.2.5",
+    "@powersync/react-native": "^2.4.1",
     "@react-native-community/datetimepicker": "9.2.1",
     "d3-force": "^3.0.1",
     "expo": "~58.0.25",
@@ -28,12 +30,13 @@
     "expo-sharing": "~58.0.23",
     "expo-speech-recognition": "^58.0.1",
     "expo-splash-screen": "~58.0.14",
-    "expo-sqlite": "~58.0.17",
     "expo-status-bar": "~58.0.5",
     "expo-system-ui": "~58.0.7",
     "react": "19.3.0",
     "react-native": "0.88.1",
+    "react-native-android-widget": "^0.26.0",
     "react-native-blob-util": "^1.1.1",
+    "react-native-enriched-html": "^1.2.0",
     "react-native-executorch": "^0.11.0",
     "react-native-gesture-handler": "~3.3.0",
     "react-native-reanimated": "4.7.1",
@@ -62,5 +65,8 @@
     "features": [
       "textEmbeddings"
     ]
+  },
+  "op-sqlite": {
+    "fts5": true
   }
 }

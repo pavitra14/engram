@@ -1,12 +1,12 @@
 import { Redirect } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useDb } from '@/db/provider';
 import { useEffect, useState } from 'react';
 
 import { loadSamples } from '@/lib/samples';
 
 /** engram://samples loads the demo thoughts into an empty brain. Used by the automated smoke test. */
 export default function SamplesRoute() {
-  const db = useSQLiteContext();
+  const db = useDb();
   const [done, setDone] = useState(false);
   useEffect(() => {
     loadSamples(db).finally(() => setDone(true));

@@ -150,6 +150,7 @@ _16 Nov 2026_
 **Context.** Word overlap cannot link paraphrases. The owner asked for links and groups that follow meaning.
 **Decision.** `react-native-executorch` runs `distiluse-base-multilingual-cased-v2` (512-dimension sentence vectors, 50+ languages including Hindi) on the phone. Each thought gets a unit vector stored as a BLOB in `embeddings`. The linker scores a pair as the greater of its word score and its vector cosine when the cosine is at least 0.5. Groups are unchanged in method but follow the better links.
 **Why this model.** Multilingual matters for this owner; MiniLM is English-only.
+**Revised 16 Nov 2026.** The library's `DEFAULT` variant on Android is a Vulkan build; on the emulator it gave every sentence the same vector. `semantic.ts` now names the XNNPACK (processor) build, and tests any loaded model on a fixed paraphrase pair, refusing it if it cannot tell the pair from an unrelated sentence. Measured with the processor build: unrelated notes about 0.08, 90th percentile 0.28, the sample paraphrase 0.28. The thresholds were lowered to match (floor 0.25, 1.25 standard deviations above a thought's own average, mutual nearest three).
 **Why opt-in.** The model is a download of about 130 MB from Hugging Face. The app otherwise never touches the network, so the person chooses when that happens. The library's download telemetry is switched off.
 **Why brute force, not `sqlite-vec`.** A few thousand 512-float vectors compare in milliseconds in JavaScript. An index is not needed yet.
 **Consequences.** Group names still come from shared words, so a group joined only by meaning may get a generic name. Images, audio without a transcript, and file contents are not understood. The 0.5 threshold is a starting value and has not been tuned on real notes.
@@ -158,3 +159,53 @@ _16 Nov 2026_
 ## D24. Push to main; every release is a beta
 
 **Decision (owner's instruction, 16 Nov 2026).** The owner is the sole maintainer: push directly to `main`. Releases are tagged `vX.Y.Z-beta.N` and published as pre-releases until the owner says the app is ready.
+
+## D25. PowerSync, local-only, in place of expo-sqlite
+
+_16 Nov 2026, owner's request._
+
+**Context.** The owner expects to add a backend such as Supabase later and wants the storage to be ready for it.
+**Decision.** The database is PowerSync (`@powersync/react-native` on op-sqlite) with every table marked local-only and no backend connected. Tables and columns are declared in `schema.ts`.
+**What it costs.** PowerSync tables are views over JSON rows. They cannot have constraints, foreign keys, cascades, BLOBs or upserts, and there are no migrations. So: every row has a text `id` (links use `a:b`, tag assignments `thought:tag`, settings their key); `repo.ts` does by hand what constraints did; meaning vectors are hex text; the search index and the vectors are ordinary SQLite tables beside the PowerSync ones because they are derived and should never sync.
+**Why not keep expo-sqlite and "be ready" on paper.** The owner asked for the engine, and moving later means a second data migration.
+**Carried over.** On first launch the old `engram.db` is read with op-sqlite and copied in (`legacy.ts`). The old file is left in place.
+**Testing.** `repo.ts` imports nothing from React Native, so the Node tests run it against node:sqlite with plain tables of the same columns. That proves the SQL and the rules, not PowerSync's own behaviour.
+**When sync is added.** Remove `localOnly`, add a connector and sync rules, and move rows as PowerSync's "local-only then sync" guide describes. Timestamps are milliseconds (bigint in Postgres).
+
+## D26. Every entry is a note: a title and a formatted body
+
+**Decision (owner's request).** One editor (`NoteEditor`) everywhere: a title field and a body that takes bold, italic, underline, strike, a heading, bulleted, numbered and check lists, and quotes. The separate "Long note" choice is gone. The quick bar still saves a line with no title.
+**Library.** `react-native-enriched-html`: a native editor (no web view) that outputs HTML and supports React Native 0.88.
+**Storage.** `body` holds the plain words and `body_html` the HTML, or null when nothing is formatted. Search, linking, lists and widgets read `body`, so they never need to parse HTML.
+**Not done.** Images inside a note, tables, links with custom text, and showing formatting in list previews.
+
+## D27. Three home layouts
+
+**Decision (owner's request).** Settings, Home screen: List (default), Map and list (the map in the top third, scrolling on its own), or Map. Stored in `meta.home_view`.
+
+## D28. Each screen moves the way that fits it
+
+**Context.** Every screen slid in from the right and the owner found it slow and uniform.
+**Decision.** Going deeper (a thought, a group) pushes from the side and swipes back. Places you glance at (map, search, to-dos, settings, home) fade. Things you start and finish (a note, a recording, a share) rise from the bottom. Menus slide up while the screen dims. Nothing runs longer than 240 ms.
+**Unverified.** The durations are requests to the native stack; Android may not honour all of them.
+
+## D29. To-dos: repeats, importance, notification buttons, the week ahead
+
+**Decision.** A reminder can repeat daily, weekly or monthly: finishing it moves it to its next time instead of marking it done. A to-do can be marked important and leads its section. The list is split into Overdue, Today, Tomorrow, This week, Later and No date, with a line to add one. Reminders carry Done and In an hour buttons. With calendar access on, the list also shows the next seven days of events, and a note started from an event remembers which event it was for.
+**Not done.** End dates for repeats, custom intervals, sub-tasks, two-way calendar sync.
+
+## D30. From ideas to outcomes
+
+**Decision.** Three small things, none of which needs a server. A group can be gathered into one note that ends with "Next step:". If Claude or ChatGPT is installed, a group (or a thought and what it links to) can be opened there as a drafted message asking for the three next actions. Each day Today shows one thought at least a week old under "Worth another look".
+**How the hand-off works.** Engram checks whether the app is installed (a manifest `<queries>` entry added by `plugins/withAppQueries.js`), then opens the app's own web link with the message in it, and also copies the message. Nothing is sent by Engram; the person sends it in the other app.
+**Why not a share intent aimed at the app.** `expo-intent-launcher` cannot target a package without knowing the activity's class name.
+**Unverified.** That each app fills in the draft from its link.
+
+## D31. Home-screen widgets
+
+**Decision.** Two widgets with `react-native-android-widget`: Quick thought (write, to-do list, speak) and To do (the next four, and a button to write). Taps open `engram://` links. The To do widget reads a small JSON file the app rewrites on every change, because Android may redraw a widget while the app is closed.
+**Why not `expo-widgets`.** Its Android support could not be confirmed for SDK 58.
+
+## D32. Version numbers are 0.x; one push per batch
+
+**Decision (owner's instruction).** The app is not ready to be called 1.0. Versions are `0.x`, releases `v0.x.y-beta.n`. Work is finished and checked locally and pushed once, because a CI run takes about twenty minutes. CI itself was trimmed and can use a self-hosted runner (`docs/CI.md`).

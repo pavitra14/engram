@@ -4,7 +4,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useDb } from '@/db/provider';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Keyboard, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
@@ -47,10 +47,10 @@ function useClipboardPrompt() {
 
 /**
  * The one place thoughts enter the app. Type and send, tap the mic to talk,
- * open the full-page editor for a longer note, or save what you just copied.
+ * open the full note editor, attach a file, or save what you just copied.
  */
 export function CaptureBar({ clipboard = false }: { clipboard?: boolean }) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState('');
@@ -169,7 +169,7 @@ export function CaptureBar({ clipboard = false }: { clipboard?: boolean }) {
             {!hasDraft ? (
               <RoundButton
                 icon="maximize-2"
-                label="Open the full-page editor"
+                label="Write a note with a title and formatting"
                 tone="plain"
                 onPress={() => router.push('/compose')}
               />
@@ -205,7 +205,6 @@ export function CaptureBar({ clipboard = false }: { clipboard?: boolean }) {
         options={[
           { label: 'Photo or video', icon: 'image', onPress: () => void pickMedia() },
           { label: 'File', icon: 'file-text', onPress: () => void pickFiles() },
-          { label: 'Long note', icon: 'edit-3', onPress: () => router.push('/compose') },
         ]}
       />
     </KeyboardAvoidingView>

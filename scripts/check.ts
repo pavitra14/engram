@@ -7,40 +7,147 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 
-import { MIGRATIONS } from '../src/db/schema';
+import type { Db } from '../src/db/db';
+import { importLegacy, LEGACY_MIGRATIONS } from '../src/db/legacy';
+import * as repo from '../src/db/repo';
+import { plainDDL } from '../src/db/schema';
 import { computeGroups } from '../src/lib/groups';
 import { meaningSimilarity, related, relateAll, surfaceTokens, tokenize, whyLinked } from '../src/lib/linker';
-import { dayLabel, daysAgo, dueLabel, fileSize, firstUrl, ftsQuery, highlightRuns, hostOf, titleOf } from '../src/lib/text';
+import { dayLabel, daysAgo, dueBucket, dueLabel, fileSize, firstUrl, ftsQuery, highlightRuns, hostOf, htmlToText, isFormatted, nextRepeat, textToHtml, titleOf } from '../src/lib/text';
 
 // --- database ---
-const db = new DatabaseSync(':memory:');
-db.exec('PRAGMA foreign_keys = ON');
-for (const sql of MIGRATIONS) db.exec(sql);
+// The same repo code the phone runs, against node:sqlite. On the phone the tables are
+// PowerSync views; here they are plain tables with the same columns and no constraints.
+function nodeDb(raw = new DatabaseSync(':memory:'), ddl = true): Db {
+  if (ddl) raw.exec(plainDDL());
+  type P = Parameters<ReturnType<DatabaseSync['prepare']>['run']>;
+  const self: Db = {
+    run: async (sql, params = []) => {
+      raw.prepare(sql).run(...(params as P));
+    },
+    all: async <T,>(sql: string, params: unknown[] = []) => raw.prepare(sql).all(...(params as P)).map((r) => ({ ...(r as object) })) as T[],
+    first: async <T,>(sql: string, params: unknown[] = []) => {
+      const r = raw.prepare(sql).get(...(params as P));
+      return r ? ({ ...(r as object) } as T) : null;
+    },
+    tx: async (fn) => {
+      raw.exec('BEGIN');
+      try {
+        const out = await fn(self);
+        raw.exec('COMMIT');
+        return out;
+      } catch (e) {
+        raw.exec('ROLLBACK');
+        throw e;
+      }
+    },
+  };
+  return self;
+}
 
-const ins = db.prepare(
-  `INSERT INTO thoughts (id, kind, body, title, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 1)`,
-);
-ins.run('a', 'text', 'Sourdough starter needs feeding tonight', null);
-ins.run('b', 'text', 'Train tickets for the Hampi trip', null);
-ins.run('c', 'voice', '', null);
+async function databaseChecks(): Promise<void> {
+  const db = nodeDb();
+  await repo.prepare(db);
+  assert.ok(repo.hasSearchIndex(), 'full-text search is available');
+  const count = async (table: string) => (await db.first<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`))!.n;
+  const found = async (q: string) => (await repo.searchThoughts(db, q)).map((t) => t.id);
 
-const match = (q: string) =>
-  db
-    .prepare(`SELECT t.id FROM thoughts_fts f JOIN thoughts t ON t.pk = f.rowid WHERE thoughts_fts MATCH ?`)
-    .all(ftsQuery(q) as string)
-    .map((r: unknown) => (r as { id: string }).id);
+  await repo.insertThought(db, { id: 'a', kind: 'text', body: 'Sourdough starter needs feeding tonight', created_at: 1 });
+  await repo.insertThought(db, { id: 'b', kind: 'text', body: 'Train tickets for the Hampi trip', created_at: 2 });
+  await repo.insertThought(db, { id: 'c', kind: 'video', body: '', title: 'holiday.mp4', file_name: 'holiday.mp4', created_at: 3 });
+  assert.deepEqual(await found('sourd'), ['a'], 'prefix search finds the thought');
+  assert.deepEqual(await found('hampi trip'), ['b']);
+  assert.deepEqual(await found('holiday'), ['c'], 'file names are searchable');
+  await repo.updateThought(db, 'a', { title: 'Shopping', body: 'Rye flour', body_html: '<html><p><b>Rye</b> flour</p></html>' });
+  assert.deepEqual(await found('sourdough'), [], 'the index follows edits');
+  assert.deepEqual(await found('rye'), ['a']);
+  assert.deepEqual(await found('shopping'), ['a'], 'titles are searched');
+  const a = (await repo.getThought(db, 'a'))!;
+  assert.equal(a.title, 'Shopping');
+  assert.equal(a.todo, 0);
+  assert.equal(a.priority, 0);
 
-assert.deepEqual(match('sourd'), ['a'], 'prefix search finds the thought');
-assert.deepEqual(match('hampi trip'), ['b']);
-db.prepare(`UPDATE thoughts SET body = ? WHERE id = ?`).run('Rye flour shopping', 'a');
-assert.deepEqual(match('sourdough'), [], 'index follows edits');
-assert.deepEqual(match('rye'), ['a']);
+  // A link is stored once, whichever way round it is given, and a manual link is never downgraded.
+  await repo.upsertLink(db, 'b', 'a', 'manual', 1);
+  await repo.upsertLink(db, 'a', 'b', 'auto', 0.2);
+  assert.deepEqual(await repo.listLinks(db), [{ a_id: 'a', b_id: 'b', kind: 'manual', weight: 1 }]);
+  await repo.upsertLink(db, 'a', 'c', 'auto', 0.3);
+  await repo.upsertLink(db, 'c', 'a', 'auto', 0.6);
+  assert.equal(await count('links'), 2);
+  assert.equal((await repo.neighboursOf(db, 'a')).find((n) => n.id === 'c')!.weight, 0.6, 'the weight is updated in place');
+  await repo.replaceAutoLinks(db, [{ a: 'b', b: 'c', score: 0.4 }]);
+  assert.deepEqual((await repo.listLinks(db)).map((l) => `${l.a_id}${l.b_id}${l.kind}`).sort(), ['abmanual', 'bcauto'], 'rebuilding keeps manual links');
 
-db.prepare(`INSERT INTO links (a_id, b_id, kind, weight) VALUES ('a', 'b', 'auto', 0.5)`).run();
-assert.throws(() => db.prepare(`INSERT INTO links (a_id, b_id, kind, weight) VALUES ('b', 'a', 'auto', 0.5)`).run(), 'links are stored one way round');
-db.prepare(`DELETE FROM thoughts WHERE id = 'b'`).run();
-assert.equal((db.prepare(`SELECT COUNT(*) AS n FROM links`).get() as { n: number }).n, 0, 'deleting a thought removes its links');
-assert.deepEqual(match('hampi'), [], 'deleted thoughts leave the index');
+  await repo.addTag(db, 'a', 'Food');
+  await repo.addTag(db, 'a', '#food');
+  await repo.addTag(db, 'b', 'food');
+  assert.equal(await count('tags'), 1, 'a tag exists once whatever its capitals');
+  assert.equal(await count('thought_tags'), 2);
+
+  await repo.setMeta(db, 'appearance', 'light');
+  await repo.setMeta(db, 'appearance', 'black');
+  assert.equal(await count('meta'), 1);
+  assert.equal(await repo.getMeta(db, 'appearance'), 'black');
+
+  await repo.setTodo(db, 'a', { remindAt: 5000, notifId: 'n1', repeat: 'weekly' });
+  await repo.setTodo(db, 'b', { remindAt: null, notifId: null, repeat: 'daily' });
+  await repo.setPriority(db, 'b', true);
+  const open = await repo.listOpenTodos(db);
+  assert.deepEqual(open.map((t) => t.id), ['a', 'b'], 'timed to-dos come first');
+  assert.equal(open[0].repeat, 'weekly');
+  assert.equal(open[1].repeat, null, 'a to-do with no time cannot repeat');
+  assert.equal(open[1].priority, 1);
+  await repo.setDone(db, 'a', true);
+  assert.deepEqual((await repo.listOpenTodos(db)).map((t) => t.id), ['b']);
+  assert.deepEqual((await repo.listDoneTodos(db)).map((t) => t.id), ['a']);
+
+  const vec = new Float32Array([0.25, -1, 3.5, 1e-7]);
+  assert.deepEqual([...repo.hexToVector(repo.vectorToHex(vec))], [...vec], 'a vector survives being stored as text');
+  await repo.saveEmbedding(db, 'a', 'm', vec);
+  await repo.saveEmbedding(db, 'a', 'm', new Float32Array([1, 2]));
+  assert.deepEqual([...(await repo.loadEmbeddings(db, 'm')).get('a')!], [1, 2]);
+  assert.deepEqual(await repo.idsWithoutEmbedding(db, 'm'), ['c', 'b']);
+
+  // Deleting a thought removes everything that hung off it. Nothing in the database enforces this; repo.ts does.
+  await repo.deleteThought(db, 'a');
+  assert.deepEqual((await repo.listLinks(db)).map((l) => l.a_id + l.b_id), ['bc']);
+  assert.equal(await count('thought_tags'), 1);
+  assert.equal(await count('embeddings'), 0);
+  assert.deepEqual(await found('rye'), []);
+  await repo.deleteThought(db, 'b');
+  assert.equal(await count('tags'), 0, 'a tag nobody uses is removed');
+  await repo.wipeAll(db);
+  assert.equal(await count('thoughts'), 0);
+  assert.equal(await repo.getMeta(db, 'appearance'), 'black', 'settings survive deleting everything');
+
+  // --- carrying thoughts over from the old database ---
+  for (const upTo of [1, LEGACY_MIGRATIONS.length]) {
+    const old = new DatabaseSync(':memory:');
+    old.exec('PRAGMA foreign_keys = OFF');
+    for (const sql of LEGACY_MIGRATIONS.slice(0, upTo)) old.exec(sql);
+    const put = old.prepare(`INSERT INTO thoughts (id, kind, body, title, created_at, updated_at) VALUES (?, 'text', ?, ?, ?, ?)`);
+    put.run('x', 'Sourdough starter', null, 10, 11);
+    put.run('y', 'Hampi trip', 'Travel', 20, 21);
+    old.exec(`INSERT INTO links (a_id, b_id, kind, weight) VALUES ('x', 'y', 'manual', 1)`);
+    old.exec(`INSERT INTO tags (id, name) VALUES ('t', 'food'); INSERT INTO thought_tags VALUES ('x', 't')`);
+    old.exec(`INSERT INTO meta (key, value) VALUES ('appearance', 'black')`);
+    if (upTo > 1) old.exec(`UPDATE thoughts SET todo = 1, remind_at = 99 WHERE id = 'y'`);
+
+    const fresh = nodeDb();
+    await repo.prepare(fresh);
+    const moved = await importLegacy(fresh, async (sql) => old.prepare(sql).all() as Record<string, unknown>[]);
+    assert.equal(moved, 2, `both thoughts come across from a version ${upTo} database`);
+    const y = (await repo.getThought(fresh, 'y'))!;
+    assert.equal(y.title, 'Travel');
+    assert.equal(y.created_at, 20, 'dates are kept');
+    assert.equal(y.todo, upTo > 1 ? 1 : 0);
+    assert.equal(y.remind_at, upTo > 1 ? 99 : null);
+    assert.deepEqual(await repo.listLinks(fresh), [{ a_id: 'x', b_id: 'y', kind: 'manual', weight: 1 }]);
+    assert.deepEqual(await repo.tagsOf(fresh, 'x'), [{ id: 't', name: 'food' }]);
+    assert.equal(await repo.getMeta(fresh, 'appearance'), 'black');
+    assert.deepEqual((await repo.searchThoughts(fresh, 'sourdough')).map((t) => t.id), ['x'], 'search works on what came across');
+  }
+}
 
 // --- text helpers ---
 assert.equal(firstUrl('see https://example.com/a?b=1, later'), 'https://example.com/a?b=1');
@@ -98,40 +205,6 @@ assert.equal(daysAgo(noon - 13 * 3_600_000, noon), 1, 'late last night counts as
 assert.deepEqual(highlightRuns('Sourdough crumb', 'sour'), [{ text: 'Sour', hit: true }, { text: 'dough crumb', hit: false }]);
 assert.deepEqual(highlightRuns('a (b', '('), [{ text: 'a (b', hit: false }]);
 
-// --- upgrading a version 1 database keeps everything ---
-{
-  const old = new DatabaseSync(':memory:');
-  old.exec('PRAGMA foreign_keys = ON');
-  old.exec(MIGRATIONS[0]);
-  const put = old.prepare(`INSERT INTO thoughts (id, kind, body, created_at, updated_at) VALUES (?, 'text', ?, 1, 1)`);
-  put.run('a', 'Sourdough starter');
-  put.run('b', 'Hampi trip');
-  old.exec(`INSERT INTO links (a_id, b_id, kind, weight) VALUES ('a', 'b', 'manual', 1)`);
-  old.exec(`INSERT INTO tags (id, name) VALUES ('t', 'food'); INSERT INTO thought_tags VALUES ('a', 't')`);
-  old.exec(`INSERT INTO graph_layout VALUES ('a', 1, 2)`);
-  // What migrate.ts does: foreign keys off around the rebuild, then back on.
-  old.exec('PRAGMA foreign_keys = OFF');
-  old.exec('BEGIN');
-  for (const sql of MIGRATIONS.slice(1)) old.exec(sql);
-  old.exec('COMMIT');
-  old.exec('PRAGMA foreign_keys = ON');
-  const n = (q: string) => (old.prepare(q).get() as { n: number }).n;
-  assert.equal(n('SELECT COUNT(*) AS n FROM thoughts'), 2, 'thoughts survive the upgrade');
-  assert.equal(n('SELECT COUNT(*) AS n FROM links'), 1, 'links survive the upgrade');
-  assert.equal(n('SELECT COUNT(*) AS n FROM thought_tags'), 1, 'tags survive the upgrade');
-  assert.equal(n('SELECT COUNT(*) AS n FROM graph_layout'), 1);
-  assert.equal(n(`SELECT COUNT(*) AS n FROM thoughts_fts WHERE thoughts_fts MATCH '"sourdough"*'`), 1, 'search still works');
-  assert.equal(n('SELECT todo AS n FROM thoughts WHERE id = \'a\''), 0);
-  assert.deepEqual(old.prepare('PRAGMA foreign_key_check').all(), [], 'no dangling references');
-  old.exec(`INSERT INTO thoughts (id, kind, body, title, file_name, created_at, updated_at) VALUES ('v', 'video', '', 'holiday.mp4', 'holiday.mp4', 2, 2)`);
-  old.exec(`INSERT INTO thoughts (id, kind, body, created_at, updated_at) VALUES ('f', 'file', '', 3, 3)`);
-  assert.equal(n(`SELECT COUNT(*) AS n FROM thoughts_fts WHERE thoughts_fts MATCH '"holiday"*'`), 1, 'file names are searchable');
-  old.exec(`INSERT INTO embeddings VALUES ('a', 'm', x'0000803f')`);
-  old.exec(`DELETE FROM thoughts WHERE id = 'a'`);
-  assert.equal(n('SELECT COUNT(*) AS n FROM links'), 0, 'cascades work after the upgrade');
-  assert.equal(n('SELECT COUNT(*) AS n FROM embeddings'), 0);
-}
-
 // --- linking by meaning ---
 {
   const unit = (v: number[]) => {
@@ -187,4 +260,27 @@ assert.equal(dueLabel(noon - 30 * 3_600_000, noon), 'Overdue since yesterday');
 assert.equal(fileSize(1536), '2 KB');
 assert.equal(fileSize(5 * 1024 * 1024), '5.0 MB');
 
-console.log(`ok: ${MIGRATIONS.length} migration(s), upgrade from v1, search, text helpers, linker, meaning, groups and reminders (${all.length} links in fixture)`);
+// --- formatted notes ---
+assert.equal(htmlToText('<html><h2>Plan</h2><ul><li>Buy <b>rye</b> &amp; salt</li><li>Bake</li></ul><p>Done</p></html>'), 'Plan\nBuy rye & salt\nBake\nDone');
+assert.equal(isFormatted('<html><p>plain words</p><br></html>'), false, 'paragraphs alone are not formatting');
+assert.equal(isFormatted('<html><p>some <b>bold</b></p></html>'), true);
+assert.equal(htmlToText(textToHtml('one <two>\n\nthree & four')), 'one <two>\n\nthree & four', 'plain words survive a round trip');
+
+// --- repeating reminders and the parts of the to-do list ---
+const nineAm = new Date(2026, 0, 31, 9, 0).getTime();
+assert.equal(nextRepeat(nineAm, 'daily', nineAm + 1), new Date(2026, 1, 1, 9, 0).getTime());
+assert.equal(nextRepeat(nineAm, 'weekly', nineAm + 15 * 86_400_000), new Date(2026, 1, 21, 9, 0).getTime(), 'skips occurrences already missed');
+assert.equal(nextRepeat(nineAm, 'monthly', nineAm + 1), new Date(2026, 1, 28, 9, 0).getTime(), 'the 31st falls back to a short month\'s last day');
+assert.equal(dueBucket(null, noon), 'No date');
+assert.equal(dueBucket(noon - 1, noon), 'Overdue');
+assert.equal(dueBucket(noon + 3_600_000, noon), 'Today');
+assert.equal(dueBucket(noon + 24 * 3_600_000, noon), 'Tomorrow');
+assert.equal(dueBucket(noon + 3 * 86_400_000, noon), 'This week');
+assert.equal(dueBucket(noon + 30 * 86_400_000, noon), 'Later');
+
+databaseChecks()
+  .then(() => console.log(`ok: database, old-database import, search, text helpers, formatted notes, linker, meaning, groups and reminders (${all.length} links in fixture)`))
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
