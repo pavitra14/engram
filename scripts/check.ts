@@ -11,6 +11,8 @@ import type { Db } from '../src/db/db';
 import { importLegacy, LEGACY_MIGRATIONS } from '../src/db/legacy';
 import * as repo from '../src/db/repo';
 import { plainDDL } from '../src/db/schema';
+import { type OpResult, type Remote, type RemoteRow, syncOnce } from '../src/cloud/sync';
+import { splitQuick } from '../src/lib/capture.logic';
 import { computeGroups } from '../src/lib/groups';
 import { meaningSimilarity, related, relateAll, surfaceTokens, tokenize, whyLinked } from '../src/lib/linker';
 import { dayLabel, daysAgo, dueBucket, dueLabel, fileSize, firstUrl, ftsQuery, highlightRuns, hostOf, htmlToText, isFormatted, nextRepeat, textToHtml, titleOf } from '../src/lib/text';
@@ -260,6 +262,156 @@ assert.equal(dueLabel(noon - 30 * 3_600_000, noon), 'Overdue since yesterday');
 assert.equal(fileSize(1536), '2 KB');
 assert.equal(fileSize(5 * 1024 * 1024), '5.0 MB');
 
+// --- Engram Cloud: two phones and a stand-in server ---
+// The stand-in follows the same rules as supabase/migrations/0001 (which is checked
+// separately against the real database): revisions, conflicts, tombstones, receipts.
+function fakeCloud() {
+  let seq = 0;
+  const rows = new Map<string, RemoteRow & { revision?: number }>();
+  const receipts = new Map<string, { results: OpResult[] }>();
+  let dropNextReply = false;
+  const remote: Remote = {
+    apply: async (batchId, ops) => {
+      let answer = receipts.get(batchId);
+      if (!answer) {
+        const results: OpResult[] = [];
+        for (const op of ops) {
+          const key = `${op.t}/${op.id}`;
+          const had = rows.get(key);
+          if (op.t !== 'thoughts') {
+            if (op.del) {
+              if (had && !had.deleted) rows.set(key, { ...had, deleted: true, seq: ++seq });
+            } else rows.set(key, { ...(op.row ?? {}), t: op.t, id: op.id, deleted: false, seq: ++seq });
+            results.push({ t: op.t, id: op.id, s: 'ok' });
+          } else if (op.del) {
+            if (had && !had.deleted) rows.set(key, { t: 'thoughts', id: op.id, deleted: true, body: '', title: null, seq: ++seq, revision: (had.revision ?? 0) + 1 });
+            results.push({ t: op.t, id: op.id, s: 'ok' });
+          } else if (!had) {
+            rows.set(key, { ...(op.row ?? {}), t: 'thoughts', id: op.id, deleted: false, seq: ++seq, revision: 1 });
+            results.push({ t: op.t, id: op.id, s: 'ok', rev: 1 });
+          } else if (had.deleted) {
+            results.push({ t: op.t, id: op.id, s: 'gone' });
+          } else if ((op.base ?? null) !== had.revision && [had.title ?? '', had.body ?? '', had.body_html ?? ''].join('\u0000') !== [op.row?.title ?? '', op.row?.body ?? '', op.row?.body_html ?? ''].join('\u0000')) {
+            results.push({ t: op.t, id: op.id, s: 'conflict', rev: had.revision });
+          } else {
+            const revision = (had.revision ?? 0) + 1;
+            rows.set(key, { ...(op.row ?? {}), t: 'thoughts', id: op.id, deleted: false, seq: ++seq, revision });
+            results.push({ t: op.t, id: op.id, s: 'ok', rev: revision });
+          }
+        }
+        answer = { results };
+        receipts.set(batchId, answer);
+      }
+      if (dropNextReply) {
+        dropNextReply = false;
+        throw new Error('the reply was lost');
+      }
+      return answer;
+    },
+    pull: async (after) => {
+      const page = [...rows.values()].filter((r) => r.seq > after).sort((x, y) => x.seq - y.seq).slice(0, 3);
+      return { rows: page, cursor: page.length ? page[page.length - 1].seq : after, more: page.length >= 3 };
+    },
+    thought: async (id) => rows.get(`thoughts/${id}`) ?? null,
+  };
+  return { remote, rows, loseNextReply: () => (dropNextReply = true) };
+}
+
+async function cloudChecks(): Promise<void> {
+  const cloud = fakeCloud();
+  let n = 0;
+  const id = () => `batch-${++n}`;
+  // Each "phone" is its own database. repo's tracking switch is shared, as there is one phone per process in real life.
+  const a = nodeDb();
+  const b = nodeDb();
+  await repo.prepare(a);
+  await repo.prepare(b);
+  const titles = async (db: Db) => (await repo.listThoughts(db)).map((t) => t.title ?? t.body).sort();
+
+  // Before sync is on, nothing is recorded for sending.
+  repo.setTracking(false);
+  await repo.insertThought(a, { id: 'old', kind: 'text', title: 'Written before signing in', body: '' });
+  assert.equal(await repo.outboxCount(a), 0, 'nothing is queued while signed out');
+
+  // Signing in queues what is already on the phone.
+  repo.setTracking(true);
+  await repo.markEverything(a);
+  await repo.insertThought(a, { id: 'n1', kind: 'text', title: 'Sourdough', body: 'feed the starter' });
+  await repo.addTag(a, 'n1', 'food');
+  await repo.upsertLink(a, 'n1', 'old', 'manual', 1);
+  await repo.upsertLink(a, 'n1', 'old2', 'auto', 0.4);
+  let done = await syncOnce(a, cloud.remote, id);
+  assert.equal(done.sent, 5, 'two thoughts, a tag, its assignment and the hand-made link are sent; the automatic link is not');
+  assert.equal(await repo.outboxCount(a), 0);
+  assert.equal(await repo.getRev(a, 'n1'), 1);
+
+  // The second phone receives them, across several pages.
+  done = await syncOnce(b, cloud.remote, id);
+  assert.deepEqual(await titles(b), ['Sourdough', 'Written before signing in']);
+  assert.deepEqual((await repo.tagsOf(b, 'n1')).map((t) => t.name), ['food']);
+  assert.deepEqual((await repo.listLinks(b)).map((l) => l.kind), ['manual']);
+  assert.deepEqual((await repo.searchThoughts(b, 'starter')).map((t) => t.id), ['n1'], 'what arrives is searchable');
+  assert.equal(await repo.outboxCount(b), 0, 'receiving queues nothing to send back');
+  assert.ok(done.touched.includes('n1'));
+
+  // A to-do set on one phone reaches the other. Alarm ids and file paths never leave.
+  await repo.setTodo(b, 'n1', { remindAt: 5000, notifId: 'alarm-on-b', repeat: 'weekly' });
+  await syncOnce(b, cloud.remote, id);
+  assert.equal(cloud.rows.get('thoughts/n1')!.notif_id, undefined, 'the alarm id is not sent');
+  assert.equal('media_path' in cloud.rows.get('thoughts/n1')!, false, 'the file path is not sent');
+  await syncOnce(a, cloud.remote, id);
+  const onA = (await repo.getThought(a, 'n1'))!;
+  assert.equal(onA.todo, 1);
+  assert.equal(onA.remind_at, 5000);
+  assert.equal(onA.repeat, 'weekly');
+
+  // A lost reply: the same batch goes again and is applied once.
+  await repo.updateThought(a, 'old', { title: 'Renamed', body: '', body_html: null });
+  cloud.loseNextReply();
+  await assert.rejects(syncOnce(a, cloud.remote, id));
+  assert.equal(await repo.outboxCount(a), 1, 'a change stays queued until the server has answered');
+  await syncOnce(a, cloud.remote, id);
+  assert.equal(cloud.rows.get('thoughts/old')!.revision, 2, 'applied once, not twice');
+  assert.equal(await repo.outboxCount(a), 0);
+
+  // The same note edited on both phones: neither set of words is lost.
+  await syncOnce(b, cloud.remote, id);
+  await repo.updateThought(a, 'n1', { title: 'Sourdough', body: 'A says: feed it at night', body_html: null });
+  await repo.updateThought(b, 'n1', { title: 'Sourdough', body: 'B says: feed it in the morning', body_html: null });
+  await syncOnce(a, cloud.remote, id);
+  done = await syncOnce(b, cloud.remote, id);
+  assert.equal(done.copies, 1, 'the second phone is told its words were kept as a copy');
+  assert.equal((await repo.getThought(b, 'n1'))!.body, 'A says: feed it at night', 'the original takes the first words to arrive');
+  assert.ok((await repo.listThoughts(b)).some((t) => t.body === 'B says: feed it in the morning' && /from this phone/.test(t.title ?? '')));
+  await syncOnce(a, cloud.remote, id);
+  assert.ok((await repo.listThoughts(a)).some((t) => t.body === 'B says: feed it in the morning'), 'the copy reaches the first phone too');
+  assert.deepEqual(await titles(a), await titles(b), 'both phones end up the same');
+
+  // Deleted on one phone, edited on the other: the deletion stands and the edit survives as a new note.
+  await repo.deleteThought(a, 'old');
+  await repo.updateThought(b, 'old', { title: 'Renamed', body: 'a late thought', body_html: null });
+  await syncOnce(a, cloud.remote, id);
+  done = await syncOnce(b, cloud.remote, id);
+  assert.equal(await repo.getThought(b, 'old'), null);
+  assert.ok((await repo.listThoughts(b)).some((t) => t.body === 'a late thought' && /deleted on another device/.test(t.title ?? '')));
+  await syncOnce(a, cloud.remote, id);
+  assert.deepEqual(await titles(a), await titles(b));
+  assert.equal(cloud.rows.get('thoughts/old')!.body, '', 'the cloud keeps no words of a deleted note');
+
+  // Removing a tag and a hand-made link travels too.
+  const tag = (await repo.tagsOf(a, 'n1'))[0];
+  await repo.removeTag(a, 'n1', tag.id);
+  await syncOnce(a, cloud.remote, id);
+  await syncOnce(b, cloud.remote, id);
+  assert.deepEqual(await repo.tagsOf(b, 'n1'), []);
+  repo.setTracking(false);
+}
+
+// --- a quick line is a title ---
+assert.deepEqual(splitQuick('  Call the bank  '), { title: 'Call the bank', body: '' });
+assert.deepEqual(splitQuick('Trip ideas\n\nHampi in January\nBook the train'), { title: 'Trip ideas', body: 'Hampi in January\nBook the train' });
+assert.deepEqual(splitQuick('x'.repeat(200)), { title: null, body: 'x'.repeat(200) }, 'a very long line is body text, not a title');
+
 // --- formatted notes ---
 assert.equal(htmlToText('<html><h2>Plan</h2><ul><li>Buy <b>rye</b> &amp; salt</li><li>Bake</li></ul><p>Done</p></html>'), 'Plan\nBuy rye & salt\nBake\nDone');
 assert.equal(isFormatted('<html><p>plain words</p><br></html>'), false, 'paragraphs alone are not formatting');
@@ -279,7 +431,8 @@ assert.equal(dueBucket(noon + 3 * 86_400_000, noon), 'This week');
 assert.equal(dueBucket(noon + 30 * 86_400_000, noon), 'Later');
 
 databaseChecks()
-  .then(() => console.log(`ok: database, old-database import, search, text helpers, formatted notes, linker, meaning, groups and reminders (${all.length} links in fixture)`))
+  .then(cloudChecks)
+  .then(() => console.log(`ok: database, old-database import, cloud sync between two phones, search, text helpers, formatted notes, linker, meaning, groups and reminders (${all.length} links in fixture)`))
   .catch((e) => {
     console.error(e);
     process.exit(1);

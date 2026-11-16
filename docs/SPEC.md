@@ -250,3 +250,13 @@ Quick thought (4×1): the field opens a new note, the tick opens the to-do list,
 ### Test hooks
 
 `engram://samples`, `engram://group/largest`, `engram://latest?menu=todo`, `engram://settings?smart=on`, `engram://settings?home=list|split|map`, `engram://search?q=…`.
+
+## 15. Version 0.4
+
+Reasons: [`DECISIONS.md`](DECISIONS.md) D33 to D36. Cloud details: [`CLOUD.md`](CLOUD.md).
+
+- **Quick capture.** One line becomes the title. Several lines: first line title, rest body. A bare web address is still a link with no title.
+- **Hold a note** in Today, a group, search or the to-do list: Open; add to to-do, remind tomorrow (or mark done, important, remove); Add to calendar; Think this through with Claude or ChatGPT (if installed); Copy text; Delete.
+- **Clipboard.** A button between the plus button and the field, visible only while the clipboard has text and the field is empty.
+- **Tour.** Five pages: capture, notes, groups and the map, to-dos and resurfacing, privacy and the two optional services. Skip on every page but the last. Stored as `meta.tour_done`.
+- **Engram Cloud.** Settings section with the explanation, email, password, Sign in, Create account; when signed in: the account, a status line (syncing, up to date and when, N changes waiting, or not synced), Sync now, Sign out, Delete my cloud account. Syncs four seconds after a change, on returning to the app, and on demand.

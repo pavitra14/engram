@@ -1,35 +1,26 @@
 This is a **beta** for testing. Expect rough edges, and please report what breaks.
 
-**Install:** download the APK below on an Android phone (Android 7 or newer, 64-bit) and open it. It installs over earlier versions and brings your thoughts across.
+**Install:** download the APK below on an Android phone (Android 7 or newer, 64-bit) and open it. It installs over earlier versions and keeps your thoughts.
 
-**New in 0.3**
+**New in 0.4**
 
-- **Every entry is a note.** A title and a body with bold, headings, lists, check boxes and quotes. One editor everywhere; "Long note" is gone.
-- **Three home screens.** List, map above list, or map. Choose in Settings.
-- **Thoughts in no group** now appear on the map as small circles of their own.
-- **Faster, more fitting movement.** Screens fade, push or rise depending on what they are. Menus slide up.
-- **A fuller to-do list.** Sections by due date, a line to add a to-do, repeating reminders, an important mark, and Done / In an hour buttons on the reminder itself.
-- **Calendar.** The to-do list shows the week ahead; a note started from an event remembers the event.
-- **From ideas to a next step.** On a group: "Make one note of these", and Chat with Claude or ChatGPT if you have them. Today shows one older thought a day under "Worth another look".
-- **Home-screen widgets.** Quick thought, and To do.
-- **Speech pack.** Shows that it is downloading and disappears from Settings once installed.
-- **Linking by meaning** now works in testing (it did not in the last beta). Turn on "Understand meaning" in Settings.
-- **A new database underneath** (PowerSync, still entirely on your phone), ready for syncing to your own backend later.
+- **Engram Cloud (optional).** Settings, Engram Cloud: create an account and your notes, to-dos, tags and hand-made links sync across your devices. Without an account nothing leaves the phone, exactly as before. Not end-to-end encrypted; files and photos are not uploaded. **This has not been tried on a real phone yet**: see below.
+- **A line you type is the note's title.** The body stays empty until you add to it.
+- **Hold a note** in any list for its actions: to-do, reminder, calendar, copy, delete.
+- **Clipboard.** The floating "Save what you copied" strip is gone. A small clipboard button sits beside the plus button when there is something to save.
+- **A tour** on first run, five pages. Settings, Help shows it again.
 
 **Please try these on your phone; they could not be tested automatically**
 
-- Your existing thoughts are all there after updating
-- Adding the widgets from your home screen, and what each tap does
-- Formatting a note, closing it, and opening it again
-- A reminder arriving, and its Done and In an hour buttons
-- Chat with Claude / ChatGPT: does the app open with the message filled in? (It is on your clipboard either way.)
-- "Understand meaning": whether the links it adds make sense on your own notes
-- Voice notes, the speech pack download, the clipboard prompt, attaching files, calendar features
+- Engram Cloud end to end: create an account, confirm the email, sign in, then sign in on a second device or after reinstalling and see your notes arrive. Tell me exactly what any error says.
+- Edit the same note on two devices and check both versions are kept.
+- Delete my cloud account.
+- Holding a note; the clipboard button; the tour.
 
 **Known limits**
 
+- After tapping the confirmation link in the email you may see a browser error page. The account is confirmed anyway; go back to Engram and sign in.
+- Sync covers words and to-dos, not files.
 - Group names are single words and can be odd; groups cannot be renamed.
-- Formatting shows in the note itself, not in lists or widgets.
-- Files are not read: a PDF links only by its name and any note you add.
 - Backups do not include files or recordings.
 - Signed with a development key: fine for installing directly, not for the Play Store.

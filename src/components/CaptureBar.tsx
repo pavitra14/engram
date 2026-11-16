@@ -6,12 +6,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useDb } from '@/db/provider';
 import { useCallback, useEffect, useState } from 'react';
-import { AppState, Keyboard, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import { AppState, Keyboard, KeyboardAvoidingView, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { captureFile, captureText } from '@/lib/capture';
-import { font, type, useTheme } from '@/theme';
+import { font, useTheme } from '@/theme';
 
 import { ActionSheet } from './ActionSheet';
 import { Notice, RoundButton } from './ui';
@@ -132,27 +131,15 @@ export function CaptureBar({ clipboard = false }: { clipboard?: boolean }) {
       <View style={[styles.inner, { paddingBottom: insets.bottom + 12, backgroundColor: c.bg }]}>
         <Notice text={notice} />
 
-        {clipboard && clip.available && !hasDraft ? (
-          <Animated.View entering={FadeInDown.duration(220)} exiting={FadeOutDown.duration(160)} style={styles.clipRow}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityHint="Reads your clipboard and saves it as a thought"
-              onPress={paste}
-              style={({ pressed }) => [
-                styles.clip,
-                { backgroundColor: c.surface, borderColor: c.line, opacity: pressed ? 0.7 : 1 },
-              ]}>
-              <Feather name="clipboard" size={16} color={c.accent} />
-              <Text style={[type.smallStrong, { color: c.ink }]}>Save what you copied</Text>
-            </Pressable>
-            <RoundButton icon="x" label="Hide the clipboard prompt" tone="plain" onPress={clip.dismiss} />
-          </Animated.View>
-        ) : null}
-
         <View style={styles.row}>
           {!hasDraft ? (
             <View style={styles.attach}>
               <RoundButton icon="plus" label="Add a photo, video or file" onPress={attach} />
+            </View>
+          ) : null}
+          {clipboard && clip.available && !hasDraft ? (
+            <View style={styles.attach}>
+              <RoundButton icon="clipboard" label="Save what you copied as a thought" onPress={paste} />
             </View>
           ) : null}
           <View style={[styles.field, { backgroundColor: c.surface, borderColor: c.line }]}>
@@ -231,15 +218,4 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, maxHeight: 132, paddingVertical: 12, fontFamily: font.regular, fontSize: 16, lineHeight: 22 },
   primary: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
-  clipRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  clip: {
-    flex: 1,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 18,
-  },
 });

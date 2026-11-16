@@ -1,6 +1,6 @@
 # Engram — instructions for agents
 
-Engram is a local-first "second brain" for Android, built with Expo and React Native. You capture thoughts by typing, speaking or sharing from any app, and they link themselves into an interactive graph. There is no server and no account; everything is stored in a database on the phone.
+Engram is a local-first "second brain" for Android, built with Expo and React Native. You capture thoughts by typing, speaking or sharing from any app, and they link themselves into an interactive graph. Everything is stored in a database on the phone and no account is needed. An optional account (Engram Cloud) syncs notes between devices.
 
 This file is the entry point for any coding agent (Claude Code, Codex, Cursor, Copilot and others). Read it fully before changing anything. Humans can read it too.
 
@@ -15,6 +15,7 @@ This file is the entry point for any coding agent (Claude Code, Codex, Cursor, C
 | [`docs/original-plan.md`](docs/original-plan.md) | Background only. The pre-build plan; superseded where SPEC differs. |
 | [`docs/research.md`](docs/research.md) | When choosing libraries or revisiting design inspiration. |
 | [`docs/CI.md`](docs/CI.md) | Before changing the workflow, or to make builds faster. |
+| [`docs/CLOUD.md`](docs/CLOUD.md) | Before touching sync, accounts or anything in `supabase/`. |
 
 When you finish a piece of work, update `docs/STATUS.md` (and `DECISIONS.md` if you made a choice someone might later question). These files are the shared memory between agents and sessions; if they are stale, the next agent starts wrong.
 
@@ -24,7 +25,7 @@ When you finish a piece of work, update `docs/STATUS.md` (and `DECISIONS.md` if 
 - **Platform:** Android first. iOS is out of scope for now, but avoid Android-only code where a cross-platform option is equally good.
 - **Package id:** `com.pavitra14.engram`. App name: Engram. URL scheme: `engram://`.
 - **Stack:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript, Expo Router, PowerSync (`@powersync/react-native` on `@op-engineering/op-sqlite`, local-only), `react-native-enriched-html` (the note editor), `react-native-android-widget`, `d3-force` (layout only), Reanimated 4.7, `expo-clipboard`, `expo-speech-recognition`, `expo-notifications`, `expo-calendar`, `expo-image-picker`, `react-native-executorch` (text embeddings only). Skia was removed in v2; nothing draws on a canvas.
-- **Versions are 0.x.** The app is `0.3.0` (`versionCode` 3). Two earlier releases were numbered 1.0.0 and 2.0.0-beta.1 by mistake; the owner asked for them to be removed. Never number a release 1.0 or higher unless the owner says so.
+- **Versions are 0.x.** The app is `0.4.0` (`versionCode` 4). Two earlier releases were numbered 1.0.0 and 2.0.0-beta.1 by mistake; the owner asked for them to be removed. Never number a release 1.0 or higher unless the owner says so.
 
 ## Repository map
 
@@ -37,6 +38,7 @@ src/
     group/[id].tsx     one group's thoughts ("loose" = ungrouped, "largest" = test hook)
     thought/[id].tsx   a note: title and formatted body edited in place, file, to-do, tags, links
     latest.tsx         engram://latest opens the newest thought (test hook)
+    tour.tsx           the first-run tour; shown once, and from Settings
     search.tsx         full-text search with kind filters and group matches
     voice.tsx          full-screen voice capture with live transcript
     compose.tsx        a new note (title + formatted body); also opened by widgets and calendar events
@@ -46,11 +48,14 @@ src/
     samples.tsx        engram://samples loads demo data (used by the smoke test)
     +native-intent.ts  routes incoming share intents to /handle-share
   components/          CaptureBar, NoteEditor (+ FormatBar), GroupMap, Entry, TodoRow,
-                       ActionSheet (slide-up menu), ui.tsx primitives
+                       ActionSheet (slide-up menu), ThoughtMenu (hold a note in any list),
+                       CloudSection (Settings), ui.tsx primitives
   db/                  schema.ts (tables and columns), powersync.ts (opens the database),
                        provider.tsx (useDb), db.ts (the Db interface), repo.ts (all SQL),
                        legacy.ts (the pre-0.3 database and its one-time import), types.ts
   widgets/             home-screen widgets, their task handler and data snapshot
+  cloud/               Engram Cloud (optional): api.ts (Supabase calls with fetch), sync.ts (the sync
+                       round, no React Native), cloud.ts (session, when to sync)
   lib/                 brain.ts (shared data loader + groups), groups.ts, linker.ts,
                        capture.ts (save + link pipeline, file import), semantic.ts (language model),
                        smart.ts (switching meaning on and off), reminders.ts, calendar.ts,
@@ -60,6 +65,7 @@ src/
 assets/brand/          SVG sources for the mark and wordmark; PNGs in assets/images are rendered from them
 index.ts               entry point: expo-router plus the widget task handler
 plugins/               local config plugins (app visibility queries)
+supabase/              the cloud's schema (migrations/) and Edge Functions (functions/)
 scripts/check.ts       Node-only tests: repo.ts against node:sqlite, old-database import, linker, groups, dates
 scripts/smoke.sh       emulator walkthrough run by CI, in both themes
 .github/workflows/android.yml   CI: checks, APK builds, emulator test, releases
@@ -95,9 +101,13 @@ You do not need the Android SDK locally. CI builds the APK.
 - **`legacy.ts` is frozen.** It describes the pre-0.3 database so old installs can be carried over. Do not edit its SQL.
 - **All SQL lives in `src/db/repo.ts`.** Screens call repo functions; they do not write SQL.
 - **Every write must call `dataChanged()`** from `src/lib/bus.ts` (directly or via `capture()` / `removeThought()`), or screens will not refresh. Pass the new id to animate it into the graph.
+- **A quickly captured line is the note's title**, not its body (`splitQuick` in `capture.logic.ts`). Several lines: the first is the title, the rest the body.
 - **Capture is save-first.** Insert the row, then link. Never make capture wait on anything slower than one insert.
 - **Links are undirected** and stored with `a_id < b_id` (a CHECK constraint enforces it). Use `repo.upsertLink`, which orders ids and never downgrades a manual link to an automatic one.
-- **Nothing leaves the device.** No analytics, no network calls for user data, no cloud speech. Voice uses `requiresOnDeviceRecognition: true`. The one download the app ever makes is the language model, and only after the person turns on "Understand meaning". `react-native-executorch` reports downloads to its maker by default; `semantic.ts` switches that off and it must stay off.
+- **Nothing leaves the device unless the person signs in to Engram Cloud.** No analytics, no cloud speech. Voice uses `requiresOnDeviceRecognition: true`. Signed out, the only network use is the language model download, and only after the person turns on "Understand meaning". Signed in, `src/cloud/` sends notes, to-dos, tags and hand-made links to the project's Supabase database and nothing else; see `docs/CLOUD.md` for the exact list. Do not add anything to what is sent without updating that page and the sign-in text. `react-native-executorch` reports downloads to its maker by default; `semantic.ts` switches that off and it must stay off.
+- **Sync is recorded only while signed in.** `repo.setTracking(true)` makes writes note themselves in `outbox`. Anything that changes a synced row must go through a `repo.ts` function that calls `mark()`, or other devices will never hear of it. Applying rows from the cloud goes through `repo.applyRemote`, which records nothing.
+- **The cloud is written only through `apply_sync_batch`.** Never grant direct insert, update or delete on the cloud tables. Server changes are new files in `supabase/migrations/`, applied to the project and tested there; never edit a migration that has been applied.
+- **Only the publishable key is in the app.** The service role key exists only inside Edge Functions.
 - **Menus with more than three choices use `ActionSheet`.** Android's `Alert.alert` silently drops buttons beyond three. Use alerts only for confirmations.
 - **`react-native-executorch` is loaded with a lazy `require`** inside `semantic.ts`, never a top-level import, so a fault in its native library cannot stop the app from starting. Its native libraries are fetched by its postinstall script, limited to text embeddings by the `react-native-executorch.features` key in `package.json`.
 - **A note's body is stored twice**: `body` is its plain words (what search, linking and lists read) and `body_html` its formatting, or null when it has none. Always write both through `repo.updateThought` or `capture`.
@@ -132,9 +142,9 @@ These caught the first build out. The installed versions behave this way:
 ## Testing
 
 - `npm run check` runs `repo.ts` itself against `node:sqlite` (plain tables with the same columns), plus the old-database import and the linker. Add a case there for any SQL or linker change. It cannot catch a difference between PowerSync's tables and plain ones; the emulator run does.
-- CI's emulator job (`scripts/smoke.sh`) installs the x86_64 APK on an Android 14 Pixel 6 emulator, loads sample data via `engram://samples`, types a thought, sets a reminder on it (`engram://latest?menu=todo`), shares a picture and text in, saves a titled note, shows the split and map home layouts (`engram://settings?home=split`), switches on linking by meaning (`engram://settings?smart=on`) and waits for the model, opens the map, a group, search, the note editor and settings, repeats the main screens in the black theme, and fails on any crash. **Tap coordinates assume 1080×2400.** If you move the top bar or dock, update them.
+- CI's emulator job (`scripts/smoke.sh`) installs the x86_64 APK on an Android 14 Pixel 6 emulator, photographs the first-run tour, loads sample data via `engram://samples`, types a thought, holds a note to open its menu, sets a reminder on it (`engram://latest?menu=todo`), shares a picture and text in, saves a titled note, shows the split and map home layouts (`engram://settings?home=split`), switches on linking by meaning (`engram://settings?smart=on`) and waits for the model, opens the map, a group, search, the note editor and settings, repeats the main screens in the black theme, and fails on any crash. **Tap coordinates assume 1080×2400.** If you move the top bar or dock, update them.
 - Screenshots from each pushed branch's latest run are force-pushed to `smoke-shots` (for `main`) or `smoke-shots-<branch>`. CI runs on `main`, `release/**` and `redesign-**` branches and on pull requests; add your branch pattern to the workflow if you need screenshots from it. Look at them after any UI change: `git clone --depth 1 -b smoke-shots https://github.com/pavitra14/engram`.
-- Not covered by automation: home-screen widgets (only that Android registered them), formatting buttons in the note editor, the Chat with Claude/ChatGPT buttons, notification buttons, the speech pack download, microphone, speech recognition, the clipboard prompt, the attach pickers, opening files in other apps, the date and time picker, a reminder actually firing, calendar events, real-device performance. Say so when you report work in those areas.
+- Not covered by automation: anything signed in to Engram Cloud (the emulator has no account), home-screen widgets (only that Android registered them), formatting buttons in the note editor, the Chat with Claude/ChatGPT buttons, notification buttons, the speech pack download, microphone, speech recognition, the clipboard prompt, the attach pickers, opening files in other apps, the date and time picker, a reminder actually firing, calendar events, real-device performance. Say so when you report work in those areas.
 
 ## Releasing
 

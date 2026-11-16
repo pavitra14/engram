@@ -5,6 +5,8 @@ import type { Thought } from '@/db/types';
 import { clock, dueLabel, fileSize, highlightRuns, hostOf, titleOf, when } from '@/lib/text';
 import { kindLabel, type, useTheme } from '@/theme';
 
+import { useThoughtMenu } from './ThoughtMenu';
+
 import { KindGlyph } from './ui';
 
 export function entryMeta(t: Thought): string {
@@ -38,13 +40,17 @@ export function Entry({
   trailing?: string;
 }) {
   const { c } = useTheme();
+  const openMenu = useThoughtMenu();
   const text = titleOf(thought);
   const runs = query ? highlightRuns(text, query) : [{ text, hit: false }];
   const host = hostOf(thought.url);
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityHint="Hold for more actions"
       onPress={onPress}
+      onLongPress={() => openMenu(thought)}
+      delayLongPress={350}
       style={({ pressed }) => [
         styles.entry,
         divider && { borderBottomWidth: 1, borderBottomColor: c.rule },

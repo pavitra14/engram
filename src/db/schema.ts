@@ -74,3 +74,16 @@ export const EMBEDDINGS_DDL =
   'CREATE TABLE IF NOT EXISTS embeddings (thought_id TEXT PRIMARY KEY NOT NULL, model TEXT NOT NULL, vector TEXT NOT NULL)';
 export const SEARCH_DDL =
   "CREATE VIRTUAL TABLE IF NOT EXISTS thoughts_fts USING fts5(id UNINDEXED, title, body, tokenize='unicode61 remove_diacritics 2')";
+
+/**
+ * Bookkeeping for Engram Cloud, used only when the person has turned sync on.
+ * `outbox` lists rows changed on this phone and not yet sent (n counts changes,
+ * so an edit made while a batch is in flight is not forgotten). `sync_revs` is
+ * the server's revision of each thought as this phone last saw it.
+ */
+export const OUTBOX_DDL =
+  'CREATE TABLE IF NOT EXISTS outbox (tbl TEXT NOT NULL, id TEXT NOT NULL, del INTEGER NOT NULL DEFAULT 0, n INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (tbl, id))';
+export const REVS_DDL = 'CREATE TABLE IF NOT EXISTS sync_revs (id TEXT PRIMARY KEY NOT NULL, rev INTEGER NOT NULL)';
+
+/** The thought columns that are sent to the cloud. Device file paths and alarm ids stay on the phone. */
+export const SYNCED_THOUGHT_COLUMNS = THOUGHT_COLUMNS.filter((c) => c !== 'media_path' && c !== 'notif_id');

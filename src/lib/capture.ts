@@ -7,6 +7,7 @@ import * as repo from '@/db/repo';
 import type { NewThought, Thought, ThoughtKind } from '@/db/types';
 
 import { dataChanged } from './bus';
+import { splitQuick } from './capture.logic';
 import { type Doc, relateAll, related } from './linker';
 import { embedText, MODEL_ID, modelReady } from './semantic';
 import { firstUrl } from './text';
@@ -73,15 +74,12 @@ export async function capture(db: Db, input: NewThought): Promise<Thought> {
 }
 
 export function captureText(db: Db, raw: string, source?: string | null): Promise<Thought> {
-  const body = raw.trim();
-  const url = firstUrl(body);
-  const isBareLink = !!url && body.replace(url, '').trim().length < 3;
-  return capture(db, {
-    kind: url ? 'link' : 'text',
-    body: isBareLink ? '' : body,
-    url,
-    source: source ?? null,
-  });
+  const text = raw.trim();
+  const url = firstUrl(text);
+  // A bare web address stays a link with nothing else; its address is what is shown.
+  if (url && text.replace(url, '').trim().length < 3) return capture(db, { kind: 'link', body: '', url, source: source ?? null });
+  const { title, body } = splitQuick(text);
+  return capture(db, { kind: url ? 'link' : 'text', title, body, url, source: source ?? null });
 }
 
 /** Saves a note written in the editor: a title, a body, and the body's formatting if it has any. */

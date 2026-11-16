@@ -10,6 +10,8 @@ import { setDone, setImportant } from '@/lib/reminders';
 import { dueLabel, repeatLabel, titleOf } from '@/lib/text';
 import { type, useTheme } from '@/theme';
 
+import { useThoughtMenu } from './ThoughtMenu';
+
 /** One to-do: a round check you can tap, the thought's words, and when it is due. */
 export function TodoRow({ thought, divider = true }: { thought: Thought; divider?: boolean }) {
   const db = useDb();
@@ -17,6 +19,7 @@ export function TodoRow({ thought, divider = true }: { thought: Thought; divider
   const done = thought.done_at != null;
   const [now] = useState(() => Date.now());
   const overdue = !done && thought.remind_at != null && thought.remind_at < now;
+  const openMenu = useThoughtMenu();
   const title = titleOf(thought);
   const important = thought.priority === 1;
   return (
@@ -38,6 +41,8 @@ export function TodoRow({ thought, divider = true }: { thought: Thought; divider
       <Pressable
         accessibilityRole="button"
         onPress={() => router.push({ pathname: '/thought/[id]', params: { id: thought.id } })}
+        onLongPress={() => openMenu(thought)}
+        delayLongPress={350}
         style={({ pressed }) => [styles.words, { opacity: pressed ? 0.6 : 1 }]}>
         <Text
           style={[type.thoughtSmall, { color: done ? c.soft : c.ink, textDecorationLine: done ? 'line-through' : 'none' }]}

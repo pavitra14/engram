@@ -24,7 +24,9 @@ adb logcat -c
 adb shell cmd uimode night no
 
 launch
-sleep 25; shot 01-empty
+# A new install opens on the tour.
+sleep 25; shot 01-tour
+tap 900 2290; sleep 2; shot 01b-tour-page-2
 
 open "engram://samples"; sleep 18; shot 02-home
 
@@ -33,6 +35,10 @@ tap 420 2221; sleep 2
 adb shell input text "Sourdough"; sleep 2; shot 03-typing
 adb shell input keyevent 4; sleep 2
 tap 953 2221; sleep 4; shot 04-captured
+
+# Hold a note in the list: its menu slides up. Back closes it.
+adb shell input swipe 500 800 500 800 700; sleep 2; shot 04b-hold-menu
+adb shell input keyevent 4; sleep 2
 
 # Open the newest thought with its to-do menu, and ask to be reminded in a week
 # (always the second choice from the bottom of the sheet).
@@ -92,6 +98,8 @@ open "engram://"; sleep 6; shot 18d-home-map
 open "engram://settings?home=list"; sleep 3
 open "engram://"; sleep 3
 open "engram://settings"; sleep 5; shot 19-settings
+adb shell input swipe 540 2000 540 500 300; sleep 1
+adb shell input swipe 540 2000 540 500 300; sleep 2; shot 19b-settings-cloud
 
 # Share text in from "another app".
 adb shell am start -W -a android.intent.action.SEND -t text/plain \

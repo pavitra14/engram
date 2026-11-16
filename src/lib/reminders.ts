@@ -167,3 +167,30 @@ export function thoughtIdFrom(response: Notifications.NotificationResponse | nul
   const id = response?.notification.request.content.data?.thoughtId;
   return typeof id === 'string' ? id : null;
 }
+
+/**
+ * After thoughts arrive from another device: make this phone's alarms match them.
+ * A to-do with a future time gets an alarm here; anything else loses the one it had.
+ * Never asks for notification permission by itself; without it, nothing is scheduled.
+ */
+export async function reconcileReminders(db: Db, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const may = (await Notifications.getPermissionsAsync().catch(() => null))?.granted ?? false;
+  for (const id of ids.slice(0, 500)) {
+    const t = await repo.getThought(db, id);
+    if (!t) continue;
+    await cancel(t.notif_id);
+    let notifId: string | null = null;
+    if (may && t.todo === 1 && !t.done_at && t.remind_at && t.remind_at > Date.now()) {
+      try {
+        notifId = await Notifications.scheduleNotificationAsync({
+          content: { title: titleOf(t), body: 'A reminder from Engram', data: { thoughtId: t.id }, categoryIdentifier: CATEGORY },
+          trigger: { type: SchedulableTriggerInputTypes.DATE, date: t.remind_at, channelId: CHANNEL },
+        });
+      } catch {
+        notifId = null;
+      }
+    }
+    if (notifId !== t.notif_id) await repo.setNotifId(db, id, notifId);
+  }
+}

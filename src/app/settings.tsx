@@ -1,11 +1,12 @@
 import Constants from 'expo-constants';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { useDb } from '@/db/provider';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CloudSection } from '@/components/CloudSection';
 import { ActionSheet } from '@/components/ActionSheet';
 import { Header, Notice } from '@/components/ui';
 import * as repo from '@/db/repo';
@@ -321,6 +322,14 @@ export default function SettingsScreen() {
                 onPress={toggleCalendar}
               />
             </View>
+          </Section>
+
+          <Section title="Help">
+            <Row title="The tour" sub="Five short pages on what Engram does and how to use it" action="Show" onPress={() => router.push('/tour')} />
+          </Section>
+
+          <Section title="Engram Cloud">
+            <CloudSection />
           </Section>
 
           <Section title="Your thoughts">

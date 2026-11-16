@@ -33,6 +33,23 @@ export default function HomeScreen() {
   const [todos, setTodos] = useState<Thought[]>([]);
   const [events, setEvents] = useState<DayEvent[]>([]);
   const [view, setView] = useState<HomeView>('list');
+  const [toured, setToured] = useState(false);
+
+  // A new install starts with the tour. A phone that already holds thoughts has no need of it.
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      if ((await repo.getMeta(db, 'tour_done')) === '1' || (await repo.countThoughts(db)) > 0) {
+        await repo.setMeta(db, 'tour_done', '1');
+        if (live) setToured(true);
+        return;
+      }
+      if (live) router.replace('/tour');
+    })();
+    return () => {
+      live = false;
+    };
+  }, [db]);
   const { width, height } = useWindowDimensions();
 
   // `brain` changes whenever the data does, which is the reload signal here.
@@ -167,6 +184,8 @@ export default function HomeScreen() {
 
   const map = brain && brain.thoughts.length > 0 ? <GroupMap brain={brain} width={width} /> : null;
   const bottom = insets.bottom + CAPTURE_BAR_SPACE + 40;
+
+  if (!toured) return <View style={{ flex: 1, backgroundColor: c.bg }} />;
 
   if (view === 'map') {
     return (

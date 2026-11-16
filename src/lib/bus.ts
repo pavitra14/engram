@@ -29,6 +29,9 @@ const subscribe = (l: () => void) => {
   };
 };
 
+/** For code outside React that needs to know when something was written. Returns a function that stops listening. */
+export const subscribeData = subscribe;
+
 export function useDataVersion(): number {
   return useSyncExternalStore(
     subscribe,

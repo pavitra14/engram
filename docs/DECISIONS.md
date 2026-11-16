@@ -209,3 +209,31 @@ _16 Nov 2026, owner's request._
 ## D32. Version numbers are 0.x; one push per batch
 
 **Decision (owner's instruction).** The app is not ready to be called 1.0. Versions are `0.x`, releases `v0.x.y-beta.n`. Work is finished and checked locally and pushed once, because a CI run takes about twenty minutes. CI itself was trimmed and can use a self-hosted runner (`docs/CI.md`).
+
+## D33. Engram Cloud: optional sync, straight to Supabase
+
+_16 Nov 2026, issue #2._
+
+**Decision.** An optional account syncs notes, to-dos, tags and hand-made links through two Postgres functions (`apply_sync_batch` to write, `pull_changes` to read). Signed out, nothing is recorded or sent. Full account in `docs/CLOUD.md`.
+**Why not PowerSync's replication service, as the issue proposes.** It is a separate service that must be created and connected; none exists for this project and an agent cannot create one. The local database stays PowerSync, and the sync round talks to a `Remote` interface so the transport can be swapped.
+**Why fetch, not `supabase-js`.** The app needs six calls. Writing them out avoids a dependency and its polyfills.
+**Conflict rule.** Never overwrite a note's words silently. A stale edit with different words is kept as a second note; a deletion beats an edit and the edit is kept as a new note. Everything else is last change wins. There is no merge screen.
+**Ids are text on the server**, not uuid as the issue sketches, because link and tag-assignment ids are built from two ids.
+**Consequences.** Files are not uploaded. Two devices that each create a tag with the same name get two tags. One local database per phone: signing in to a second account on the same phone copies the phone's notes into it, after asking.
+**Revisit:** media in Storage; Google and Apple sign-in; a PowerSync service; a real merge screen; per-account local databases.
+
+## D34. The privacy promise is now "unless you sign in"
+
+**Decision.** The README, the tour, Settings and `AGENTS.md` say that everything stays on the phone unless the person signs in to Engram Cloud, and that the cloud copy is not end-to-end encrypted. Cloud AI (later phases of issue #2) will be a separate switch.
+
+## D35. Only phase 1 and part of phase 2 of issue #2
+
+**Decision.** Cloud search, Ask Engram, insights, other clients, sharing and billing are not started. Each needs an AI provider or payment account, a cost ceiling and consent wording that are the owner's to choose.
+
+## D36. A quick line is a title; hold a note for its menu; clipboard as a button; a tour
+
+**Decisions (owner's requests, 16 Nov 2026).**
+- A line typed in the bar, shared, or pasted becomes the note's title with an empty body. With several lines, the first is the title. One line over 140 characters is body text with no title.
+- Holding a note in any list opens the same actions as its three-dot menu (`ThoughtMenu`).
+- The "Save what you copied" strip above the bar is gone. A clipboard button appears beside the plus button only while the clipboard holds text. It still reads the clipboard only when tapped.
+- A new install opens on a five-page tour. A phone that already holds thoughts skips it. Settings, Help shows it again.

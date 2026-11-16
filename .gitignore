@@ -45,3 +45,6 @@ example
 # CI output
 /smoke
 /out
+
+# cloud address and key for local builds
+.env

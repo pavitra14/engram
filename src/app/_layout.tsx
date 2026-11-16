@@ -11,9 +11,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as repo from '@/db/repo';
 import { ACTION_DONE, ACTION_LATER, actionFrom, setDone, snooze, thoughtIdFrom } from '@/lib/reminders';
 import { startSmartLinking } from '@/lib/smart';
+import { ThoughtMenuProvider } from '@/components/ThoughtMenu';
 import { ThemeProvider, useTheme } from '@/theme';
 import { useDataVersion } from '@/lib/bus';
 import { refreshWidgets } from '@/widgets/snapshot';
+import { startCloud } from '@/cloud/cloud';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -27,6 +29,11 @@ function Screens() {
   useEffect(() => {
     void refreshWidgets(db);
   }, [db, version, dark]);
+
+  // Engram Cloud does nothing unless someone has signed in on this phone.
+  useEffect(() => {
+    void startCloud(db);
+  }, [db]);
 
   // Load the language model in the background if meaning-based linking is on.
   useEffect(() => {
@@ -60,6 +67,7 @@ function Screens() {
         through quickly. Things you start and finish (a note, a recording, a share)
         rise from the bottom like a sheet. Durations are short on purpose.
       */}
+      <ThoughtMenuProvider>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg }, animation: 'ios_from_right', animationDuration: 220 }}>
         <Stack.Screen name="index" options={{ animation: 'fade', animationDuration: 140 }} />
         <Stack.Screen name="thought/[id]" options={{ animation: 'ios_from_right', animationDuration: 220 }} />
@@ -73,7 +81,9 @@ function Screens() {
         <Stack.Screen name="handle-share" options={{ animation: 'slide_from_bottom', animationDuration: 200 }} />
         <Stack.Screen name="samples" options={{ animation: 'none' }} />
         <Stack.Screen name="latest" options={{ animation: 'none' }} />
+        <Stack.Screen name="tour" options={{ animation: 'fade', animationDuration: 160, gestureEnabled: false }} />
       </Stack>
+      </ThoughtMenuProvider>
     </GestureHandlerRootView>
   );
 }

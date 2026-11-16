@@ -1,12 +1,26 @@
 # Status
 
-_Last updated: 16 Nov 2026, v0.3.0-beta.1 on `main`. Update this file whenever you finish work._
+_Last updated: 16 Nov 2026, v0.4.0-beta.1. Update this file whenever you finish work._
 
 ## Where things are
 
-- The app is **0.3.0**. Work is pushed straight to `main`; every release is a `0.x` beta (pre-release) until the owner says otherwise.
-- Two earlier releases were numbered `v1.0.0` and `v2.0.0-beta.1`. The owner has asked for them to be removed; that has to be done by hand on GitHub's Releases page (the agent environment cannot delete releases or tags).
-- 0.3.0 was written and checked locally as one batch and pushed once, as the `release/v0.3.0-beta.1` branch. That one run built both APKs, passed the emulator walkthrough and published <https://github.com/pavitra14/engram/releases/tag/v0.3.0-beta.1>. Its screenshots are on the `smoke-shots-release-v0.3.0-beta.1` branch.
+- The app is **0.4.0**. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
+- The old `v1.0.0` and `v2.0.0-beta.1` releases still need deleting by hand on GitHub (the agent environment cannot).
+- Issue #2 (Engram Cloud) is partly implemented: phase 1 and part of phase 2. `docs/CLOUD.md` has the table. The agent environment cannot comment on or close issues.
+
+## What 0.4 changed
+
+1. **Engram Cloud**, optional sync to the project's Supabase database (D33 to D35, `docs/CLOUD.md`). Server schema and functions are applied and tested in the database. **The app side has never run signed in.**
+2. A quickly captured line is the note's title (D36).
+3. Holding a note in a list opens its menu.
+4. The clipboard prompt is a button beside the plus button.
+5. A first-run tour.
+
+### Not verified in 0.4
+
+- Everything in Engram Cloud beyond the database tests and the two-simulated-phones test: the HTTP calls, sign-up and its email, sign-in, session refresh, sync from a device, account deletion.
+- The `delete-account` Edge Function has been deployed and never called.
+- Supabase's security advisors report nothing wrong with the new tables. They note, as expected, that `apply_sync_batch` and `delete_my_data` run with definer rights for signed-in users, and that `sync_receipts` has no policy (nobody should read it). They also flag `public.rls_auto_enable()`, a function that was already in the project and is callable without signing in; the owner should decide whether it is needed.
 
 ## What 0.3 changed
 

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Engram",
     "slug": "engram",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "engram",
@@ -10,7 +10,7 @@
     "backgroundColor": "#F3F4F1",
     "android": {
       "package": "com.pavitra14.engram",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#1F3FBF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -132,7 +132,8 @@
             "com.openai.chatgpt"
           ]
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
