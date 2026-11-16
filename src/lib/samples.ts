@@ -43,6 +43,10 @@ const SAMPLES: (Omit<NewThought, 'created_at'> & { ago: number })[] = [
   { kind: 'text', body: 'Share sheet is the fastest way to save a link from any app', ago: 15 },
   { kind: 'link', body: 'Local first software: you own your data', url: 'https://software.example/local-first', ago: 110 },
   { kind: 'text', body: 'Notes app idea: link suggestions should explain why two notes are related', ago: 112 },
+
+  // These two share no words; only meaning-based linking joins them.
+  { kind: 'text', body: 'The car is due for an oil change and new brake pads', ago: 130 },
+  { kind: 'text', body: 'Book the vehicle in at the garage for maintenance', ago: 131 },
 ];
 
 /** Loads a small demo brain. Does nothing if the brain already has thoughts. */

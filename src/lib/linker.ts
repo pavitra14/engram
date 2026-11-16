@@ -14,12 +14,16 @@ export type Doc = {
   text: string;
   url?: string | null;
   tags?: string[];
+  /** Unit-length vector from the on-device language model, when it is switched on. */
+  vec?: Float32Array;
 };
 
 export type Scored = { id: string; score: number };
 
 export const LINK_THRESHOLD = 0.12;
 export const LINK_TOP_K = 4;
+/** Cosine similarity of two meaning vectors above which thoughts count as related. */
+export const MEANING_THRESHOLD = 0.5;
 
 const STOP = new Set(
   (
@@ -75,7 +79,7 @@ export function whyLinked(a: Doc, b: Doc): string {
     if (mine.has(t.stem) && !shared.includes(mine.get(t.stem)!)) shared.push(mine.get(t.stem)!);
   }
   shared.sort((x, y) => y.length - x.length);
-  if (shared.length === 0) return 'Related';
+  if (shared.length === 0) return 'Similar meaning';
   if (shared.length === 1) return `Both mention ${shared[0]}`;
   return `Both mention ${shared[0]} and ${shared[1]}`;
 }
@@ -126,7 +130,7 @@ function boost(a: Doc, b: Doc): number {
   return extra;
 }
 
-type Prepared = { vecs: { vec: Vec; norm: number }[]; distinctive: (t: string) => boolean };
+type Prepared = { vecs: { vec: Vec; norm: number }[]; distinctive: (t: string) => boolean; meaning: (Float32Array | undefined)[] };
 
 function prepare(docs: Doc[]): Prepared {
   const tfs = docs.map((d) => termFreq(tokenize(docText(d))));
@@ -139,15 +143,24 @@ function prepare(docs: Doc[]): Prepared {
   return {
     vecs: tfs.map((tf) => weigh(tf, idf)),
     distinctive: (t) => t.length >= 4 && (df.get(t) ?? 0) <= rareLimit,
+    meaning: docs.map((d) => d.vec),
   };
 }
 
 /**
- * Cosine similarity, plus a lift for each distinctive word two thoughts share.
- * Short notes rarely share more than one or two words, so plain cosine alone
- * would leave "sourdough starter" and "sourdough crumb" unlinked.
+ * Word similarity is cosine over TF-IDF, plus a lift for each distinctive word
+ * two thoughts share. Short notes rarely share more than one or two words, so
+ * plain cosine alone would leave "sourdough starter" and "sourdough crumb" unlinked.
  */
-function similarity(p: Prepared, i: number, j: number): number {
+/** Cosine similarity of two unit vectors, or 0 when either is missing or they differ in size. */
+export function meaningSimilarity(a: Float32Array | undefined, b: Float32Array | undefined): number {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+  return dot;
+}
+
+function wordSimilarity(p: Prepared, i: number, j: number): number {
   const a = p.vecs[i];
   const b = p.vecs[j];
   const base = cosine(a, b);
@@ -156,6 +169,17 @@ function similarity(p: Prepared, i: number, j: number): number {
   let shared = 0;
   for (const t of small.keys()) if (large.has(t) && p.distinctive(t)) shared += 1;
   return base + Math.min(0.24, shared * 0.08);
+}
+
+/**
+ * How related two thoughts are. Words always count. When both thoughts have a
+ * meaning vector and the vectors are close, that counts too, so "car needs a
+ * service" and "book the vehicle in for maintenance" link without sharing a word.
+ */
+function similarity(p: Prepared, i: number, j: number): number {
+  const words = wordSimilarity(p, i, j);
+  const meaning = meaningSimilarity(p.meaning[i], p.meaning[j]);
+  return meaning >= MEANING_THRESHOLD ? Math.max(words, meaning) : words;
 }
 
 /** Related thoughts for `target` among `corpus` (target may or may not be in it). */

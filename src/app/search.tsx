@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -12,14 +12,22 @@ import type { Thought, ThoughtKind } from '@/db/types';
 import { placement, useBrain } from '@/lib/brain';
 import { font, KINDS, type, useTheme } from '@/theme';
 
-const PLURAL: Record<ThoughtKind, string> = { text: 'Notes', voice: 'Voice', link: 'Links', image: 'Images' };
+const PLURAL: Record<ThoughtKind, string> = {
+  text: 'Notes',
+  voice: 'Voice',
+  link: 'Links',
+  image: 'Images',
+  video: 'Videos',
+  file: 'Files',
+};
 
 export default function SearchScreen() {
   const db = useSQLiteContext();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const brain = useBrain(db);
-  const [query, setQuery] = useState('');
+  const params = useLocalSearchParams<{ q?: string }>();
+  const [query, setQuery] = useState(() => (typeof params.q === 'string' ? params.q : ''));
   const [kind, setKind] = useState<ThoughtKind | null>(null);
   const [hits, setHits] = useState<Thought[] | null>(null);
 

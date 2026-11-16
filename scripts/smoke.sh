@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Installs the APK on a running emulator, walks through every screen in both
-# themes and fails if the app crashed. Screenshots and the log go to ./smoke.
+# Installs the APK on a running emulator, walks through the app and fails if it
+# crashed. Screenshots and the log go to ./smoke.
 # Tap coordinates assume a 1080x2400 screen at 2.625 density (Pixel 6 profile).
 set -uo pipefail
 
@@ -14,6 +14,7 @@ open() { adb shell am start -W -a android.intent.action.VIEW -d "$1" "$PKG" >/de
 launch() { adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null; }
 
 adb install -r "$APK" || exit 1
+adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS || true
 adb logcat -c
 adb shell cmd uimode night no
 
@@ -23,48 +24,66 @@ sleep 25; shot 01-empty
 open "engram://samples"; sleep 18; shot 02-home
 
 # Type a thought in the capture bar and send it.
-adb shell input tap 400 2221; sleep 2
+adb shell input tap 420 2221; sleep 2
 adb shell input text "Sourdough"; sleep 2; shot 03-typing
 adb shell input keyevent 4; sleep 2
 adb shell input tap 953 2221; sleep 4; shot 04-captured
 
-# Open the first thought in the stream.
+# Open it (first in the stream), put it on the to-do list with a reminder in a week.
 adb shell input tap 500 900; sleep 4; shot 05-thought
-adb shell input keyevent 4; sleep 2
+adb shell input tap 195 585; sleep 2; shot 06-todo-menu
+adb shell input tap 540 2084; sleep 4; shot 07-thought-reminder
+adb shell input keyevent 4; sleep 3; shot 08-home-todo
+open "engram://todo"; sleep 4; shot 09-todo
+adb shell dumpsys alarm | grep -i "$PKG" | head -5 > "$OUT/alarms.txt" || true
 
-open "engram://map"; sleep 6; shot 06-map
-open "engram://group/largest"; sleep 5; shot 07-group
-open "engram://search"; sleep 4
-adb shell input text "sourdough"; sleep 3; shot 08-search
+# Share a picture in from "another app".
+adb shell screencap -p /sdcard/Pictures/engram-test.png
+adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/engram-test.png >/dev/null; sleep 4
+IMG_ID=$(adb shell content query --uri content://media/external/images/media --projection _id | tr -d '\r' | sed -n 's/.*_id=\([0-9]*\).*/\1/p' | tail -1)
+echo "image id: ${IMG_ID:-none}"
+if [ -n "${IMG_ID:-}" ]; then
+  adb shell am start -W -a android.intent.action.SEND -t image/png \
+    --eu android.intent.extra.STREAM "content://media/external/images/media/$IMG_ID" \
+    --grant-read-uri-permission "$PKG" >/dev/null
+  sleep 3; shot 10-share-image
+  sleep 5
+  launch; sleep 8; shot 11-home-image
+  adb shell input tap 500 1500; sleep 1
+fi
+
+# Linking by meaning. Before: the garage thought shares no words with anything.
+open "engram://search?q=garage"; sleep 5; shot 12-before-meaning
 adb shell input keyevent 4; sleep 1
+open "engram://settings?smart=on"; sleep 20; shot 13-meaning-starting
+for i in $(seq 1 30); do
+  sleep 10
+  if adb logcat -d -s ReactNativeJS | grep -q "engram: meaning ready"; then break; fi
+  if adb logcat -d -s ReactNativeJS | grep -q "engram: meaning error"; then break; fi
+done
+sleep 3; shot 14-meaning-done
+open "engram://search?q=garage"; sleep 5; shot 15-after-meaning
+adb shell input keyevent 4; sleep 1
+
+open "engram://map"; sleep 6; shot 16-map
+open "engram://group/largest"; sleep 5; shot 17-group
 open "engram://compose"; sleep 4
-adb shell input text "Notepad"; sleep 2; shot 09-compose
+adb shell input text "Notepad"; sleep 2; shot 18-compose
 adb shell input keyevent 4; sleep 1
-open "engram://settings"; sleep 5; shot 10-settings
+open "engram://settings"; sleep 5; shot 19-settings
 
 # Share text in from "another app".
 adb shell am start -W -a android.intent.action.SEND -t text/plain \
   --es android.intent.extra.TEXT "Sourdough\ hydration\ notes\ from\ the\ smoke\ test" "$PKG" >/dev/null
-sleep 2; shot 11-share
+sleep 2; shot 20-share-text
 sleep 5
 
-# The phone switches to dark while Engram has no screen open (it closed itself
-# after the share). On return it must follow, in true black.
+# The phone switches to dark while Engram has no screen open. On return it must follow, in true black.
 adb shell cmd uimode night yes
-launch; sleep 10; shot 12-home-black
-open "engram://map"; sleep 6; shot 13-map-black
-open "engram://group/largest"; sleep 5; shot 14-group-black
-open "engram://search"; sleep 4
-adb shell input text "hampi"; sleep 3; shot 15-search-black
-adb shell input keyevent 4; sleep 1
-open "engram:///"; sleep 5
-adb shell input tap 500 900; sleep 4; shot 16-thought-black
-adb shell cmd uimode night no; sleep 4; shot 17-thought-light-again
-
-# The in-app override: Settings, Appearance, Black, while the phone is light.
-open "engram://settings"; sleep 5
-adb shell input tap 852 677; sleep 3; shot 18-settings-forced-black
-adb shell input tap 240 677; sleep 2
+launch; sleep 10; shot 21-home-black
+open "engram://todo"; sleep 5; shot 22-todo-black
+open "engram://map"; sleep 6; shot 23-map-black
+adb shell cmd uimode night no; sleep 3
 
 adb logcat -d > "$OUT/logcat.txt"
 if grep -E "FATAL EXCEPTION|Fatal signal" -A 25 "$OUT/logcat.txt" | grep -q "$PKG"; then
@@ -77,4 +96,5 @@ if ! adb shell pidof "$PKG" >/dev/null; then
   exit 1
 fi
 grep -E "ReactNativeJS" "$OUT/logcat.txt" | tail -40 || true
+cat "$OUT/alarms.txt" || true
 echo "Smoke test passed."

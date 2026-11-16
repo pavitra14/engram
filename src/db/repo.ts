@@ -20,12 +20,19 @@ export async function insertThought(db: SQLiteDatabase, t: NewThought & { id?: s
     source: t.source ?? null,
     media_path: t.media_path ?? null,
     duration_ms: t.duration_ms ?? null,
+    file_name: t.file_name ?? null,
+    mime_type: t.mime_type ?? null,
+    file_size: t.file_size ?? null,
+    todo: 0,
+    remind_at: null,
+    done_at: null,
+    notif_id: null,
     created_at: t.created_at ?? now,
     updated_at: now,
   };
   await db.runAsync(
-    `INSERT INTO thoughts (id, kind, body, title, url, source, media_path, duration_ms, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO thoughts (id, kind, body, title, url, source, media_path, duration_ms, file_name, mime_type, file_size, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.kind,
     row.body,
@@ -34,13 +41,17 @@ export async function insertThought(db: SQLiteDatabase, t: NewThought & { id?: s
     row.source,
     row.media_path,
     row.duration_ms,
+    row.file_name,
+    row.mime_type,
+    row.file_size,
     row.created_at,
     row.updated_at,
   );
   return row;
 }
 
-const COLS = 'id, kind, body, title, url, source, media_path, duration_ms, created_at, updated_at';
+const COLS =
+  'id, kind, body, title, url, source, media_path, duration_ms, file_name, mime_type, file_size, todo, remind_at, done_at, notif_id, created_at, updated_at';
 
 export function getThought(db: SQLiteDatabase, id: string): Promise<Thought | null> {
   return db.getFirstAsync<Thought>(`SELECT ${COLS} FROM thoughts WHERE id = ?`, id);
@@ -88,6 +99,96 @@ export async function deleteThought(db: SQLiteDatabase, id: string): Promise<voi
 export async function countThoughts(db: SQLiteDatabase): Promise<number> {
   const r = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM thoughts');
   return r?.n ?? 0;
+}
+
+// ---------- to-dos and reminders ----------
+
+/** Puts a thought on the to-do list, optionally with a reminder time. Clears any "done" state. */
+export async function setTodo(
+  db: SQLiteDatabase,
+  id: string,
+  { remindAt, notifId }: { remindAt: number | null; notifId: string | null },
+): Promise<void> {
+  await db.runAsync(
+    'UPDATE thoughts SET todo = 1, remind_at = ?, notif_id = ?, done_at = NULL, updated_at = ? WHERE id = ?',
+    remindAt,
+    notifId,
+    Date.now(),
+    id,
+  );
+}
+
+export async function clearTodo(db: SQLiteDatabase, id: string): Promise<void> {
+  await db.runAsync(
+    'UPDATE thoughts SET todo = 0, remind_at = NULL, notif_id = NULL, done_at = NULL, updated_at = ? WHERE id = ?',
+    Date.now(),
+    id,
+  );
+}
+
+export async function setDone(db: SQLiteDatabase, id: string, done: boolean): Promise<void> {
+  await db.runAsync(
+    'UPDATE thoughts SET done_at = ?, notif_id = CASE WHEN ? THEN NULL ELSE notif_id END, updated_at = ? WHERE id = ?',
+    done ? Date.now() : null,
+    done ? 1 : 0,
+    Date.now(),
+    id,
+  );
+}
+
+/** Open to-dos: those with a time first, soonest first; then the rest, newest first. */
+export function listOpenTodos(db: SQLiteDatabase): Promise<Thought[]> {
+  return db.getAllAsync<Thought>(
+    `SELECT ${COLS} FROM thoughts WHERE todo = 1 AND done_at IS NULL
+     ORDER BY (remind_at IS NULL), remind_at ASC, created_at DESC`,
+  );
+}
+
+export function listDoneTodos(db: SQLiteDatabase, limit = 100): Promise<Thought[]> {
+  return db.getAllAsync<Thought>(
+    `SELECT ${COLS} FROM thoughts WHERE todo = 1 AND done_at IS NOT NULL ORDER BY done_at DESC LIMIT ?`,
+    limit,
+  );
+}
+
+// ---------- embeddings ----------
+
+export async function saveEmbedding(db: SQLiteDatabase, id: string, model: string, vector: Float32Array): Promise<void> {
+  const bytes = new Uint8Array(vector.buffer, vector.byteOffset, vector.byteLength);
+  await db.runAsync(
+    `INSERT INTO embeddings (thought_id, model, vector) VALUES (?, ?, ?)
+     ON CONFLICT (thought_id) DO UPDATE SET model = excluded.model, vector = excluded.vector`,
+    id,
+    model,
+    bytes,
+  );
+}
+
+export async function loadEmbeddings(db: SQLiteDatabase, model: string): Promise<Map<string, Float32Array>> {
+  const rows = await db.getAllAsync<{ thought_id: string; vector: Uint8Array }>(
+    'SELECT thought_id, vector FROM embeddings WHERE model = ?',
+    model,
+  );
+  const out = new Map<string, Float32Array>();
+  for (const r of rows) {
+    // Copy so the floats are aligned whatever offset the driver handed back.
+    const copy = new Uint8Array(r.vector);
+    out.set(r.thought_id, new Float32Array(copy.buffer, 0, Math.floor(copy.byteLength / 4)));
+  }
+  return out;
+}
+
+export async function idsWithoutEmbedding(db: SQLiteDatabase, model: string): Promise<string[]> {
+  const rows = await db.getAllAsync<{ id: string }>(
+    `SELECT t.id FROM thoughts t LEFT JOIN embeddings e ON e.thought_id = t.id AND e.model = ?
+     WHERE e.thought_id IS NULL ORDER BY t.created_at DESC`,
+    model,
+  );
+  return rows.map((r) => r.id);
+}
+
+export async function dropEmbeddings(db: SQLiteDatabase): Promise<void> {
+  await db.runAsync('DELETE FROM embeddings');
 }
 
 // ---------- links ----------

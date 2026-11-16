@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Thought } from '@/db/types';
-import { clock, highlightRuns, hostOf, titleOf, when } from '@/lib/text';
+import { clock, dueLabel, fileSize, highlightRuns, hostOf, titleOf, when } from '@/lib/text';
 import { kindLabel, type, useTheme } from '@/theme';
 
 import { KindGlyph } from './ui';
@@ -10,7 +11,8 @@ export function entryMeta(t: Thought): string {
   const parts = [kindLabel[t.kind]];
   if (t.source === 'share') parts[0] = `${parts[0]}, shared`;
   if (t.source === 'clipboard') parts[0] = `${parts[0]}, pasted`;
-  if (t.kind === 'voice' && t.duration_ms) parts.push(clock(t.duration_ms));
+  if ((t.kind === 'voice' || t.kind === 'video') && t.duration_ms) parts.push(clock(t.duration_ms));
+  if ((t.kind === 'video' || t.kind === 'file') && t.file_size) parts.push(fileSize(t.file_size));
   parts.push(when(t.created_at));
   return parts.join(', ');
 }
@@ -55,18 +57,31 @@ export function Entry({
         </Text>
         {trailing ? <Text style={[type.meta, { color: c.accent }]}>{trailing}</Text> : null}
       </View>
-      <Text style={[size === 'small' ? type.thoughtSmall : type.thought, { color: c.ink }]} numberOfLines={4}>
-        {runs.map((r, i) =>
-          r.hit ? (
-            <Text key={i} style={{ backgroundColor: c.highlight }}>
-              {r.text}
-            </Text>
-          ) : (
-            r.text
-          ),
-        )}
-      </Text>
+      <View style={styles.main}>
+        <Text style={[size === 'small' ? type.thoughtSmall : type.thought, { color: c.ink, flex: 1 }]} numberOfLines={4}>
+          {runs.map((r, i) =>
+            r.hit ? (
+              <Text key={i} style={{ backgroundColor: c.highlight }}>
+                {r.text}
+              </Text>
+            ) : (
+              r.text
+            ),
+          )}
+        </Text>
+        {thought.kind === 'image' && thought.media_path ? (
+          <Image source={{ uri: thought.media_path }} style={[styles.thumb, { backgroundColor: c.surface }]} accessibilityIgnoresInvertColors />
+        ) : null}
+      </View>
       {host && thought.body.trim() ? <Text style={[type.small, { color: c.soft }]}>{host}</Text> : null}
+      {thought.todo === 1 ? (
+        <View style={styles.meta}>
+          <Feather name={thought.done_at ? 'check-circle' : 'bell'} size={13} color={c.soft} />
+          <Text style={[type.small, { color: c.soft }]}>
+            {thought.done_at ? 'Done' : thought.remind_at ? dueLabel(thought.remind_at) : 'To do'}
+          </Text>
+        </View>
+      ) : null}
       {sub ? <Text style={[type.small, { color: c.soft }]}>{sub}</Text> : null}
     </Pressable>
   );
@@ -75,4 +90,6 @@ export function Entry({
 const styles = StyleSheet.create({
   entry: { gap: 6, paddingVertical: 16, paddingHorizontal: 24 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  main: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
+  thumb: { width: 64, height: 64, borderRadius: 12 },
 });

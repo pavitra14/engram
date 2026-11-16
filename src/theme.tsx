@@ -101,8 +101,15 @@ export const type = {
 
 export const space = { xs: 6, sm: 8, md: 16, lg: 24, xl: 36 } as const;
 
-export const kindLabel: Record<ThoughtKind, string> = { text: 'Note', voice: 'Voice', link: 'Link', image: 'Image' };
-export const KINDS: ThoughtKind[] = ['text', 'voice', 'link', 'image'];
+export const kindLabel: Record<ThoughtKind, string> = {
+  text: 'Note',
+  voice: 'Voice',
+  link: 'Link',
+  image: 'Image',
+  video: 'Video',
+  file: 'File',
+};
+export const KINDS: ThoughtKind[] = ['text', 'voice', 'link', 'image', 'video', 'file'];
 
 export type AppearanceSetting = 'system' | 'light' | 'black';
 

@@ -49,10 +49,14 @@
             "singleShareMimeTypes": [
               "text/*",
               "image/*",
-              "audio/*"
+              "video/*",
+              "audio/*",
+              "application/*"
             ],
             "multipleShareMimeTypes": [
-              "image/*"
+              "image/*",
+              "video/*",
+              "application/*"
             ]
           }
         }
@@ -68,6 +72,28 @@
             "com.google.android.googlequicksearchbox",
             "com.google.android.as"
           ]
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      "react-native-blob-util",
+      [
+        "expo-notifications",
+        {
+          "color": "#1F3FBF"
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Engram shows today's events so you can take notes on them."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Engram saves the photos and videos you choose.",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ]
     ],

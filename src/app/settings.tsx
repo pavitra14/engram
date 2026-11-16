@@ -1,16 +1,21 @@
 import Constants from 'expo-constants';
+import { useLocalSearchParams } from 'expo-router';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { useSQLiteContext } from 'expo-sqlite';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ActionSheet } from '@/components/ActionSheet';
 import { Header, Notice } from '@/components/ui';
 import * as repo from '@/db/repo';
 import { exportBackup, importBackup } from '@/lib/backup';
 import { dataChanged, useDataVersion } from '@/lib/bus';
+import { askForCalendar, calendarAllowed } from '@/lib/calendar';
 import { rebuildAllLinks } from '@/lib/capture';
 import { loadSamples } from '@/lib/samples';
+import { MODEL_SIZE_NOTE, useSemanticState } from '@/lib/semantic';
+import { disableSmartLinking, enableSmartLinking } from '@/lib/smart';
 import { canTranscribeOnDevice, SPEECH_LANGS, speechLang } from '@/lib/useVoice';
 import { type AppearanceSetting, type, useTheme } from '@/theme';
 
@@ -79,6 +84,19 @@ export default function SettingsScreen() {
   const [count, setCount] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
   const onDevice = canTranscribeOnDevice();
+  const smart = useSemanticState();
+  const params = useLocalSearchParams<{ smart?: string }>();
+  const [calendar, setCalendar] = useState(false);
+  const [choosingLang, setChoosingLang] = useState(false);
+
+  // engram://settings?smart=on switches meaning-based linking on (used by the automated test).
+  useEffect(() => {
+    if (params.smart === 'on') void enableSmartLinking(db);
+  }, [db, params.smart]);
+
+  useEffect(() => {
+    (async () => setCalendar((await repo.getMeta(db, 'calendar')) === 'on' && (await calendarAllowed())))();
+  }, [db]);
 
   useEffect(() => {
     speechLang(db).then(setLang);
@@ -96,18 +114,30 @@ export default function SettingsScreen() {
 
   const langLabel = SPEECH_LANGS.find((l) => l.code === lang)?.label ?? 'English';
 
-  const chooseLang = () => {
-    Alert.alert('Voice language', 'Voice notes are transcribed in this language.', [
-      ...SPEECH_LANGS.map((l) => ({
-        text: l.label,
-        onPress: () => {
-          setLang(l.code);
-          void repo.setMeta(db, 'speech_lang', l.code);
-        },
-      })),
-      { text: 'Cancel', style: 'cancel' as const },
-    ]);
-  };
+  const toggleCalendar = () =>
+    run(async () => {
+      if (calendar) {
+        await repo.setMeta(db, 'calendar', 'off');
+        setCalendar(false);
+        return null;
+      }
+      if (!(await askForCalendar())) return 'Calendar access was not allowed. You can allow it in system settings.';
+      await repo.setMeta(db, 'calendar', 'on');
+      setCalendar(true);
+      return null;
+    });
+
+  const smartStatus =
+    smart.status === 'downloading'
+      ? `Downloading the language model, ${Math.round(smart.progress * 100)}%`
+      : smart.status === 'indexing'
+        ? `Reading your thoughts, ${smart.done} of ${smart.total}`
+        : smart.status === 'ready'
+          ? 'On. Thoughts link by meaning.'
+          : smart.status === 'error'
+            ? `Could not start: ${smart.message ?? 'unknown problem'}`
+            : `Off. Thoughts link by shared words. Turning it on downloads a language model once (${MODEL_SIZE_NOTE}).`;
+  const smartBusy = smart.status === 'downloading' || smart.status === 'indexing';
 
   const confirmWipe = () => {
     Alert.alert('Delete everything?', `All ${count} thoughts, their links and tags are deleted from this phone. This cannot be undone.`, [
@@ -139,7 +169,7 @@ export default function SettingsScreen() {
 
           <Section title="Voice notes">
             <View>
-              <Row title="Voice language" sub={langLabel} action="Change" onPress={chooseLang} />
+              <Row title="Voice language" sub={langLabel} action="Change" onPress={() => setChoosingLang(true)} />
               {onDevice ? (
                 <Row
                   title="Offline speech pack"
@@ -161,9 +191,38 @@ export default function SettingsScreen() {
             </View>
           </Section>
 
+          <Section title="Linking by meaning">
+            <View>
+              <Row
+                title="Understand meaning"
+                sub={smartStatus}
+                action={smartBusy ? 'Working' : smart.status === 'off' || smart.status === 'error' ? 'Turn on' : 'Turn off'}
+                onPress={() => {
+                  if (smartBusy) return;
+                  if (smart.status === 'off' || smart.status === 'error') void enableSmartLinking(db);
+                  else void disableSmartLinking(db);
+                }}
+              />
+            </View>
+            <Text style={[type.meta, { color: c.soft }]}>
+              The model runs on this phone and works in 50+ languages. Your thoughts are never sent anywhere; the only download is the model itself.
+            </Text>
+          </Section>
+
+          <Section title="Calendar">
+            <View>
+              <Row
+                title="Show today's events"
+                sub={calendar ? 'On. Tap an event on Today to take notes on it.' : 'Off. Engram does not read your calendar.'}
+                action={calendar ? 'Turn off' : 'Turn on'}
+                onPress={toggleCalendar}
+              />
+            </View>
+          </Section>
+
           <Section title="Your thoughts">
             <View>
-              <Row title="Back up" sub="One file with thoughts, tags and links" action="Export" onPress={() => run(async () => `Backup created with ${await exportBackup(db)} thoughts.`)} />
+              <Row title="Back up" sub="One file with thoughts, tags and links. Files and recordings are not included." action="Export" onPress={() => run(async () => `Backup created with ${await exportBackup(db)} thoughts.`)} />
               <Row
                 title="Restore"
                 sub="Add thoughts from a backup file"
@@ -187,6 +246,19 @@ export default function SettingsScreen() {
           <Text style={[type.meta, { color: c.faint }]}>Engram {Constants.expoConfig?.version ?? ''}</Text>
         </View>
       </ScrollView>
+      <ActionSheet
+        visible={choosingLang}
+        title="Voice language"
+        onClose={() => setChoosingLang(false)}
+        options={SPEECH_LANGS.map((l) => ({
+          label: l.label,
+          icon: l.code === lang ? ('check' as const) : undefined,
+          onPress: () => {
+            setLang(l.code);
+            void repo.setMeta(db, 'speech_lang', l.code);
+          },
+        }))}
+      />
     </View>
   );
 }

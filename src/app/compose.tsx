@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -13,7 +13,8 @@ export default function ComposeScreen() {
   const db = useSQLiteContext();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
-  const [text, setText] = useState('');
+  const params = useLocalSearchParams<{ text?: string }>();
+  const [text, setText] = useState(() => (typeof params.text === 'string' ? params.text : ''));
   const [saving, setSaving] = useState(false);
   const has = text.trim().length > 0;
   const words = has ? text.trim().split(/\s+/).length : 0;

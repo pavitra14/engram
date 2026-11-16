@@ -11,7 +11,7 @@ import { entryMeta } from '@/components/Entry';
 import { Button, KindGlyph } from '@/components/ui';
 import type { Thought } from '@/db/types';
 import { loadBrain, placement } from '@/lib/brain';
-import { capture, captureText, importMedia } from '@/lib/capture';
+import { captureFile, captureText } from '@/lib/capture';
 import { firstUrl, titleOf } from '@/lib/text';
 import { type, useTheme } from '@/theme';
 
@@ -22,13 +22,11 @@ async function savePayload(db: ReturnType<typeof useSQLiteContext>, p: SharePayl
   if (!value) return null;
   const kind = p.shareType ?? 'text';
   if (kind === 'text' || kind === 'url') return captureText(db, value, 'share');
-  if (kind === 'image') {
-    return capture(db, { kind: 'image', body: '', media_path: await importMedia(value, p.mimeType, 'jpg'), source: 'share' });
+  if (kind === 'image' || kind === 'video' || kind === 'audio' || kind === 'file') {
+    // A shared "file" whose value is really a web address is kept as a link.
+    if (kind === 'file' && /^https?:\/\//i.test(value)) return captureText(db, value, 'share');
+    return captureFile(db, value, { mimeType: p.mimeType ?? undefined, source: 'share' });
   }
-  if (kind === 'audio') {
-    return capture(db, { kind: 'voice', body: '', media_path: await importMedia(value, p.mimeType, 'm4a'), source: 'share' });
-  }
-  // Files and video are not supported yet; keep a link if the value is one.
   return firstUrl(value) ? captureText(db, value, 'share') : null;
 }
 
@@ -63,7 +61,7 @@ export default function HandleShareScreen() {
         }
         clearSharedPayloads();
         if (saved.length === 0) {
-          setState({ phase: 'failed', message: 'Engram can save text, links, images and audio. This item is none of those.' });
+          setState({ phase: 'failed', message: 'There was nothing in that share that Engram could save.' });
           return;
         }
         const brain = await loadBrain(db, Date.now());

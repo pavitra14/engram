@@ -19,6 +19,8 @@ export function titleOf(t: { title: string | null; body: string; kind: string; u
   if (t.url) return hostOf(t.url) ?? t.url;
   if (t.kind === 'voice') return 'Voice note';
   if (t.kind === 'image') return 'Image';
+  if (t.kind === 'video') return 'Video';
+  if (t.kind === 'file') return 'File';
   return 'Untitled thought';
 }
 
@@ -118,4 +120,31 @@ export function highlightRuns(text: string, query: string): { text: string; hit:
     .split(re)
     .filter((part) => part.length > 0)
     .map((part) => ({ text: part, hit: exact.test(part) }));
+}
+
+export function fileSize(bytes: number | null | undefined): string {
+  if (bytes == null || bytes < 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+/** "in 2 h", "tomorrow, 9:00 am", "Fri 20 Nov, 6:00 pm", or "overdue since yesterday". */
+export function dueLabel(ts: number, now: number = Date.now()): string {
+  const days = -daysAgo(ts, now);
+  const time = timeOfDay(ts);
+  if (ts < now) {
+    if (days === 0) return `Overdue since ${time}`;
+    if (days === -1) return 'Overdue since yesterday';
+    return `Overdue by ${-days} days`;
+  }
+  if (days === 0) {
+    const mins = Math.round((ts - now) / 60_000);
+    if (mins < 60) return `In ${Math.max(1, mins)} min`;
+    return `Today, ${time}`;
+  }
+  if (days === 1) return `Tomorrow, ${time}`;
+  const d = new Date(ts);
+  return `${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}, ${time}`;
 }

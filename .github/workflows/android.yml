@@ -60,7 +60,7 @@ jobs:
     name: Launch on an emulator
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50
     permissions:
       contents: write
     steps:
@@ -93,6 +93,7 @@ jobs:
         if: always() && github.event_name == 'push'
         env:
           REF_NAME: ${{ github.ref_name }}
+          PKG_NAME: com.pavitra14.engram
         run: |
           # main publishes to smoke-shots; any other branch to smoke-shots-<branch>
           TARGET=smoke-shots
@@ -101,7 +102,7 @@ jobs:
           git init -q -b "$TARGET"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          tail -c 400000 logcat.txt > logcat-tail.txt 2>/dev/null || true
+          grep -E "ReactNativeJS|AndroidRuntime|$PKG_NAME|uimode" logcat.txt | tail -c 300000 > logcat-tail.txt 2>/dev/null || true
           rm -f logcat.txt
           git add -A
           git commit -q -m "Smoke test screenshots for ${GITHUB_SHA}"

@@ -8,7 +8,14 @@ import { font, type, useTheme } from '@/theme';
 
 export type IconName = ComponentProps<typeof Feather>['name'];
 
-const KIND_ICON: Record<ThoughtKind, IconName> = { text: 'circle', voice: 'mic', link: 'link-2', image: 'image' };
+const KIND_ICON: Record<ThoughtKind, IconName> = {
+  text: 'circle',
+  voice: 'mic',
+  link: 'link-2',
+  image: 'image',
+  video: 'film',
+  file: 'file-text',
+};
 
 /** Kind is shown by shape as well as position, never by colour alone. */
 export function KindGlyph({ kind, size = 14 }: { kind: ThoughtKind; size?: number }) {
@@ -203,7 +210,7 @@ const styles = StyleSheet.create({
   },
   header: { gap: 2, paddingLeft: 24, paddingRight: 20 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  headerButtons: { flexDirection: 'row', gap: 8 },
+  headerButtons: { flexDirection: 'row', gap: 6 },
   back: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 48, marginLeft: -6, alignSelf: 'flex-start' },
   notice: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16 },
 });

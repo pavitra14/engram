@@ -1,16 +1,20 @@
-import { router } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
+import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useMemo, useState } from 'react';
-import { ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CAPTURE_BAR_SPACE, CaptureBar } from '@/components/CaptureBar';
 import { Entry } from '@/components/Entry';
+import { TodoRow } from '@/components/TodoRow';
 import { Button, Header, Pill, RoundButton } from '@/components/ui';
+import * as repo from '@/db/repo';
 import type { Thought } from '@/db/types';
 import { placement, useBrain } from '@/lib/brain';
+import { type DayEvent, eventsToday } from '@/lib/calendar';
 import { loadSamples } from '@/lib/samples';
-import { dayLabel, daysAgo, longDate } from '@/lib/text';
+import { dayLabel, daysAgo, longDate, timeOfDay } from '@/lib/text';
 import { type, useTheme } from '@/theme';
 
 /** Home: today's thoughts as a readable stream, with your groups one tap away. */
@@ -20,6 +24,34 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const brain = useBrain(db);
   const [now] = useState(() => Date.now());
+  const [todos, setTodos] = useState<Thought[]>([]);
+  const [events, setEvents] = useState<DayEvent[]>([]);
+
+  // `brain` changes whenever the data does, which is the reload signal here.
+  useEffect(() => {
+    let live = true;
+    repo.listOpenTodos(db).then((rows) => {
+      if (live) setTodos(rows);
+    });
+    return () => {
+      live = false;
+    };
+  }, [db, brain]);
+
+  // Today's calendar, if the person switched it on in Settings.
+  useFocusEffect(
+    useCallback(() => {
+      let live = true;
+      (async () => {
+        const on = (await repo.getMeta(db, 'calendar')) === 'on';
+        const rows = on ? await eventsToday().catch(() => []) : [];
+        if (live) setEvents(rows);
+      })();
+      return () => {
+        live = false;
+      };
+    }, [db]),
+  );
 
   const sections = useMemo(() => {
     const out: { title: string; data: Thought[] }[] = [];
@@ -50,6 +82,7 @@ export default function HomeScreen() {
               sub={`${longDate(now)}, ${today} ${today === 1 ? 'thought' : 'thoughts'}`}>
               <RoundButton icon="search" label="Search your thoughts" onPress={() => router.push('/search')} />
               <RoundButton icon="share-2" label="Open the map of your groups" onPress={() => router.push('/map')} />
+              <RoundButton icon="check-square" label="To-do list" onPress={() => router.push('/todo')} />
               <RoundButton icon="sliders" label="Settings" onPress={() => router.push('/settings')} />
             </Header>
             {brain && brain.groups.length > 0 ? (
@@ -63,6 +96,42 @@ export default function HomeScreen() {
                   />
                 ))}
               </ScrollView>
+            ) : null}
+
+            {events.length > 0 ? (
+              <View>
+                <Text style={[type.labelStrong, styles.heading, { color: c.ink }]}>On your calendar today</Text>
+                {events.slice(0, 4).map((e) => (
+                  <Pressable
+                    key={e.id + e.start}
+                    accessibilityRole="button"
+                    accessibilityHint="Starts a note about this event"
+                    onPress={() => router.push({ pathname: '/compose', params: { text: `${e.title}\n\n` } })}
+                    style={({ pressed }) => [styles.event, { opacity: pressed ? 0.6 : 1 }]}>
+                    <Text style={[type.small, { color: c.soft, width: 76 }]}>{e.allDay ? 'All day' : timeOfDay(e.start)}</Text>
+                    <Text style={[type.label, { color: c.ink, flex: 1 }]} numberOfLines={1}>
+                      {e.title}
+                    </Text>
+                    <Feather name="edit-3" size={16} color={c.accent} />
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+
+            {todos.length > 0 ? (
+              <View>
+                <View style={styles.todoHead}>
+                  <Text style={[type.labelStrong, { color: c.ink }]}>To do, {todos.length}</Text>
+                  {todos.length > 3 ? (
+                    <Pressable accessibilityRole="button" onPress={() => router.push('/todo')} hitSlop={8} style={styles.seeAll}>
+                      <Text style={[type.smallStrong, { color: c.accent }]}>See all</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+                {todos.slice(0, 3).map((t, i) => (
+                  <TodoRow key={t.id} thought={t} divider={i < Math.min(todos.length, 3) - 1} />
+                ))}
+              </View>
             ) : null}
           </View>
         }
@@ -99,6 +168,10 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   groups: { gap: 8, paddingHorizontal: 24 },
+  heading: { paddingHorizontal: 24, paddingBottom: 4 },
+  event: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: 24 },
+  todoHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, minHeight: 32 },
+  seeAll: { minHeight: 32, justifyContent: 'center' },
   day: { paddingHorizontal: 24, paddingTop: 28, paddingBottom: 2 },
   empty: { gap: 16, paddingHorizontal: 24, paddingTop: 24 },
 });

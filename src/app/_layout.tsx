@@ -1,19 +1,38 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { Newsreader_400Regular, Newsreader_500Medium, useFonts } from '@expo-google-fonts/newsreader';
-import { Stack } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { SQLiteProvider } from 'expo-sqlite';
+import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { migrate } from '@/db/migrate';
+import { thoughtIdFrom } from '@/lib/reminders';
+import { startSmartLinking } from '@/lib/smart';
 import { ThemeProvider, useTheme } from '@/theme';
 
 void SplashScreen.preventAutoHideAsync();
 
 function Screens() {
   const { c, dark } = useTheme();
+  const db = useSQLiteContext();
+  const lastResponse = Notifications.useLastNotificationResponse();
+
+  // Load the language model in the background if meaning-based linking is on.
+  useEffect(() => {
+    void startSmartLinking(db);
+  }, [db]);
+
+  // Tapping a reminder opens its thought.
+  useEffect(() => {
+    const id = thoughtIdFrom(lastResponse);
+    if (!id) return;
+    const t = setTimeout(() => router.push({ pathname: '/thought/[id]', params: { id } }), 50);
+    return () => clearTimeout(t);
+  }, [lastResponse]);
+
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.bg }}>
       <StatusBar style={dark ? 'light' : 'dark'} />
