@@ -22,8 +22,22 @@ export type Scored = { id: string; score: number };
 
 export const LINK_THRESHOLD = 0.12;
 export const LINK_TOP_K = 4;
-/** Cosine similarity of two meaning vectors above which thoughts count as related. */
-export const MEANING_THRESHOLD = 0.5;
+/**
+ * Linking by meaning.
+ *
+ * Sentence vectors from this kind of model are all somewhat alike: two
+ * unrelated notes can score 0.4. A fixed cut-off therefore links nearly
+ * everything, and the map collapses into one group. So a pair links by meaning
+ * only when each is among the other's few nearest thoughts (mutual nearest
+ * neighbours) and the pair stands out from that thought's usual similarity.
+ */
+export const MEANING_NEIGHBOURS = 3;
+export const MEANING_FLOOR = 0.35;
+/** Below this many thoughts there is no "usual similarity" to compare with, so a fixed bar is used. */
+const MEANING_SMALL_CORPUS = 20;
+const MEANING_SMALL_BAR = 0.5;
+/** How many standard deviations above a thought's average similarity a neighbour must be. */
+const MEANING_STAND_OUT = 1;
 
 const STOP = new Set(
   (
@@ -160,7 +174,7 @@ export function meaningSimilarity(a: Float32Array | undefined, b: Float32Array |
   return dot;
 }
 
-function wordSimilarity(p: Prepared, i: number, j: number): number {
+function similarity(p: Prepared, i: number, j: number): number {
   const a = p.vecs[i];
   const b = p.vecs[j];
   const base = cosine(a, b);
@@ -171,15 +185,31 @@ function wordSimilarity(p: Prepared, i: number, j: number): number {
   return base + Math.min(0.24, shared * 0.08);
 }
 
-/**
- * How related two thoughts are. Words always count. When both thoughts have a
- * meaning vector and the vectors are close, that counts too, so "car needs a
- * service" and "book the vehicle in for maintenance" link without sharing a word.
- */
-function similarity(p: Prepared, i: number, j: number): number {
-  const words = wordSimilarity(p, i, j);
-  const meaning = meaningSimilarity(p.meaning[i], p.meaning[j]);
-  return meaning >= MEANING_THRESHOLD ? Math.max(words, meaning) : words;
+/** The few thoughts nearest in meaning to thought `i`, if they stand out from the rest. */
+function meaningNeighbours(vecs: (Float32Array | undefined)[], i: number): { j: number; cos: number }[] {
+  const mine = vecs[i];
+  if (!mine) return [];
+  const sims: { j: number; cos: number }[] = [];
+  let sum = 0;
+  let sumSq = 0;
+  for (let j = 0; j < vecs.length; j++) {
+    if (j === i || !vecs[j]) continue;
+    const cos = meaningSimilarity(mine, vecs[j]);
+    sims.push({ j, cos });
+    sum += cos;
+    sumSq += cos * cos;
+  }
+  if (sims.length === 0) return [];
+  let bar = MEANING_SMALL_BAR;
+  if (sims.length >= MEANING_SMALL_CORPUS) {
+    const mean = sum / sims.length;
+    const sd = Math.sqrt(Math.max(0, sumSq / sims.length - mean * mean));
+    bar = Math.max(MEANING_FLOOR, mean + MEANING_STAND_OUT * sd);
+  }
+  return sims
+    .filter((x) => x.cos >= bar)
+    .sort((x, y) => y.cos - x.cos)
+    .slice(0, MEANING_NEIGHBOURS);
 }
 
 /** Related thoughts for `target` among `corpus` (target may or may not be in it). */
@@ -191,13 +221,21 @@ export function related(
   const others = corpus.filter((d) => d.id !== target.id);
   if (others.length === 0) return [];
   const p = prepare([target, ...others]);
-  const scored: Scored[] = [];
+  const best = new Map<string, number>();
   for (let i = 0; i < others.length; i++) {
     const score = Math.min(1, similarity(p, 0, i + 1) + boost(target, others[i]));
-    if (score >= threshold) scored.push({ id: others[i].id, score });
+    if (score >= threshold) best.set(others[i].id, score);
   }
-  scored.sort((x, y) => y.score - x.score);
-  return scored.slice(0, topK);
+  // By meaning: only where the other thought would pick this one back.
+  for (const n of meaningNeighbours(p.meaning, 0)) {
+    if (!meaningNeighbours(p.meaning, n.j).some((back) => back.j === 0)) continue;
+    const id = others[n.j - 1].id;
+    best.set(id, Math.max(best.get(id) ?? 0, Math.min(1, n.cos)));
+  }
+  return [...best]
+    .map(([id, score]) => ({ id, score }))
+    .sort((x, y) => y.score - x.score)
+    .slice(0, topK);
 }
 
 /** Every auto link for a whole corpus. Used by "Rebuild connections". */
@@ -207,19 +245,24 @@ export function relateAll(
 ): { a: string; b: string; score: number }[] {
   const p = prepare(corpus);
   const best = new Map<string, number>();
+  const keep = (i: number, j: number, score: number) => {
+    const [a, b] = corpus[i].id < corpus[j].id ? [corpus[i].id, corpus[j].id] : [corpus[j].id, corpus[i].id];
+    const key = `${a}\u0000${b}`;
+    if ((best.get(key) ?? 0) < score) best.set(key, score);
+  };
+  const byMeaning = corpus.map((_, i) => meaningNeighbours(p.meaning, i));
   for (let i = 0; i < corpus.length; i++) {
-    const row: { j: number; score: number }[] = [];
+    const row = new Map<number, number>();
     for (let j = 0; j < corpus.length; j++) {
       if (i === j) continue;
       const score = Math.min(1, similarity(p, i, j) + boost(corpus[i], corpus[j]));
-      if (score >= threshold) row.push({ j, score });
+      if (score >= threshold) row.set(j, score);
     }
-    row.sort((x, y) => y.score - x.score);
-    for (const { j, score } of row.slice(0, topK)) {
-      const [a, b] = corpus[i].id < corpus[j].id ? [corpus[i].id, corpus[j].id] : [corpus[j].id, corpus[i].id];
-      const key = `${a}\u0000${b}`;
-      if ((best.get(key) ?? 0) < score) best.set(key, score);
+    for (const n of byMeaning[i]) {
+      if (byMeaning[n.j].some((back) => back.j === i)) row.set(n.j, Math.max(row.get(n.j) ?? 0, Math.min(1, n.cos)));
     }
+    const ranked = [...row].sort((x, y) => y[1] - x[1]).slice(0, topK);
+    for (const [j, score] of ranked) keep(i, j, score);
   }
   return [...best].map(([key, score]) => {
     const [a, b] = key.split('\u0000');

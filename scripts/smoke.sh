@@ -9,10 +9,20 @@ PKG=com.pavitra14.engram
 OUT=smoke
 mkdir -p "$OUT"
 
-shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
+# The emulator's own launcher sometimes hangs and puts a "not responding" dialog
+# over everything. Tap Wait so it does not swallow the test's taps.
+calm() {
+  if adb shell dumpsys window 2>/dev/null | grep -q "Application Not Responding"; then
+    adb shell input tap 540 1360; sleep 1
+  fi
+}
+shot() { calm; adb exec-out screencap -p > "$OUT/$1.png"; }
+tap() { calm; tap "$1" "$2"; }
 open() { adb shell am start -W -a android.intent.action.VIEW -d "$1" "$PKG" >/dev/null; }
 launch() { adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null; }
 
+adb shell settings put global hide_error_dialogs 1 || true
+sleep 15
 adb install -r "$APK" || exit 1
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS || true
 adb logcat -c
@@ -24,15 +34,15 @@ sleep 25; shot 01-empty
 open "engram://samples"; sleep 18; shot 02-home
 
 # Type a thought in the capture bar and send it.
-adb shell input tap 420 2221; sleep 2
+tap 420 2221; sleep 2
 adb shell input text "Sourdough"; sleep 2; shot 03-typing
 adb shell input keyevent 4; sleep 2
-adb shell input tap 953 2221; sleep 4; shot 04-captured
+tap 953 2221; sleep 4; shot 04-captured
 
 # Open it (first in the stream), put it on the to-do list with a reminder in a week.
-adb shell input tap 500 900; sleep 4; shot 05-thought
-adb shell input tap 195 585; sleep 2; shot 06-todo-menu
-adb shell input tap 540 2084; sleep 4; shot 07-thought-reminder
+tap 500 900; sleep 4; shot 05-thought
+tap 195 585; sleep 2; shot 06-todo-menu
+tap 540 2084; sleep 4; shot 07-thought-reminder
 adb shell input keyevent 4; sleep 3; shot 08-home-todo
 open "engram://todo"; sleep 4; shot 09-todo
 adb shell dumpsys alarm | grep -i "$PKG" | head -5 > "$OUT/alarms.txt" || true
@@ -49,7 +59,7 @@ if [ -n "${IMG_ID:-}" ]; then
   sleep 3; shot 10-share-image
   sleep 5
   launch; sleep 8; shot 11-home-image
-  adb shell input tap 500 1500; sleep 1
+  tap 500 1500; sleep 1
 fi
 
 # Linking by meaning. Before: the garage thought shares no words with anything.
@@ -63,6 +73,8 @@ for i in $(seq 1 30); do
 done
 sleep 3; shot 14-meaning-done
 open "engram://search?q=garage"; sleep 5; shot 15-after-meaning
+adb shell input keyevent 4; sleep 1
+tap 500 650; sleep 4; shot 15b-garage-thought
 adb shell input keyevent 4; sleep 1
 
 open "engram://map"; sleep 6; shot 16-map

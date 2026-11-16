@@ -124,3 +124,37 @@ _16 Nov 2026_
 ## D19. New brand: a serif "e" and a full stop
 
 **Decision.** The mark is a Newsreader "e" followed by a dot, paper on cobalt. The wordmark is "engram." It replaces the v1 mark (an "e" drawn as a graph), which belonged to the dark graph design.
+
+## D20. Any file can be a thought
+
+_16 Nov 2026_
+
+**Decision.** Two new kinds, `video` and `file`, join text, voice, link and image. A file is copied into Engram's own storage on capture, from the attach menu (photo or video picker, document picker) or the share sheet (`text/*`, `image/*`, `video/*`, `audio/*`, `application/*`). Videos and documents open in whichever app on the phone handles them; images show inline.
+**Why not an in-app video player or document viewer.** Each is another native dependency to carry for something the phone already does well.
+**Consequences.** The `kind` CHECK constraint had to change, which in SQLite means rebuilding the table (migration 2). Files are not understood: a PDF links only by its file name and any note you add.
+
+## D21. To-dos are thoughts with a flag
+
+**Decision.** A thought has `todo`, `remind_at` and `done_at`. Putting it on the to-do list is one tap on its screen, with an optional reminder from presets or a date and time. Reminders are local notifications scheduled on the phone (`expo-notifications`); nothing is sent to a server.
+**Why.** The owner wants thoughts not to be forgotten once entered. Keeping to-dos as ordinary thoughts means they still link and group.
+**Consequences.** No recurring reminders, no sub-tasks, no due-date-without-time. If notifications are denied, the to-do and its time are kept and the person is told the phone will not alert them.
+
+## D22. Calendar: write through the system screen, read only if asked
+
+**Decision.** "Add to calendar" opens the phone's own new-event screen pre-filled from the thought, which needs no permission. Separately, a setting (off by default) shows today's events on Today; tapping one starts a note titled with the event. Only that setting asks for calendar access.
+**Why.** It keeps the default install free of a calendar permission, and makes the common wish (notes for a meeting) one tap.
+**Not done.** Thoughts are not stored against calendar event ids, and reminders are not mirrored into the calendar automatically.
+
+## D23. Linking by meaning with an on-device model, opt-in
+
+**Context.** Word overlap cannot link paraphrases. The owner asked for links and groups that follow meaning.
+**Decision.** `react-native-executorch` runs `distiluse-base-multilingual-cased-v2` (512-dimension sentence vectors, 50+ languages including Hindi) on the phone. Each thought gets a unit vector stored as a BLOB in `embeddings`. The linker scores a pair as the greater of its word score and its vector cosine when the cosine is at least 0.5. Groups are unchanged in method but follow the better links.
+**Why this model.** Multilingual matters for this owner; MiniLM is English-only.
+**Why opt-in.** The model is a download of about 130 MB from Hugging Face. The app otherwise never touches the network, so the person chooses when that happens. The library's download telemetry is switched off.
+**Why brute force, not `sqlite-vec`.** A few thousand 512-float vectors compare in milliseconds in JavaScript. An index is not needed yet.
+**Consequences.** Group names still come from shared words, so a group joined only by meaning may get a generic name. Images, audio without a transcript, and file contents are not understood. The 0.5 threshold is a starting value and has not been tuned on real notes.
+**Revisit:** tune the threshold on the owner's notes; name groups with a small on-device language model; understand images and documents (OCR, image embeddings).
+
+## D24. Push to main; every release is a beta
+
+**Decision (owner's instruction, 16 Nov 2026).** The owner is the sole maintainer: push directly to `main`. Releases are tagged `vX.Y.Z-beta.N` and published as pre-releases until the owner says the app is ready.

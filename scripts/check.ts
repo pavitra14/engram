@@ -146,6 +146,30 @@ assert.deepEqual(highlightRuns('a (b', '('), [{ text: 'a (b', hit: false }]);
   assert.ok(meaningSimilarity(car.vec, bread.vec) < 0.2);
   assert.equal(meaningSimilarity(car.vec, new Float32Array(2)), 0, 'vectors of different sizes never match');
   assert.equal(whyLinked(car, garage), 'Similar meaning');
+
+  // Real sentence vectors are all somewhat alike. Thirty thoughts in three topics, where even
+  // unrelated ones score about 0.4, must still come out as three groups and not one.
+  const topics = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  const crowd = Array.from({ length: 30 }, (_, i) => {
+    const t = topics[i % 3];
+    const wobble = [Math.sin(i * 1.7) * 0.25, Math.cos(i * 2.3) * 0.25, Math.sin(i * 0.9) * 0.25];
+    // A large shared component makes every pair similar, as the model does.
+    return { id: `c${String(i).padStart(2, '0')}`, text: `note number ${i} zq${i}`, vec: unit([t[0] + wobble[0] + 0.9, t[1] + wobble[1] + 0.9, t[2] + wobble[2] + 0.9]) };
+  });
+  assert.ok(meaningSimilarity(crowd[0].vec, crowd[1].vec) > 0.5, 'the fixture really is crowded');
+  const crowdLinks = relateAll(crowd);
+  const topicOf = (id: string) => Number(id.slice(1)) % 3;
+  const wrong = crowdLinks.filter((l) => topicOf(l.a) !== topicOf(l.b)).length;
+  assert.ok(crowdLinks.length >= 20, `expected a connected crowd, got ${crowdLinks.length} links`);
+  assert.ok(wrong <= crowdLinks.length * 0.1, `${wrong} of ${crowdLinks.length} links cross topics`);
+  const crowdGroups = computeGroups(
+    crowd.map((d, i) => ({ id: d.id, text: d.text, created_at: i })),
+    crowdLinks.map((l) => ({ a: l.a, b: l.b, weight: l.score })),
+  );
+  assert.ok(crowdGroups.groups.length >= 3, `one blob would be wrong; got ${crowdGroups.groups.length} groups`);
+  assert.ok(Math.max(...crowdGroups.groups.map((x) => x.members.length)) <= 14, 'no group swallows the rest');
+  const one = related(crowd[0], crowd).map((h) => h.id);
+  assert.ok(one.length > 0 && one.every((id) => topicOf(id) === 0), `a single thought links within its topic: ${one}`);
   const g = computeGroups(
     [car, garage, bread].map((d, i) => ({ id: d.id, text: d.text, created_at: i })),
     relateAll([car, garage, bread]).map((l) => ({ a: l.a, b: l.b, weight: l.score })),

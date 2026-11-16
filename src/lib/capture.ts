@@ -1,5 +1,6 @@
 import { randomUUID } from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
+import { copyAsync } from 'expo-file-system/legacy';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import * as repo from '@/db/repo';
@@ -103,7 +104,9 @@ function extensionOf(name: string, mimeType: string | undefined, fallback: strin
 /** Copies a file (file:// or content://) into the app's own storage and returns the new URI. */
 export async function importMedia(uri: string, mimeType: string | undefined, fallbackExt: string, name?: string): Promise<string> {
   const dest = new File(mediaDir(), `${randomUUID()}.${extensionOf(name ?? uri, mimeType, fallbackExt)}`);
-  await new File(uri).copy(dest);
+  // The legacy copy reads content:// addresses (what the share sheet and pickers hand over);
+  // File.copy only accepts real file paths.
+  await copyAsync({ from: uri, to: dest.uri });
   return dest.uri;
 }
 

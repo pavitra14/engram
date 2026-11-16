@@ -67,7 +67,8 @@ export default function HandleShareScreen() {
         const brain = await loadBrain(db, Date.now());
         setState({ phase: 'saved', first: saved[0], count: saved.length, where: placement(brain, saved[0]) });
       } catch (e) {
-        setState({ phase: 'failed', message: e instanceof Error ? e.message : 'The item could not be saved.' });
+        console.log('engram: share failed', e instanceof Error ? e.message : String(e));
+        setState({ phase: 'failed', message: 'The item could not be copied into Engram. Try sharing it again.' });
       }
     })();
   }, [db, sharedPayloads, clearSharedPayloads]);

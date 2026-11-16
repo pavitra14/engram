@@ -173,3 +173,40 @@ The capture bar asks the system whether the clipboard has text, on launch, on re
 ### Removed dependencies
 
 `@shopify/react-native-skia` and the Sora font. Added: `expo-clipboard`, Newsreader and Inter.
+
+## 13. Version 2 additions: files, to-dos, calendar, meaning
+
+Reasons are in [`DECISIONS.md`](DECISIONS.md) D20 to D23.
+
+### Data model (migration 2)
+
+`thoughts` gains: `kind` now also `video` and `file`; `file_name`, `mime_type`, `file_size`; `todo` (0 or 1), `remind_at`, `done_at`, `notif_id`. New table `embeddings(thought_id, model, vector BLOB)`, one unit-length float32 vector per thought. The upgrade rebuilds `thoughts` and keeps every row, link, tag and the search index.
+
+### Files
+
+| Source | What happens |
+|---|---|
+| Attach menu, "Photo or video" | System picker, several at once. Each becomes an image or video thought. |
+| Attach menu, "File" | Document picker, several at once. |
+| Share sheet | Text and links as before; images, video, audio and documents are copied in. Several images, videos or documents can be shared at once. |
+
+The kind is taken from the MIME type, falling back to the file extension. Videos and documents are titled with their file name, which makes them searchable. Images show as a thumbnail in lists and full width on their screen. Videos and documents show a card that opens them in another app.
+
+### To-dos and reminders
+
+- The first pill on a thought's screen is "To do". Its menu offers: add to the list with no reminder; remind in an hour, this evening, tomorrow at 9 or in a week; pick a date and time; mark done; remove.
+- A reminder is a local notification on a "Reminders" channel. Tapping it opens the thought.
+- Today lists up to three open to-dos, soonest first, with a round check to mark each done. The To do screen (fourth header button) lists all open and the last 50 done.
+- An overdue reminder is shown in the danger colour with how long it has been.
+
+### Calendar
+
+- Thought menu, "Add to calendar": opens the system's new-event screen with the thought's first line as the title, its text and link as notes, and its reminder time (or the next hour) for 30 minutes.
+- Settings, "Show today's events" (off by default): asks for calendar access, then Today lists the rest of today's events. Tapping one opens the note editor with the event's title as the first line.
+
+### Linking by meaning
+
+- Settings, "Understand meaning": downloads the model on first use, gives every thought a vector, rebuilds links, and from then on embeds each thought when it is captured or edited. Progress is shown in Settings. Turning it off deletes the vectors and rebuilds links from words alone.
+- Scoring: `max(word score, cosine)` when cosine ≥ 0.5, otherwise the word score. Website and tag boosts still apply. Top 4 neighbours above 0.12 are kept, as before.
+- A link with no shared words is explained as "Similar meaning".
+- On launch, if the setting is on, the model is loaded in the background; until it is ready, new thoughts link by words and are embedded on the next launch.

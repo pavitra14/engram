@@ -3,6 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import * as repo from '@/db/repo';
 
 import { rebuildAllLinks } from './capture';
+import { meaningSimilarity } from './linker';
 import { embedText, loadModel, MODEL_ID, setSemanticState, unloadModel } from './semantic';
 
 let running = false;
@@ -29,8 +30,14 @@ export async function startSmartLinking(db: SQLiteDatabase): Promise<void> {
     }
     if (ids.length > 0) await rebuildAllLinks(db);
     setSemanticState({ status: 'ready' });
-    // The automated test waits for this line.
-    console.log('engram: meaning ready');
+    // The automated test waits for this line. The spread of similarities is logged
+    // to help tune the linker; it contains numbers only, none of the person's words.
+    const vecs = [...(await repo.loadEmbeddings(db, MODEL_ID)).values()].slice(0, 150);
+    const sims: number[] = [];
+    for (let i = 0; i < vecs.length; i++) for (let j = i + 1; j < vecs.length; j++) sims.push(meaningSimilarity(vecs[i], vecs[j]));
+    sims.sort((x, y) => x - y);
+    const q = (f: number) => (sims.length ? sims[Math.min(sims.length - 1, Math.floor(f * sims.length))].toFixed(2) : 'n/a');
+    console.log(`engram: meaning ready; ${vecs.length} vectors of ${vecs[0]?.length ?? 0}; similarity p10=${q(0.1)} p50=${q(0.5)} p90=${q(0.9)} p99=${q(0.99)} max=${q(1)}`);
   } catch (e) {
     console.log('engram: meaning error', e instanceof Error ? e.message : String(e));
     setSemanticState({

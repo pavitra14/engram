@@ -22,7 +22,7 @@ When you finish a piece of work, update `docs/STATUS.md` (and `DECISIONS.md` if 
 - **Owner:** pavitra14 on GitHub. Repo: `pavitra14/engram`. Default branch: `main`.
 - **Platform:** Android first. iOS is out of scope for now, but avoid Android-only code where a cross-platform option is equally good.
 - **Package id:** `com.pavitra14.engram`. App name: Engram. URL scheme: `engram://`.
-- **Stack:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript, Expo Router, `expo-sqlite`, `d3-force` (layout only), Reanimated 4.7, `expo-clipboard`, `expo-speech-recognition`. Skia was removed in v2; nothing draws on a canvas.
+- **Stack:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript, Expo Router, `expo-sqlite`, `d3-force` (layout only), Reanimated 4.7, `expo-clipboard`, `expo-speech-recognition`, `expo-notifications`, `expo-calendar`, `expo-image-picker`, `react-native-executorch` (text embeddings only). Skia was removed in v2; nothing draws on a canvas.
 - **Release:** v1.0.0 (the dark graph design) is at <https://github.com/pavitra14/engram/releases/tag/v1.0.0>. v2 (the redesign) is described in `docs/STATUS.md`.
 
 ## Repository map
@@ -38,15 +38,18 @@ src/
     search.tsx         full-text search with kind filters and group matches
     voice.tsx          full-screen voice capture with live transcript
     compose.tsx        the notepad: full-page note editor
-    settings.tsx       appearance, voice language, backup, data
+    todo.tsx           the to-do list: open items, then done
+    settings.tsx       appearance, voice, linking by meaning, calendar, backup, data
     handle-share.tsx   sheet shown when another app shares to Engram
     samples.tsx        engram://samples loads demo data (used by the smoke test)
     +native-intent.ts  routes incoming share intents to /handle-share
-  components/          CaptureBar (text, mic, clipboard prompt), Entry, ui.tsx primitives
+  components/          CaptureBar (text, mic, attach, clipboard prompt), Entry, TodoRow,
+                       ActionSheet (bottom-sheet menu), ui.tsx primitives
   db/                  schema.ts (migrations), migrate.ts, repo.ts (all SQL), types.ts
   lib/                 brain.ts (shared data loader + groups), groups.ts, linker.ts,
-                       capture.ts (save + link pipeline), useVoice.ts, backup.ts,
-                       samples.ts, bus.ts (change signal), text.ts
+                       capture.ts (save + link pipeline, file import), semantic.ts (language model),
+                       smart.ts (switching meaning on and off), reminders.ts, calendar.ts,
+                       open.ts, useVoice.ts, backup.ts, samples.ts, bus.ts, text.ts
   theme.tsx            light and black palettes, type scale, ThemeProvider, useTheme()
 assets/brand/          SVG sources for the mark and wordmark; PNGs in assets/images are rendered from them
 scripts/check.ts       Node-only logic tests (migrations, FTS, linker, groups, dates)
@@ -83,7 +86,10 @@ You do not need the Android SDK locally. CI builds the APK.
 - **Every write must call `dataChanged()`** from `src/lib/bus.ts` (directly or via `capture()` / `removeThought()`), or screens will not refresh. Pass the new id to animate it into the graph.
 - **Capture is save-first.** Insert the row, then link. Never make capture wait on anything slower than one insert.
 - **Links are undirected** and stored with `a_id < b_id` (a CHECK constraint enforces it). Use `repo.upsertLink`, which orders ids and never downgrades a manual link to an automatic one.
-- **Nothing leaves the device.** No analytics, no network calls for user data, no cloud speech. Voice uses `requiresOnDeviceRecognition: true`.
+- **Nothing leaves the device.** No analytics, no network calls for user data, no cloud speech. Voice uses `requiresOnDeviceRecognition: true`. The one download the app ever makes is the language model, and only after the person turns on "Understand meaning". `react-native-executorch` reports downloads to its maker by default; `semantic.ts` switches that off and it must stay off.
+- **Menus with more than three choices use `ActionSheet`.** Android's `Alert.alert` silently drops buttons beyond three. Use alerts only for confirmations.
+- **`react-native-executorch` is loaded with a lazy `require`** inside `semantic.ts`, never a top-level import, so a fault in its native library cannot stop the app from starting. Its native libraries are fetched by its postinstall script, limited to text embeddings by the `react-native-executorch.features` key in `package.json`.
+- **Changing the `thoughts` table means rebuilding it** (see migration 2). `migrate.ts` turns foreign keys off around migrations so the rebuild does not cascade deletes. Add a case to the upgrade test in `scripts/check.ts`.
 - **Follow `docs/DESIGN.md`** for UI. Never hard-code a colour: take every one from `useTheme().c` so both the light and the black theme work. Newsreader for the person's words and titles, Inter for the app's own text, sentence case, 48 pt minimum targets, no decorative animation.
 - **Screens read through `useBrain(db)`** (`src/lib/brain.ts`), which loads thoughts and links once per data change and computes groups. Do not query thoughts and recompute groups per screen.
 - **Groups are derived, not stored.** `computeGroups` runs label propagation over the links and names each group from its shared words. A group's id is its smallest member id and can change when links change; screens must cope with a group id that no longer exists.
@@ -108,9 +114,9 @@ These caught the first build out. The installed versions behave this way:
 ## Testing
 
 - `npm run check` covers the database and linker in Node using `node:sqlite`. Add a case there for any SQL or linker change.
-- CI's emulator job (`scripts/smoke.sh`) installs the x86_64 APK on an Android 14 Pixel 6 emulator, loads sample data via `engram://samples`, types a thought, opens a thought, the map, a group, search, the note editor and settings, shares text in, repeats the main screens in the black theme, and fails on any crash. **Tap coordinates assume 1080×2400.** If you move the top bar or dock, update them.
+- CI's emulator job (`scripts/smoke.sh`) installs the x86_64 APK on an Android 14 Pixel 6 emulator, loads sample data via `engram://samples`, types a thought, sets a reminder on it, shares a picture and text in, switches on linking by meaning (`engram://settings?smart=on`) and waits for the model, opens the map, a group, search, the note editor and settings, repeats the main screens in the black theme, and fails on any crash. **Tap coordinates assume 1080×2400.** If you move the top bar or dock, update them.
 - Screenshots from each pushed branch's latest run are force-pushed to `smoke-shots` (for `main`) or `smoke-shots-<branch>`. CI runs on `main`, `release/**` and `redesign-**` branches and on pull requests; add your branch pattern to the workflow if you need screenshots from it. Look at them after any UI change: `git clone --depth 1 -b smoke-shots https://github.com/pavitra14/engram`.
-- Not covered by automation: microphone, speech recognition, the clipboard prompt, image and audio shares, real-device performance. Say so when you report work in those areas.
+- Not covered by automation: microphone, speech recognition, the clipboard prompt, the attach pickers, opening files in other apps, the date and time picker, a reminder actually firing, calendar events, real-device performance. Say so when you report work in those areas.
 
 ## Releasing
 
@@ -128,4 +134,5 @@ The APK is signed with the React Native template's debug keystore, which is the 
 - Functional components and hooks. No state library; SQLite is the source of truth and `useDataVersion()` triggers reloads.
 - Name things for what the user sees.
 - Commits: imperative subject under 72 characters, a body explaining why when it is not obvious.
-- Branches: work on a feature branch and open a PR unless the owner asks you to push to `main`.
+- Branches: the owner is the sole maintainer and has asked for work to be pushed straight to `main`. No pull request is needed.
+- Releases: every release is a beta until the owner says otherwise. Name them `vX.Y.Z-beta.N`; the hyphen makes CI publish a pre-release.

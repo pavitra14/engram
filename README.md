@@ -15,14 +15,17 @@ A second brain that lives entirely on your phone. Write, speak or share a though
 
 - **Today.** A calm, readable stream of what you captured, each thought showing where it landed.
 - **Map.** Your thoughts as named groups ("Sourdough", "Hampi") that form on their own.
-- **Capture from anywhere.** Type in the bar, tap the mic, open the full-page note editor, save what you just copied, or share text, links, images and audio from any app.
+- **Capture anything, from anywhere.** Type in the bar, tap the mic, open the full-page note editor, save what you just copied, attach photos, videos and documents, or share any of those from another app.
+- **To-dos and reminders.** Put any thought on your to-do list, with a reminder if you want one.
+- **Calendar.** Add a thought to your calendar, or show today's events and take notes on them.
+- **Links by meaning.** Optionally, a language model that runs on your phone links thoughts that mean similar things, in 50+ languages.
 - **On-device transcription.** Voice notes are transcribed by Android's offline speech recogniser (Android 13+). On other phones the audio alone is saved.
 - **Light and true black.** Follows your phone, or pick one. Black is for AMOLED screens.
 - **Yours.** Everything is in one SQLite database on the phone. Export and import a backup file whenever you like.
 
 ## Install
 
-Download the latest APK from [Releases](../../releases) and open it on an Android phone.
+Download the latest APK from [Releases](../../releases) and open it on an Android phone. Releases are betas for now.
 
 ## Develop
 
@@ -47,6 +50,8 @@ Every push to `main` builds a release APK and launches it on an emulator in GitH
 | Storage | `expo-sqlite` with FTS5 full-text search |
 | Groups and links | Pure TypeScript: word-overlap scoring and label propagation (`src/lib/linker.ts`, `src/lib/groups.ts`) |
 | Map layout | `d3-force`, drawn with plain views |
+| Meaning | `react-native-executorch` running a multilingual sentence-embedding model on the phone (optional) |
+| Reminders | `expo-notifications`, local only |
 | Voice | `expo-speech-recognition` (on-device only) with `expo-audio` as the audio-only fallback |
 | Share target | `expo-sharing` |
 

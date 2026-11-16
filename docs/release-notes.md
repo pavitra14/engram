@@ -1,27 +1,33 @@
-Engram 2 is a redesign: a calm, readable notebook that organises itself.
+This is a **beta** for testing. Expect rough edges, and please report what breaks.
 
-**Install:** download the APK below on an Android phone (Android 7 or newer) and open it. It installs over version 1 and keeps your thoughts.
+**Install:** download the APK below on an Android phone (Android 7 or newer, 64-bit) and open it. It installs over version 1 and keeps your thoughts.
 
-**New**
+**New since version 1**
 
-- **Today.** Home is now a readable stream of what you captured, each thought showing the group it landed in.
-- **Map of groups.** Related thoughts gather into named groups on their own. Tap a group to read it.
-- **Light and true black.** Follows your phone, or choose in Settings. Black is for AMOLED screens.
-- **Notepad.** The expand button in the capture bar opens a full-page editor for longer notes.
-- **Save what you copied.** When your clipboard has text, home offers to save it. Engram reads the clipboard only when you tap.
-- **Why things are linked.** Each linked thought says what it shares with the one you are reading.
-- **Full-screen voice notes** with your words appearing as you speak.
-- **Search** with highlighted matches, filters and matching groups.
-- **New icon.**
+- **A new design.** Home is a readable stream of your thoughts; a map shows them as named groups that form on their own. Light and true-black themes.
+- **Any kind of thought.** Text, voice, links, photos, videos and documents, from the + button or shared from any app.
+- **To-dos and reminders.** Open a thought and tap To do. Today shows what is open.
+- **Calendar.** Add a thought to your calendar from its menu. In Settings you can show today's events on Today and take notes on them.
+- **Links by meaning (optional).** In Settings, turn on "Understand meaning". Engram downloads a language model once (about 130 MB) and from then on links thoughts that mean similar things, in 50+ languages. It runs on your phone; your thoughts are never sent anywhere.
+- **Notepad.** A full-page editor for longer notes.
+- **Save what you copied.** Home offers to save your clipboard when it has text.
+- **Search** with highlights and filters, **full-screen voice notes**, and a reason shown for every link.
 
-**Changed**
+**Please test these on your phone; an emulator could not**
 
-- The dark graph of dots is gone. The map of groups replaces it.
+- Voice notes: recording, live transcription, playback
+- A reminder actually arriving, and tapping it
+- Picking photos, videos and files; opening a saved video or document
+- The date and time picker for reminders
+- Calendar: adding an event, and today's events on Today
+- "Understand meaning" on real notes: download time, speed, and whether the links make sense
+- The clipboard prompt
 
 **Known limits**
 
-- Linking and grouping compare words, not meaning. Group names are single words taken from your thoughts and can be odd; groups cannot be renamed yet.
+- Group names are single words and can be odd; groups cannot be renamed.
+- Files are not read: a PDF links only by its name and any note you add.
+- No repeating reminders.
 - The share sheet appears over Engram, not over the app you shared from.
-- Backups do not include recordings or images.
-- Voice notes, the clipboard prompt and sharing images have not been tested on a real phone.
-- The APK is signed with a development key, which is fine for installing directly but not for the Play Store.
+- Backups do not include files or recordings.
+- Signed with a development key: fine for installing directly, not for the Play Store.
