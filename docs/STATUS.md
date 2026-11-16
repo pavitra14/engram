@@ -15,7 +15,18 @@ _Last updated: 16 Nov 2026, v0.5.0-beta.1. Update this file whenever you finish 
 3. Optional translation into English on the phone (D39).
 4. A question a day, a weekly review, note templates (D40).
 
+### Verified in 0.5 on the emulator (run for `release/v0.5.0-beta.1`, screenshots on `smoke-shots-release-v0.5.0-beta.1`)
+
+- Today shows the day's question with Answer and Not today, and the "This week" line
+- The weekly review: four numbers, a bar per day, "Most on your mind", and the empty state for older notes
+- Holding a note in a group opens its menu
+- Settings shows Today (a question a day) and Translation, and no Engram Cloud section, as expected with the flag off
+- No crash, no `engram:` error lines
+- The phone APK is now 90 MB, up from 72 MB: ML Kit's translation library.
+
 ### Not verified in 0.5
+
+- The template chips on a new note (the walkthrough types a title first, which hides them).
 
 - **The microphone on a real phone.** The fix was confirmed only by reading the generated manifest. No test has ever recorded audio.
 - **Translation.** `expo-translate-text` has never run here: language detection, the pack download, the result. Only the storage and search of an English version are tested (in Node).
