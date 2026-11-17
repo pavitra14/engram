@@ -6,7 +6,8 @@
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
 
 export type WidgetTodo = { id: string; title: string; due: string | null; overdue: boolean };
-export type WidgetData = { dark: boolean; todos: WidgetTodo[]; open: number };
+export type WidgetNote = { id: string; title: string; when: string };
+export type WidgetData = { dark: boolean; todos: WidgetTodo[]; open: number; older?: WidgetNote[] };
 
 type Hex = `#${string}`;
 const palette = (dark: boolean): { bg: Hex; surface: Hex; ink: Hex; soft: Hex; line: Hex; accent: Hex; onAccent: Hex; danger: Hex } =>
@@ -89,4 +90,40 @@ export function TodoWidget({ dark = false, todos = [], open: count = 0 }: Partia
       )}
     </FlexWidget>
   );
+}
+
+/** One older note at a time, changing through the day. Tap it to read it, or the arrow for another. */
+export function MemoryWidget({ dark = false, note }: { dark?: boolean; note?: WidgetNote | null }) {
+  const c = palette(dark);
+  return (
+    <FlexWidget
+      style={{
+        width: 'match_parent',
+        height: 'match_parent',
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bg,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: c.line,
+        paddingLeft: 16,
+        paddingRight: 10,
+      }}>
+      <FlexWidget {...open(note ? `engram://thought/${note.id}` : 'engram://compose')} style={{ flex: 1, height: 'match_parent', flexDirection: 'column', justifyContent: 'center' }}>
+        <TextWidget text={note ? `You wrote this ${note.when}` : 'From your notes'} maxLines={1} style={{ fontSize: 11, color: c.soft }} />
+        <TextWidget text={note ? note.title : 'Older notes appear here once you have some.'} maxLines={3} truncate="END" style={{ fontSize: 15, color: c.ink }} />
+      </FlexWidget>
+      <FlexWidget
+        {...open('engram://surprise')}
+        style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginLeft: 8, borderWidth: 1, borderColor: c.line }}>
+        <TextWidget text="↻" style={{ fontSize: 18, color: c.ink }} />
+      </FlexWidget>
+    </FlexWidget>
+  );
+}
+
+/** Which of the stored older notes to show now: a different one every three hours. */
+export function noteForNow(older: WidgetNote[] | undefined, now: number = Date.now()): WidgetNote | null {
+  if (!older || older.length === 0) return null;
+  return older[Math.floor(now / (3 * 3_600_000)) % older.length];
 }

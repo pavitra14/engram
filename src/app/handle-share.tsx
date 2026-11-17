@@ -10,7 +10,7 @@ import {
 import { File } from 'expo-file-system';
 import { useDb } from '@/db/provider';
 import { useEffect, useRef, useState } from 'react';
-import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -19,11 +19,18 @@ import { Button, KindGlyph } from '@/components/ui';
 import type { Thought } from '@/db/types';
 import { loadBrain, placement } from '@/lib/brain';
 import type { Db } from '@/db/db';
-import { captureFile, captureText } from '@/lib/capture';
+import * as repo from '@/db/repo';
+import { captureFile, captureText, mergeInto } from '@/lib/capture';
 import { firstUrl, titleOf } from '@/lib/text';
-import { type, useTheme } from '@/theme';
+import { font, type, useTheme } from '@/theme';
 
-type State = { phase: 'saving' } | { phase: 'saved'; first: Thought; count: number; where: string } | { phase: 'failed'; message: string };
+type State =
+  | { phase: 'saving' }
+  | { phase: 'saved'; first: Thought; all: Thought[]; count: number; where: string; into?: boolean }
+  | { phase: 'failed'; message: string };
+
+/** The brain as it is this moment, not a cached one. */
+const freshBrain = (db: Db) => loadBrain(db, Date.now());
 
 const isWords = (p: SharePayload) => p.shareType === 'text' || p.shareType === 'url';
 
@@ -100,13 +107,41 @@ export default function HandleShareScreen() {
           return;
         }
         const brain = await loadBrain(db, Date.now());
-        setState({ phase: 'saved', first: saved[0], count: saved.length, where: placement(brain, saved[0]) });
+        setState({ phase: 'saved', first: saved[0], all: saved, count: saved.length, where: placement(brain, saved[0]) });
       } catch (e) {
         console.log('engram: share failed', e instanceof Error ? e.message : String(e));
         setState({ phase: 'failed', message: 'The item could not be copied into Engram. Try sharing it again.' });
       }
     })();
   }, [db, sharedPayloads]);
+
+  // "Add to another note": pick from the latest notes, or search for one.
+  const [choosing, setChoosing] = useState(false);
+  const [query, setQuery] = useState('');
+  const [notes, setNotes] = useState<Thought[]>([]);
+  useEffect(() => {
+    if (!choosing || state.phase !== 'saved') return;
+    let live = true;
+    const mine = new Set(state.all.map((t) => t.id));
+    const timer = setTimeout(async () => {
+      const rows = query.trim() ? await repo.searchThoughts(db, query, { limit: 20 }) : await repo.listThoughts(db, { limit: 20 });
+      if (live) setNotes(rows.filter((r) => !mine.has(r.id) && (r.kind === 'text' || r.kind === 'link')).slice(0, 5));
+    }, 120);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [db, choosing, query, state]);
+
+  const addTo = async (target: Thought) => {
+    if (state.phase !== 'saved') return;
+    setChoosing(false);
+    const merged = await mergeInto(db, state.all, target.id);
+    if (!merged) return;
+    const brain = await freshBrain(db);
+    setState({ phase: 'saved', first: merged, all: [merged], count: 1, where: placement(brain, merged), into: true });
+    setStay(false);
+  };
 
   const leave = () => {
     router.replace('/');
@@ -127,13 +162,37 @@ export default function HandleShareScreen() {
         accessibilityLiveRegion="polite"
         style={[styles.sheet, { backgroundColor: c.bg, borderColor: c.line, paddingBottom: insets.bottom + 20 }]}>
         <View style={[styles.handle, { backgroundColor: c.line }]} />
-        {state.phase === 'saved' ? (
+        {state.phase === 'saved' && choosing ? (
+          <>
+            <Text style={[type.title, { color: c.ink }]}>Add to which note?</Text>
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Find a note"
+              placeholderTextColor={c.faint}
+              accessibilityLabel="Find a note to add this to"
+              style={[styles.find, { color: c.ink, borderColor: c.line, backgroundColor: c.surface }]}
+              selectionColor={c.accent}
+            />
+            <View>
+              {notes.map((n) => (
+                <Pressable key={n.id} accessibilityRole="button" onPress={() => void addTo(n)} style={({ pressed }) => [styles.pick, { borderBottomColor: c.rule, opacity: pressed ? 0.6 : 1 }]}>
+                  <Text style={[type.thoughtSmall, { color: c.ink }]} numberOfLines={1}>
+                    {titleOf(n)}
+                  </Text>
+                </Pressable>
+              ))}
+              {notes.length === 0 ? <Text style={[type.small, { color: c.soft }]}>No notes match. It stays saved as its own note.</Text> : null}
+            </View>
+            <Button title="Keep it as its own note" onPress={() => setChoosing(false)} />
+          </>
+        ) : state.phase === 'saved' ? (
           <>
             <View style={styles.head}>
               <View style={[styles.tick, { backgroundColor: c.accent }]}>
                 <Feather name="check" size={22} color={c.onAccent} />
               </View>
-              <Text style={[type.title, { color: c.ink }]}>{state.count === 1 ? 'Saved to Engram' : `Saved ${state.count} items`}</Text>
+              <Text style={[type.title, { color: c.ink }]}>{state.into ? 'Added to your note' : state.count === 1 ? 'Saved to Engram' : `Saved ${state.count} items`}</Text>
             </View>
             <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.line }]}>
               <View style={styles.meta}>
@@ -156,6 +215,17 @@ export default function HandleShareScreen() {
               />
               <Button title="Done" tone="solid" style={{ flex: 1 }} onPress={leave} />
             </View>
+            {state.into ? null : (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setStay(true);
+                  setChoosing(true);
+                }}
+                style={styles.instead}>
+                <Text style={[type.smallStrong, { color: c.accent }]}>Add to another note instead</Text>
+              </Pressable>
+            )}
             <Text style={[type.meta, { color: c.soft, textAlign: 'center' }]}>This closes on its own if you do nothing.</Text>
           </>
         ) : state.phase === 'failed' ? (
@@ -181,4 +251,7 @@ const styles = StyleSheet.create({
   card: { padding: 16, borderRadius: 20, borderWidth: 1, gap: 6 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   buttons: { flexDirection: 'row', gap: 12 },
+  instead: { minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  find: { height: 52, borderRadius: 26, borderWidth: 1, paddingHorizontal: 18, fontFamily: font.regular, fontSize: 16 },
+  pick: { minHeight: 52, justifyContent: 'center', borderBottomWidth: 1 },
 });

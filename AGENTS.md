@@ -26,7 +26,7 @@ When you finish a piece of work, update `docs/STATUS.md` (and `DECISIONS.md` if 
 - **Platform:** Android first. iOS is out of scope for now, but avoid Android-only code where a cross-platform option is equally good.
 - **Package id:** `com.pavitra14.engram`. App name: Engram. URL scheme: `engram://`.
 - **Stack:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript, Expo Router, PowerSync (`@powersync/react-native` on `@op-engineering/op-sqlite`, local-only), `react-native-enriched-html` (the note editor), `react-native-android-widget`, `d3-force` (layout only), Reanimated 4.7, `expo-clipboard`, `expo-speech-recognition`, `expo-notifications`, `expo-calendar`, `expo-image-picker`, `react-native-executorch` (text embeddings only). Skia was removed in v2; nothing draws on a canvas.
-- **Versions are 0.x.** The app is `0.5.0` (`versionCode` 5). Two earlier releases were numbered 1.0.0 and 2.0.0-beta.1 by mistake; the owner asked for them to be removed. Never number a release 1.0 or higher unless the owner says so.
+- **Versions are 0.x.** The app is `0.6.0` (`versionCode` 6). Two earlier releases were numbered 1.0.0 and 2.0.0-beta.1 by mistake; the owner asked for them to be removed. Never number a release 1.0 or higher unless the owner says so.
 
 ## Repository map
 
@@ -47,6 +47,10 @@ src/
     todo.tsx           the to-do list by due date, quick add, the week's calendar, done
     settings.tsx       appearance, voice, linking by meaning, calendar, backup, data
     handle-share.tsx   sheet shown when another app shares to Engram
+    recap.tsx          the month in review
+    trash.tsx          deleted thoughts, kept 30 days
+    tile.tsx           engram://tile, where the Quick Settings tile lands
+    surprise.tsx       engram://surprise opens a random older note (widget)
     samples.tsx        engram://samples loads demo data (used by the smoke test)
     +native-intent.ts  routes incoming share intents to /handle-share
   components/          CaptureBar, NoteEditor (+ FormatBar), GroupMap, Entry, TodoRow,
@@ -63,11 +67,12 @@ src/
                        smart.ts (switching meaning on and off), reminders.ts, calendar.ts,
                        assistants.ts (Chat with Claude / ChatGPT), open.ts, useVoice.ts,
                        translate.ts (English versions, on the phone), habits.ts (daily question,
-                       streak, week numbers, note templates), backup.ts, samples.ts, bus.ts, text.ts
+                       streak, week numbers, note templates), when.ts (dates in plain words), checks.ts (check boxes),
+                       recall.ts, projects.ts, markdown.ts, ocr.ts, focus.ts, briefs.ts, lock.ts, toast.ts, actions.ts, backup.ts, samples.ts, bus.ts, text.ts
   theme.tsx            light and black palettes, type scale, ThemeProvider, useTheme()
 assets/brand/          SVG sources for the mark and wordmark; PNGs in assets/images are rendered from them
 index.ts               entry point: expo-router plus the widget task handler
-plugins/               local config plugins (app visibility queries)
+plugins/               local config plugins (app visibility queries; Quick Settings tile and icon shortcuts)
 supabase/              the cloud's schema (migrations/) and Edge Functions (functions/)
 scripts/check.ts       Node-only tests: repo.ts against node:sqlite, old-database import, linker, groups, dates
 scripts/smoke.sh       emulator walkthrough run by CI, in both themes
@@ -111,6 +116,10 @@ You do not need the Android SDK locally. CI builds the APK.
 - **Sync is recorded only while signed in.** `repo.setTracking(true)` makes writes note themselves in `outbox`. Anything that changes a synced row must go through a `repo.ts` function that calls `mark()`, or other devices will never hear of it. Applying rows from the cloud goes through `repo.applyRemote`, which records nothing.
 - **The cloud is written only through `apply_sync_batch`.** Never grant direct insert, update or delete on the cloud tables. Server changes are new files in `supabase/migrations/`, applied to the project and tested there; never edit a migration that has been applied.
 - **Unfinished features sit behind a flag that is off by default.** Flags are rows in the cloud's `feature_flags` table, read by `src/cloud/flags.ts`. A flag that is missing, false, or never fetched is off; the last fetched answer is remembered for when the phone is offline. Engram Cloud is behind `cloud`, which is off: with it off the Settings section is hidden, no session is restored and no change is recorded for sending. To add a flag, add its name to `FLAGS` and a row to the table.
+- **Deleting is `removeThought`, which moves to the trash.** Only `deleteForever` and `emptyOldTrash` remove rows. Every list query filters `trashed_at IS NULL`; a new query must too.
+- **Columns in `LOCAL_THOUGHT_COLUMNS` stay on the phone** (pins, trash, recall, parked list, focus minutes) and are written without `mark()`. The `projects` table is local too.
+- **Short messages use `showToast`** (`src/lib/toast.ts`), with at most one action. Prefer Undo over a confirmation.
+- **Text read from pictures is derived data** (`image_text`), like translations. `ocr.ts` loads its native module lazily.
 - **Translations are derived data**, like meaning vectors: a plain `translations` table, never synced, rebuilt on demand. The original note is never changed.
 - **Only the publishable key is in the app.** The service role key exists only inside Edge Functions.
 - **Menus with more than three choices use `ActionSheet`.** Android's `Alert.alert` silently drops buttons beyond three. Use alerts only for confirmations.

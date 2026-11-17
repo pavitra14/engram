@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { type, useTheme } from '@/theme';
@@ -30,6 +30,7 @@ export function ActionSheet({
 }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
+  const window = useWindowDimensions();
   // The modal stays mounted until the sheet has slid back down.
   const [shown, setShown] = useState(visible);
   const [height, setHeight] = useState(480);
@@ -60,6 +61,8 @@ export function ActionSheet({
           ]}>
           <View style={[styles.handle, { backgroundColor: c.line }]} />
           {title ? <Text style={[type.labelStrong, styles.title, { color: c.ink }]}>{title}</Text> : null}
+          {/* A long menu scrolls inside the sheet, so its last choice is never off the screen. */}
+          <ScrollView style={{ maxHeight: Math.round(window.height * 0.7) }} bounces={false}>
           {options.map((o) => (
             <Pressable
               key={o.label}
@@ -73,6 +76,7 @@ export function ActionSheet({
               <Text style={[type.body, { color: o.danger ? c.danger : c.ink }]}>{o.label}</Text>
             </Pressable>
           ))}
+          </ScrollView>
         </Animated.View>
       </View>
     </Modal>

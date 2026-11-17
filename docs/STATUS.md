@@ -1,12 +1,29 @@
 # Status
 
-_Last updated: 16 Nov 2026, v0.5.0-beta.1. Update this file whenever you finish work._
+_Last updated: 16 Nov 2026, v0.6.0-beta.1. Update this file whenever you finish work._
 
 ## Where things are
 
 - The app is **0.5.0**. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
 - **Engram Cloud is switched off** by the `cloud` feature flag (D37). The code and the server side from 0.4 are still there.
 - The old `v1.0.0` and `v2.0.0-beta.1` releases still need deleting by hand on GitHub.
+
+## What 0.6 changed
+
+One commit, built from `docs/ROADMAP.md` (all 19 committed items and most of the proposed list). Verification is filled in below once the release run has finished.
+
+- **Fixed:** translation stopped at the first failing note and always reported a language-pack download failure. `translateAll` now tries each note on its own, `looksEnglish` keeps English notes away from ML Kit (English to English still triggered a pack download), and `runSummary` reports the error the phone gave.
+- **Capture:** reminders from plain words (`lib/when.ts`), Quick Settings tile and app shortcuts (`plugins/withQuickCapture.js`), shake to record (in-app only), sticky quick-note notification, "Add to another note" on the share sheet, scan paper, text read from pictures (`lib/ocr.ts`, `image_text` table), voice notes over a minute set out in paragraphs.
+- **Linking:** pins, `[[Title]]` links, `@people` as tags, saved searches, link suggestions (`nearMisses`, `dismissed_links`), near-duplicate warning, group rename/merge/goal/date (`projects` table, `lib/projects.ts`).
+- **Recall:** Remember this, decisions, on this day, surprise me, month in review (`/recap`), map time-lapse (`/map?play=1`), milestones, a third widget.
+- **Doing:** check boxes roll up to To do (`lib/checks.ts`), focus timer (`lib/focus.ts`), Waiting and Someday, habits, morning brief and evening wrap-up (`lib/briefs.ts`).
+- **Yours:** trash with undo (30 days), app lock (`LockGate`), accent colour, weekly backup, Markdown export, import from Markdown, text and Keep.
+
+### Not built
+Wear OS tile; on-phone language model features; place reminders; password-protected backups; share a note as an image; media in backups. Back-tap is a system gesture an app cannot claim.
+
+### Not verified in 0.6 (no automation can reach them)
+Translation on a real phone, the tile, shortcuts, shake, the sticky notification, scan, OCR on a phone without the ML Kit module, app lock, focus timer firing, briefs firing, weekly backup, Markdown export, note import, the Memory widget drawn.
 
 ## What 0.5 changed
 

@@ -62,6 +62,9 @@ if [ -n "${IMG_ID:-}" ]; then
   launch; sleep 8; shot 11-home-image
   tap 500 1500; sleep 1
 fi
+# The picture just shared, opened: any words read from it are shown under it.
+open "engram://latest"; sleep 8; shot 11b-image-text
+adb shell input keyevent 4; sleep 1
 
 # Linking by meaning. Before: the garage thought shares no words with anything.
 open "engram://search?q=garage"; sleep 5; shot 12-before-meaning
@@ -108,6 +111,23 @@ adb shell am start -W -a android.intent.action.SEND -t text/plain \
 sleep 2; shot 20-share-text
 sleep 5
 
+# A reminder from plain words: the note keeps its words, a to-do is made, and a message offers Undo.
+open "engram://"; sleep 4
+tap 420 2221; sleep 2
+adb shell input text "Call%sthe%sbank%stomorrow%s9am"; sleep 2
+adb shell input keyevent 4; sleep 2
+tap 953 2221; sleep 2; shot 24-plain-reminder
+open "engram://todo"; sleep 5; shot 25-todo-boxes
+adb shell input swipe 540 2000 540 700 300; sleep 2; shot 25b-todo-habits
+open "engram://recap"; sleep 5; shot 26-recap
+open "engram://map?play=1"; sleep 4; shot 27-map-playing
+sleep 30
+open "engram://trash"; sleep 4; shot 28-trash
+open "engram://settings"; sleep 5
+adb shell input swipe 540 2000 540 900 300; sleep 2; shot 29-settings-new
+adb shell dumpsys package "$PKG" | grep -i -m3 "QuickTileService" > "$OUT/tile.txt" || true
+adb shell dumpsys shortcut | grep -A12 "Package: $PKG" | head -30 > "$OUT/shortcuts.txt" || true
+
 # The phone switches to dark while Engram has no screen open. On return it must follow, in true black.
 adb shell cmd uimode night yes
 launch; sleep 10; shot 21-home-black
@@ -128,4 +148,6 @@ fi
 grep -E "ReactNativeJS" "$OUT/logcat.txt" | tail -40 || true
 cat "$OUT/alarms.txt" || true
 cat "$OUT/widgets.txt" || true
+cat "$OUT/tile.txt" || true
+cat "$OUT/shortcuts.txt" || true
 echo "Smoke test passed."

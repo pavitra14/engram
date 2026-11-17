@@ -8,6 +8,8 @@
  */
 import { surfaceTokens } from './linker';
 
+import type { Project } from '@/db/types';
+
 export type GroupThought = { id: string; text: string; created_at: number };
 export type GroupLink = { a: string; b: string; weight: number };
 
@@ -22,6 +24,10 @@ export type Group = {
   /** Other groups this one has links into, strongest first. */
   near: string[];
   newest: number;
+  /** The name Engram worked out, kept when the person has given the group a name of their own. */
+  autoName?: string;
+  /** What the person has said about this group: a name, and a goal and date if it is a project. */
+  project?: Project;
 };
 
 export type Grouping = {

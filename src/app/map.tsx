@@ -1,4 +1,5 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -6,7 +7,7 @@ import { CAPTURE_BAR_SPACE, CaptureBar } from '@/components/CaptureBar';
 import { GroupMap } from '@/components/GroupMap';
 import { Header, RoundButton } from '@/components/ui';
 import { useDb } from '@/db/provider';
-import { placement, useBrain } from '@/lib/brain';
+import { brainAt, placement, useBrain } from '@/lib/brain';
 import { titleOf } from '@/lib/text';
 import { type, useTheme } from '@/theme';
 
@@ -17,6 +18,29 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const brain = useBrain(db);
+  const params = useLocalSearchParams<{ play?: string }>();
+  // Playing the map: step through time from the first thought to now and draw the map as it was at each step.
+  const [step, setStep] = useState<number | null>(params.play ? 0 : null);
+  const [now] = useState(() => Date.now());
+  const moments = useMemo(() => {
+    const all = brain?.thoughts ?? [];
+    if (all.length < 2) return [];
+    const first = all[all.length - 1].created_at;
+    const last = now;
+    // About a week a step, but never more than 40 steps however long the history is.
+    const size = Math.max(7 * 86_400_000, Math.ceil((last - first) / 40));
+    const out: number[] = [];
+    for (let t = first; t < last; t += size) out.push(t);
+    out.push(last);
+    return out;
+  }, [brain, now]);
+  const playing = step !== null && step < moments.length;
+  useEffect(() => {
+    if (!playing) return;
+    const timer = setTimeout(() => setStep((s) => (s === null ? null : s + 1)), 650);
+    return () => clearTimeout(timer);
+  }, [playing, step]);
+  const shown = useMemo(() => (brain && playing ? brainAt(brain, moments[step]) : brain), [brain, playing, moments, step]);
 
   const latest = brain?.thoughts[0];
   const total = brain?.thoughts.length ?? 0;
@@ -30,12 +54,22 @@ export default function MapScreen() {
           title="Map"
           back="Today"
           sub={`${total} ${total === 1 ? 'thought' : 'thoughts'}, ${groupCount} ${groupCount === 1 ? 'group' : 'groups'}${alone ? `, ${alone} on ${alone === 1 ? 'its' : 'their'} own` : ''}`}>
+          {moments.length > 2 ? (
+            <RoundButton icon={playing ? 'square' : 'play'} label={playing ? 'Stop playing the map' : 'Play the map growing from your first thought'} onPress={() => setStep(playing ? null : 0)} />
+          ) : null}
           <RoundButton icon="search" label="Search your thoughts" onPress={() => router.push('/search')} />
         </Header>
 
-        {brain && total > 0 ? (
+        {playing && shown ? (
+          <Text style={[type.small, styles.note, { color: c.accent }]} accessibilityLiveRegion="polite">
+            {new Date(moments[step]).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}: {shown.thoughts.length}{' '}
+            {shown.thoughts.length === 1 ? 'thought' : 'thoughts'}, {shown.groups.length} {shown.groups.length === 1 ? 'group' : 'groups'}
+          </Text>
+        ) : null}
+
+        {shown && total > 0 ? (
           <View style={{ marginTop: 28 }}>
-            <GroupMap brain={brain} width={width} />
+            <GroupMap brain={shown} width={width} />
           </View>
         ) : null}
 

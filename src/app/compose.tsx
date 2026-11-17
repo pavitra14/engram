@@ -7,7 +7,9 @@ import { FormatBar, NoteEditor, type NoteEditorHandle } from '@/components/NoteE
 import { Pill, RoundButton } from '@/components/ui';
 import { TEMPLATES } from '@/lib/habits';
 import { useDb } from '@/db/provider';
+import { markDecision } from '@/lib/actions';
 import { captureNote } from '@/lib/capture';
+import { showToast } from '@/lib/toast';
 import { when } from '@/lib/text';
 import { type, useTheme } from '@/theme';
 
@@ -24,7 +26,7 @@ export default function ComposeScreen() {
   const [inBody, setInBody] = useState(false);
   const [active, setActive] = useState({});
   // Choosing a template restarts the editor with that outline in it.
-  const [seed, setSeed] = useState<{ key: number; title?: string; html?: string }>({ key: 0 });
+  const [seed, setSeed] = useState<{ key: number; name?: string; title?: string; html?: string }>({ key: 0 });
   const eventAt = params.event_at ? Number(params.event_at) : null;
 
   const leave = () => (router.canGoBack() ? router.back() : router.replace('/'));
@@ -49,11 +51,16 @@ export default function ComposeScreen() {
         setSaving(false);
         return;
       }
-      await captureNote(
+      const made = await captureNote(
         db,
         note,
         params.event_id ? { event_id: params.event_id, event_title: params.title ?? null, event_at: eventAt } : {},
       );
+      // A decision comes back in three months to ask how it turned out.
+      if (seed.name === 'Decision') {
+        await markDecision(db, made.id);
+        showToast('Engram will ask how this turned out in three months.');
+      }
       leave();
     } catch (e) {
       setSaving(false);
@@ -85,7 +92,7 @@ export default function ComposeScreen() {
                 label={t.name}
                 selected={seed.key > 0 && seed.html === t.html}
                 onPress={() => {
-                  setSeed({ key: seed.key + 1, title: t.title, html: t.html });
+                  setSeed({ key: seed.key + 1, name: t.name, title: t.title, html: t.html });
                   setHas(true);
                 }}
               />

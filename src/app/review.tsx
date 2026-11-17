@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Entry } from '@/components/Entry';
-import { Button, Header } from '@/components/ui';
+import { Button, Header, RoundButton } from '@/components/ui';
 import { useDb } from '@/db/provider';
 import type { Thought } from '@/db/types';
 import { useBrain } from '@/lib/brain';
@@ -65,7 +65,9 @@ export default function ReviewScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 48 }}>
-        <Header title="Your week" back="Today" sub={week.streak > 1 ? `${week.streak} days in a row with a note` : 'The last seven days'} />
+        <Header title="Your week" back="Today" sub={week.streak > 1 ? `${week.streak} days in a row with a note` : 'The last seven days'}>
+          <RoundButton icon="calendar" label="The month in review" onPress={() => router.push('/recap')} />
+        </Header>
 
         <View style={styles.stats}>
           {stat(week.captured, week.captured === 1 ? 'note' : 'notes')}
@@ -124,13 +126,13 @@ export default function ReviewScreen() {
                 title="Let it go"
                 tone="danger"
                 onPress={() => {
-                  void removeThought(db, current);
+                  void removeThought(db, current, { quiet: true });
                   done(current.id);
                 }}
               />
             </View>
             <Text style={[type.meta, styles.note, { color: c.soft }]}>
-              &ldquo;Let it go&rdquo; deletes &ldquo;{titleOf(current).slice(0, 40)}&rdquo; for good.
+              &ldquo;Let it go&rdquo; moves &ldquo;{titleOf(current).slice(0, 40)}&rdquo; to the trash, where it stays for 30 days.
             </Text>
           </View>
         ) : (

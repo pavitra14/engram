@@ -35,6 +35,13 @@ export const TABLES = {
     event_at: 'integer',
     created_at: 'integer',
     updated_at: 'integer',
+    // The rest are this phone's own and are not sent to Engram Cloud (see LOCAL_THOUGHT_COLUMNS).
+    pinned: 'integer', // when it was pinned, or null
+    trashed_at: 'integer', // when it was moved to the trash, or null
+    recall_step: 'integer', // "Remember this": which showing comes next. 100 marks a decision to look back on.
+    recall_at: 'integer', // when it next comes back
+    list: 'text', // waiting | someday: to-dos that are parked
+    focus_min: 'integer', // minutes of focus sessions spent on it
   },
   // Undirected: a_id < b_id always, and id is "a_id:b_id" so a pair exists once.
   links: { a_id: 'text', b_id: 'text', kind: 'text', weight: 'real' },
@@ -43,6 +50,9 @@ export const TABLES = {
   thought_tags: { thought_id: 'text', tag_id: 'text' },
   // Settings. id is the key.
   meta: { value: 'text' },
+  // A name, goal or date the person gave a group. Groups are worked out from links, so this is
+  // kept against the group's members (a JSON list of thought ids) and follows most of them.
+  projects: { name: 'text', goal: 'text', due_at: 'integer', members: 'text', notif_id: 'text', created_at: 'integer', updated_at: 'integer' },
 } as const satisfies Record<string, Record<string, ColumnType>>;
 
 export type TableName = keyof typeof TABLES;
@@ -86,8 +96,15 @@ export const OUTBOX_DDL =
 export const REVS_DDL = 'CREATE TABLE IF NOT EXISTS sync_revs (id TEXT PRIMARY KEY NOT NULL, rev INTEGER NOT NULL)';
 
 /** The thought columns that are sent to the cloud. Device file paths and alarm ids stay on the phone. */
-export const SYNCED_THOUGHT_COLUMNS = THOUGHT_COLUMNS.filter((c) => c !== 'media_path' && c !== 'notif_id');
+export const LOCAL_THOUGHT_COLUMNS: readonly string[] = ['media_path', 'notif_id', 'pinned', 'trashed_at', 'recall_step', 'recall_at', 'list', 'focus_min'];
+export const SYNCED_THOUGHT_COLUMNS = THOUGHT_COLUMNS.filter((c) => !LOCAL_THOUGHT_COLUMNS.includes(c));
 
 /** English versions of notes written in other languages, made on the phone when the person asks for them. Derived: never synced. lang 'en' with no text means "checked, already English". */
 export const TRANSLATIONS_DDL =
   'CREATE TABLE IF NOT EXISTS translations (thought_id TEXT PRIMARY KEY NOT NULL, lang TEXT NOT NULL, title TEXT, body TEXT)';
+
+/** Words read from pictures on the phone, so a photo can be found by what is written in it. Derived: never synced. */
+export const IMAGE_TEXT_DDL = 'CREATE TABLE IF NOT EXISTS image_text (thought_id TEXT PRIMARY KEY NOT NULL, text TEXT NOT NULL)';
+
+/** Pairs the person said are not related. id is "a:b" with a < b. Engram never links or suggests them again. */
+export const DISMISSED_DDL = 'CREATE TABLE IF NOT EXISTS dismissed_links (id TEXT PRIMARY KEY NOT NULL)';

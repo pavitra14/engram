@@ -13,12 +13,23 @@ import type { Db } from '@/db/db';
 import * as repo from '@/db/repo';
 
 import { dataChanged } from './bus';
+import { looksEnglish } from './text';
 
 type Result = { translatedTexts: unknown; sourceLanguage: string | null };
 type Module = { onTranslateTask: (p: { input: string[]; targetLangCode: string }) => Promise<Result> };
 
 export async function translationOn(db: Db): Promise<boolean> {
   return (await repo.getMeta(db, 'translate')) === 'on';
+}
+
+/** Why a note could not be translated. `pack` means a language pack is not on the phone yet. */
+export type TranslateProblem = { kind: 'pack' | 'other'; message: string };
+
+/** Sorts the translator's error into "language pack missing" and everything else, keeping its own words. */
+export function problemOf(e: unknown): TranslateProblem {
+  const message = e instanceof Error ? e.message : String(e);
+  const code = e && typeof e === 'object' && 'code' in e ? String((e as { code: unknown }).code) : '';
+  return { kind: code === 'MODEL_DOWNLOAD_FAILED' || /download|model/i.test(message) ? 'pack' : 'other', message };
 }
 
 /**
@@ -30,7 +41,12 @@ export async function translateThought(db: Db, id: string): Promise<boolean> {
   if (!t) return false;
   const title = t.title?.trim() ?? '';
   const body = t.body.trim().slice(0, 4000);
-  if (!title && !body) return false;
+  // Notes that are plainly English never reach the translator. Asking it to turn English
+  // into English still makes it fetch a language pack, and a failure there used to stop everything.
+  if ((!title && !body) || looksEnglish(`${title}\n${body}`)) {
+    await repo.saveTranslation(db, id, 'en', null, null);
+    return false;
+  }
   const input = [title, body].filter(Boolean);
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require('expo-translate-text') as Module;
@@ -57,23 +73,50 @@ export function translateLater(db: Db, id: string): void {
   })();
 }
 
-/** Turning it on: give every note that has not been looked at an English version. Returns how many were translated. */
-export async function translateAll(db: Db, onProgress?: (done: number, total: number) => void): Promise<number> {
+export type TranslateRun = { made: number; checked: number; failed: number; problem: TranslateProblem | null };
+
+/**
+ * Turning it on, or trying again: give every note that has not been looked at an
+ * English version. One note failing does not stop the rest; it is left unmarked so
+ * the next run tries it again. Stops early only when the same failure keeps coming,
+ * since then the cause is the phone and not the note.
+ */
+export async function translateAll(db: Db, onProgress?: (done: number, total: number) => void): Promise<TranslateRun> {
   const ids = await repo.idsWithoutTranslation(db);
-  let made = 0;
+  const run: TranslateRun = { made: 0, checked: 0, failed: 0, problem: null };
+  let inARow = 0;
   for (let i = 0; i < ids.length; i++) {
     if (!(await translationOn(db))) break;
     try {
-      if (await translateThought(db, ids[i])) made += 1;
+      if (await translateThought(db, ids[i])) run.made += 1;
+      run.checked += 1;
+      inARow = 0;
     } catch (e) {
-      // Usually the language pack could not be downloaded. Stop; the next save or a later try picks up again.
-      console.log('engram: translation stopped', e instanceof Error ? e.message : String(e));
-      throw e;
+      run.failed += 1;
+      inARow += 1;
+      run.problem = run.problem ?? problemOf(e);
+      console.log('engram: translation failed for one note', e instanceof Error ? e.message : String(e));
+      if (inARow >= 3) {
+        run.failed += ids.length - i - 1;
+        break;
+      }
     }
     onProgress?.(i + 1, ids.length);
   }
-  if (made > 0) dataChanged();
-  return made;
+  if (run.made > 0) dataChanged();
+  return run;
+}
+
+/** What to tell the person after a run, in one or two sentences. */
+export function runSummary(r: TranslateRun): string {
+  const made = r.made === 0 ? 'None of your notes needed translating' : `${r.made} ${r.made === 1 ? 'note has' : 'notes have'} an English version now`;
+  if (r.failed === 0 || !r.problem) return `On. ${made}.`;
+  const n = `${r.failed} ${r.failed === 1 ? 'note' : 'notes'}`;
+  const why =
+    r.problem.kind === 'pack'
+      ? `${n} could not be translated because the phone did not finish downloading a language pack from Google. This needs Google Play services and a connection; tap Try again in a minute.`
+      : `${n} could not be translated.`;
+  return `On. ${made}. ${why} What the phone reported: ${r.problem.message.slice(0, 160)}`;
 }
 
 const NAMES: Record<string, string> = {

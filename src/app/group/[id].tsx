@@ -1,18 +1,23 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useDb } from '@/db/provider';
 import { useEffect, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CAPTURE_BAR_SPACE, CaptureBar } from '@/components/CaptureBar';
 import { Entry } from '@/components/Entry';
-import { Header, Pill } from '@/components/ui';
+import { ActionSheet, type SheetOption } from '@/components/ActionSheet';
+import { Header, Pill, RoundButton } from '@/components/ui';
+import { progress } from '@/lib/checks';
+import { mergeGroups, updateProject } from '@/lib/projectActions';
+import { dueIn, progressLabel } from '@/lib/projects';
+import { pickDateTime } from '@/lib/reminders';
 import { type Assistant, chatWith, installedAssistants, outline, planPrompt } from '@/lib/assistants';
 import { capture } from '@/lib/capture';
 import type { Thought } from '@/db/types';
 import { useBrain } from '@/lib/brain';
 import { htmlToText, when } from '@/lib/text';
-import { type, useTheme } from '@/theme';
+import { font, type, useTheme } from '@/theme';
 
 /**
  * One group's thoughts. The id is a group id, or "loose" for thoughts that
@@ -36,6 +41,50 @@ export default function GroupScreen() {
   const ids = loose ? (brain?.loose ?? []) : (group?.members ?? []);
   const thoughts = ids.map((x) => brain?.byId.get(x)).filter((t): t is Thought => !!t);
   const missing = brain !== null && !loose && !group;
+  const [sheet, setSheet] = useState<'more' | 'merge' | null>(null);
+  const [now] = useState(() => Date.now());
+  const [editing, setEditing] = useState<{ what: 'name' | 'goal'; text: string } | null>(null);
+  const project = group?.project;
+  // Progress is the check boxes in the group's notes: ticked, of all of them.
+  const steps = progress(thoughts.map((t) => t.body_html));
+
+  const saveEdit = () => {
+    if (!editing || !group) return;
+    const text = editing.text.trim();
+    setEditing(null);
+    void updateProject(db, group, editing.what === 'name' ? { name: text || null } : { goal: text || null });
+  };
+
+  const moreOptions: SheetOption[] = group
+    ? [
+        { label: 'Rename this group', icon: 'edit-2', onPress: () => setEditing({ what: 'name', text: project?.name ?? group.name }) },
+        { label: project?.goal ? 'Change the goal' : 'Give it a goal', icon: 'flag', onPress: () => setEditing({ what: 'goal', text: project?.goal ?? '' }) },
+        {
+          label: project?.due_at ? 'Change the date' : 'Give it a date',
+          icon: 'calendar',
+          onPress: () => {
+            void pickDateTime(project?.due_at ?? Date.now() + 7 * 86_400_000).then((at) => {
+              if (at) void updateProject(db, group, { due_at: at });
+            });
+          },
+        },
+        ...(brain && brain.groups.length > 1 ? [{ label: 'Merge with another group', icon: 'git-merge' as const, onPress: () => setTimeout(() => setSheet('merge'), 260) }] : []),
+        ...(project?.name ? [{ label: `Use the automatic name, ${group.autoName ?? ''}`.trim(), icon: 'rotate-ccw' as const, onPress: () => void updateProject(db, group, { name: null }) }] : []),
+        ...(project?.goal || project?.due_at ? [{ label: 'Remove the goal and date', icon: 'x' as const, onPress: () => void updateProject(db, group, { goal: null, due_at: null }) }] : []),
+      ]
+    : [];
+  const mergeOptions: SheetOption[] =
+    group && brain
+      ? brain.groups
+          .filter((g) => g.id !== group.id)
+          .slice(0, 24)
+          .map((g) => ({
+            label: `${g.name}, ${g.members.length} thoughts`,
+            onPress: () => {
+              void mergeGroups(db, brain, group, g).then(() => router.replace('/map'));
+            },
+          }))
+      : [];
 
   const title = loose ? 'Not in a group' : (group?.name ?? '');
   const count = thoughts.length;
@@ -57,7 +106,38 @@ export default function GroupScreen() {
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + CAPTURE_BAR_SPACE + 40 }}
         ListHeaderComponent={
           <View style={{ gap: 18, paddingBottom: 6 }}>
-            <Header title={missing ? 'This group has changed' : title} back="Map" sub={sub} />
+            <Header title={missing ? 'This group has changed' : title} back="Map" sub={sub}>
+              {group ? <RoundButton icon="more-horizontal" label="Rename, set a goal or merge this group" onPress={() => setSheet('more')} /> : null}
+            </Header>
+            {editing ? (
+              <View style={styles.note}>
+                <TextInput
+                  autoFocus
+                  value={editing.text}
+                  onChangeText={(text) => setEditing({ ...editing, text })}
+                  onSubmitEditing={saveEdit}
+                  onBlur={saveEdit}
+                  placeholder={editing.what === 'name' ? 'Name for this group' : 'What does done look like?'}
+                  placeholderTextColor={c.faint}
+                  accessibilityLabel={editing.what === 'name' ? 'Group name' : 'Goal'}
+                  returnKeyType="done"
+                  maxLength={editing.what === 'name' ? 40 : 140}
+                  style={[styles.edit, { color: c.ink, borderColor: c.accent, backgroundColor: c.surface }]}
+                  selectionColor={c.accent}
+                />
+              </View>
+            ) : null}
+            {group && (project?.goal || project?.due_at) ? (
+              <View style={[styles.project, { backgroundColor: c.surface, borderColor: c.line }]}>
+                {project.goal ? <Text style={{ fontFamily: font.serifMedium, fontSize: 19, lineHeight: 25, color: c.ink }}>{project.goal}</Text> : null}
+                {project.due_at ? <Text style={[type.small, { color: project.due_at < now ? c.danger : c.soft }]}>{dueIn(project.due_at)}</Text> : null}
+                <View style={[styles.track, { backgroundColor: c.rule }]}>
+                  <View style={{ height: 6, borderRadius: 3, backgroundColor: c.accent, width: `${steps.total ? Math.round((steps.done / steps.total) * 100) : 0}%` }} />
+                </View>
+                <Text style={[type.small, { color: c.soft }]}>{progressLabel(steps.done, steps.total)}</Text>
+                {steps.next ? <Text style={[type.small, { color: c.ink }]}>Next: {steps.next}</Text> : null}
+              </View>
+            ) : null}
             {missing ? (
               <Text style={[type.body, styles.note, { color: c.soft }]}>
                 Groups follow your links, so this one merged or split. Go back to the map to find its thoughts.
@@ -121,6 +201,12 @@ export default function GroupScreen() {
         }}
       />
       <CaptureBar />
+      <ActionSheet
+        visible={sheet !== null}
+        title={sheet === 'merge' ? 'Merge into' : undefined}
+        options={sheet === 'merge' ? mergeOptions : moreOptions}
+        onClose={() => setSheet(null)}
+      />
     </View>
   );
 }
@@ -128,4 +214,7 @@ export default function GroupScreen() {
 const styles = StyleSheet.create({
   near: { alignItems: 'center', gap: 8, paddingHorizontal: 24 },
   note: { paddingHorizontal: 24 },
+  edit: { height: 52, borderRadius: 26, borderWidth: 2, paddingHorizontal: 18, fontFamily: font.medium, fontSize: 16 },
+  project: { marginHorizontal: 16, padding: 16, borderRadius: 20, borderWidth: 1, gap: 8 },
+  track: { height: 6, borderRadius: 3, overflow: 'hidden' },
 });

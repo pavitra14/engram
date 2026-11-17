@@ -7,12 +7,15 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useFlag } from '@/cloud/flags';
-import { translateAll } from '@/lib/translate';
+import { runSummary, translateAll } from '@/lib/translate';
 import { CloudSection } from '@/components/CloudSection';
-import { ActionSheet } from '@/components/ActionSheet';
-import { Header, Notice } from '@/components/ui';
+import { ActionSheet, type SheetOption } from '@/components/ActionSheet';
+import { Header, Notice, Pill } from '@/components/ui';
 import * as repo from '@/db/repo';
-import { exportBackup, importBackup } from '@/lib/backup';
+import { autoBackupFolder, chooseBackupFolder, exportBackup, exportMarkdown, importBackup, importNotes, stopAutoBackup } from '@/lib/backup';
+import { type Briefs, briefSettings, EVENINGS, MORNINGS, saveBriefSettings } from '@/lib/briefs';
+import { canLock, confirmItIsYou, LOCK_DELAYS, type LockSetting, lockSetting, saveLockSetting } from '@/lib/lock';
+import { allowed as notificationsAllowed } from '@/lib/reminders';
 import { dataChanged, useDataVersion } from '@/lib/bus';
 import { askForCalendar, calendarAllowed } from '@/lib/calendar';
 import { rebuildAllLinks } from '@/lib/capture';
@@ -20,7 +23,7 @@ import { loadSamples } from '@/lib/samples';
 import { MODEL_SIZE_NOTE, useSemanticState } from '@/lib/semantic';
 import { disableSmartLinking, enableSmartLinking } from '@/lib/smart';
 import { canTranscribeOnDevice, SPEECH_LANGS, speechLang } from '@/lib/useVoice';
-import { type AppearanceSetting, type, useTheme } from '@/theme';
+import { ACCENT_NAMES, ACCENTS, type AppearanceSetting, type, useTheme } from '@/theme';
 
 function Row({ title, sub, action, onPress, danger }: { title: string; sub: string; action: string; onPress: () => void; danger?: boolean }) {
   const { c } = useTheme();
@@ -98,7 +101,7 @@ const APPEARANCES: { value: AppearanceSetting; label: string }[] = [
 
 export default function SettingsScreen() {
   const db = useDb();
-  const { c, appearance, setAppearance } = useTheme();
+  const { c, appearance, setAppearance, accent, setAccent } = useTheme();
   const insets = useSafeAreaInsets();
   const version = useDataVersion();
   const [lang, setLang] = useState<string | null>(null);
@@ -119,6 +122,41 @@ export default function SettingsScreen() {
     repo.getMeta(db, 'translate').then((v) => setTranslate(v === 'on'));
   }, [db]);
   const [homeView, setHomeView] = useState<HomeView>('list');
+  const [plainReminders, setPlainReminders] = useState(true);
+  const [shake, setShake] = useState(false);
+  const [tileOpens, setTileOpens] = useState<'voice' | 'note'>('voice');
+  const [briefs, setBriefs] = useState<Briefs>({ morning: null, evening: null, sticky: false });
+  const [lock, setLock] = useState<LockSetting>({ on: false, afterMs: 0 });
+  const [backupTo, setBackupTo] = useState<{ folder: string | null; last: number }>({ folder: null, last: 0 });
+  const [trashed, setTrashed] = useState(0);
+  const [choice, setChoice] = useState<{ title: string; options: SheetOption[] } | null>(null);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const [pr, sh, tile, b, l, folder, last, trash] = await Promise.all([
+        repo.getMeta(db, 'plain_reminders'),
+        repo.getMeta(db, 'shake'),
+        repo.getMeta(db, 'tile_opens'),
+        briefSettings(db),
+        lockSetting(db),
+        autoBackupFolder(db),
+        repo.getMeta(db, 'backup_last'),
+        repo.listTrash(db),
+      ]);
+      if (!live) return;
+      setPlainReminders(pr !== 'off');
+      setShake(sh === 'on');
+      setTileOpens(tile === 'note' ? 'note' : 'voice');
+      setBriefs(b);
+      setLock(l);
+      setBackupTo({ folder, last: Number(last) || 0 });
+      setTrashed(trash.length);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [db, version]);
+
   const [pack, setPack] = useState<'unknown' | 'missing' | 'downloading' | 'installed'>('unknown');
   const polling = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -207,6 +245,35 @@ export default function SettingsScreen() {
     }
   };
 
+  const changeBriefs = (next: Briefs) =>
+    run(async () => {
+      // The first one switched on is when Engram asks to send notifications.
+      if ((next.sticky || next.morning != null || next.evening != null) && !(await notificationsAllowed())) {
+        return 'Notifications are off for Engram. Turn them on in system settings first.';
+      }
+      setBriefs(next);
+      await saveBriefSettings(db, next);
+      return null;
+    });
+  const hour = (h: number) => `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'am' : 'pm'}`;
+  const chooseHour = (title: string, hours: number[], set: (h: number | null) => void) =>
+    setChoice({
+      title,
+      options: [...hours.map((h) => ({ label: `At ${hour(h)}`, onPress: () => set(h) })), { label: 'Off', icon: 'x' as const, onPress: () => set(null) }],
+    });
+
+  const toggleLock = () =>
+    run(async () => {
+      if (!lock.on && !(await canLock())) return 'This phone has no screen lock. Set a PIN, pattern or fingerprint in system settings first.';
+      // Turning it on or off both need you to prove it is you.
+      if (!(await confirmItIsYou(lock.on ? 'Turn off app lock' : 'Turn on app lock'))) return 'App lock was not changed.';
+      const next = { ...lock, on: !lock.on };
+      setLock(next);
+      await saveLockSetting(db, next);
+      dataChanged();
+      return null;
+    });
+
   const langLabel = SPEECH_LANGS.find((l) => l.code === lang)?.label ?? 'English';
 
   const toggleCalendar = () =>
@@ -235,7 +302,7 @@ export default function SettingsScreen() {
   const smartBusy = smart.status === 'downloading' || smart.status === 'indexing';
 
   const confirmWipe = () => {
-    Alert.alert('Delete everything?', `All ${count} thoughts, their links and tags are deleted from this phone. This cannot be undone.`, [
+    Alert.alert('Delete everything?', `All ${count} thoughts, their links and tags, and everything in the trash, are deleted from this phone. This cannot be undone.`, [
       { text: 'Keep my thoughts', style: 'cancel' },
       {
         text: 'Delete everything',
@@ -260,6 +327,15 @@ export default function SettingsScreen() {
           <Section title="Appearance">
             <Segments options={APPEARANCES} value={appearance} onChange={setAppearance} />
             <Text style={[type.meta, { color: c.soft }]}>Black uses true black to save power on AMOLED screens. System follows your phone.</Text>
+          </Section>
+
+          <Section title="Accent colour">
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {ACCENT_NAMES.map((a) => (
+                <Pill key={a} label={ACCENTS[a].label} selected={accent === a} onPress={() => setAccent(a)} />
+              ))}
+            </ScrollView>
+            <Text style={[type.meta, { color: c.soft }]}>The colour of buttons and links. Widgets and the app icon stay cobalt.</Text>
           </Section>
 
           <Section title="Home screen">
@@ -290,6 +366,103 @@ export default function SettingsScreen() {
                 void repo.setMeta(db, 'daily_question', dailyQ ? 'off' : 'on');
               }}
             />
+          </Section>
+
+          <Section title="Catching thoughts">
+            <View>
+              <Row
+                title="Reminders from plain words"
+                sub={plainReminders ? 'On. "Call the bank Friday 10am", typed or spoken, sets that reminder. A message lets you undo it.' : 'Off. Reminders are only set by hand.'}
+                action={plainReminders ? 'Turn off' : 'Turn on'}
+                onPress={() => {
+                  setPlainReminders(!plainReminders);
+                  void repo.setMeta(db, 'plain_reminders', plainReminders ? 'off' : 'on');
+                }}
+              />
+              <Row
+                title="Shake to record"
+                sub={shake ? 'On. Shake the phone while Engram is open to start a voice note.' : 'Off. Works only while Engram is open.'}
+                action={shake ? 'Turn off' : 'Turn on'}
+                onPress={() => {
+                  setShake(!shake);
+                  void repo.setMeta(db, 'shake', shake ? 'off' : 'on').then(() => dataChanged());
+                }}
+              />
+              <Row
+                title="Quick-note notification"
+                sub={briefs.sticky ? 'On. A quiet notification stays in the shade: tap it to write, or use Speak.' : 'Off.'}
+                action={briefs.sticky ? 'Turn off' : 'Turn on'}
+                onPress={() => void changeBriefs({ ...briefs, sticky: !briefs.sticky })}
+              />
+              <Row
+                title="Quick Settings tile"
+                sub={`Opens ${tileOpens === 'voice' ? 'a voice note' : 'a new note'}. To add it, swipe down twice from the top of the screen, tap the pencil, and drag "New thought" into your tiles.`}
+                action={tileOpens === 'voice' ? 'Use note' : 'Use voice'}
+                onPress={() => {
+                  const next = tileOpens === 'voice' ? 'note' : 'voice';
+                  setTileOpens(next);
+                  void repo.setMeta(db, 'tile_opens', next);
+                }}
+              />
+            </View>
+            <Text style={[type.meta, { color: c.soft }]}>
+              Hold the Engram icon on your home screen for shortcuts to a voice note, a new note and your to-dos. On a Pixel, Quick Tap
+              (system settings, Gestures) can open Engram when you tap the back of the phone twice.
+            </Text>
+          </Section>
+
+          <Section title="Through the day">
+            <View>
+              <Row
+                title="Morning brief"
+                sub={briefs.morning != null ? `At ${hour(briefs.morning)}: what is due today and the day's question.` : 'Off. A notification with what is due today.'}
+                action="Change"
+                onPress={() => chooseHour('Morning brief', MORNINGS, (h) => void changeBriefs({ ...briefs, morning: h }))}
+              />
+              <Row
+                title="Evening wrap-up"
+                sub={briefs.evening != null ? `At ${hour(briefs.evening)}: how much you saved today, and a nudge to pick out the to-dos.` : 'Off. A notification at the end of the day.'}
+                action="Change"
+                onPress={() => chooseHour('Evening wrap-up', EVENINGS, (h) => void changeBriefs({ ...briefs, evening: h }))}
+              />
+            </View>
+            <Text style={[type.meta, { color: c.soft }]}>
+              Both are written on this phone from your own list. They are as up to date as the last time you opened Engram.
+            </Text>
+          </Section>
+
+          <Section title="Privacy">
+            <View>
+              <Row
+                title="App lock"
+                sub={lock.on ? 'On. Engram asks for your fingerprint, face or PIN when you open it.' : 'Off. Anyone holding the unlocked phone can open Engram.'}
+                action={lock.on ? 'Turn off' : 'Turn on'}
+                onPress={toggleLock}
+              />
+              {lock.on ? (
+                <Row
+                  title="Lock"
+                  sub={LOCK_DELAYS.find((d) => d.ms === lock.afterMs)?.label ?? 'Straight away'}
+                  action="Change"
+                  onPress={() =>
+                    setChoice({
+                      title: 'Lock Engram',
+                      options: LOCK_DELAYS.map((d) => ({
+                        label: `${d.label}${d.ms ? ' away' : ''}`,
+                        onPress: () => {
+                          const next = { ...lock, afterMs: d.ms };
+                          setLock(next);
+                          void saveLockSetting(db, next).then(() => dataChanged());
+                        },
+                      })),
+                    })
+                  }
+                />
+              ) : null}
+            </View>
+            <Text style={[type.meta, { color: c.soft }]}>
+              Sharing into Engram, widgets and new notes still work while it is locked. Reading anything needs the unlock.
+            </Text>
           </Section>
 
           <Section title="Voice notes">
@@ -355,15 +528,13 @@ export default function SettingsScreen() {
                     dataChanged();
                     return 'English versions removed. Your notes are unchanged.';
                   }
-                  try {
-                    const n = await translateAll(db);
-                    return n === 0 ? 'On. None of your notes needed translating.' : `On. ${n} ${n === 1 ? 'note has' : 'notes have'} an English version now.`;
-                  } catch {
-                    return 'On, but a language pack could not be downloaded just now. Notes will be translated as you save them once you are online.';
-                  }
+                  return runSummary(await translateAll(db));
                 })
               }
             />
+            {translate ? (
+              <Row title="Translate notes not yet done" sub="Checks notes that were skipped or failed last time" action="Try again" onPress={() => run(async () => runSummary(await translateAll(db)))} />
+            ) : null}
             <Text style={[type.meta, { color: c.soft }]}>
               Translation happens on this phone. Your words are not sent anywhere; the first note in each language downloads a
               language pack of about 30 MB from Google. The original is always kept.
@@ -382,7 +553,10 @@ export default function SettingsScreen() {
           </Section>
 
           <Section title="Help">
-            <Row title="The tour" sub="Five short pages on what Engram does and how to use it" action="Show" onPress={() => router.push('/tour')} />
+            <View>
+              <Row title="The tour" sub="Five short pages on what Engram does and how to use it" action="Show" onPress={() => router.push('/tour')} />
+              <Row title="The month in review" sub="A month of your notes in a few numbers" action="Open" onPress={() => router.push('/recap')} />
+            </View>
           </Section>
 
           {cloudOn ? (
@@ -405,6 +579,41 @@ export default function SettingsScreen() {
                   })
                 }
               />
+              <Row
+                title="Back up every week"
+                sub={
+                  backupTo.folder
+                    ? `On. ${backupTo.last ? `Last written ${new Date(backupTo.last).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}.` : 'Not written yet.'} Words, tags and links; files and recordings are not included.`
+                    : 'Off. Choose a folder and Engram writes a backup file there once a week when you open it.'
+                }
+                action={backupTo.folder ? 'Stop' : 'Choose'}
+                onPress={() =>
+                  run(async () => {
+                    if (backupTo.folder) {
+                      await stopAutoBackup(db);
+                      setBackupTo({ folder: null, last: backupTo.last });
+                      return 'Weekly backups stopped. Files already written stay where they are.';
+                    }
+                    if (!(await chooseBackupFolder(db))) return null;
+                    setBackupTo({ folder: await autoBackupFolder(db), last: Date.now() });
+                    return 'The first backup is in that folder. A new one is written each week.';
+                  })
+                }
+              />
+              <Row title="Export as Markdown" sub="A zip with one .md file per note, links as [[Title]]. Opens in Obsidian and similar apps." action="Export" onPress={() => run(async () => `Exported ${await exportMarkdown(db)} notes.`)} />
+              <Row
+                title="Bring in notes"
+                sub="Markdown or text files, Google Keep's Takeout files, or a zip of them"
+                action="Import"
+                onPress={() =>
+                  run(async () => {
+                    const r = await importNotes(db, rebuildAllLinks);
+                    if (!r) return null;
+                    return `Added ${r.added} ${r.added === 1 ? 'note' : 'notes'}.${r.skipped ? ` ${r.skipped} ${r.skipped === 1 ? 'file was' : 'files were'} not notes and were left out.` : ''}`;
+                  })
+                }
+              />
+              <Row title="Trash" sub={trashed === 0 ? 'Empty. Deleted thoughts wait here for 30 days.' : `${trashed} deleted ${trashed === 1 ? 'thought' : 'thoughts'}, kept for 30 days`} action="Open" onPress={() => router.push('/trash')} />
               <Row title="Rebuild links" sub="Recalculate automatic links and groups" action="Rebuild" onPress={() => run(async () => `Found ${await rebuildAllLinks(db)} links.`)} />
               {count === 0 ? (
                 <Row title="Sample thoughts" sub="See how Engram works with examples" action="Load" onPress={() => run(async () => ((await loadSamples(db)) ? 'Sample thoughts loaded.' : null))} />
@@ -417,6 +626,7 @@ export default function SettingsScreen() {
           <Text style={[type.meta, { color: c.faint }]}>Engram {Constants.expoConfig?.version ?? ''}</Text>
         </View>
       </ScrollView>
+      <ActionSheet visible={choice !== null} title={choice?.title} options={choice?.options ?? []} onClose={() => setChoice(null)} />
       <ActionSheet
         visible={choosingLang}
         title="Voice language"

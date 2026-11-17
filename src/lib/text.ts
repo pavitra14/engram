@@ -213,3 +213,69 @@ export function dueBucket(at: number | null, now: number = Date.now()): DueBucke
 }
 
 export const repeatLabel = { daily: 'Every day', weekly: 'Every week', monthly: 'Every month' } as const;
+
+// ---------- [[links]], @people and a guess at English ----------
+
+/** The note titles a text points at with [[Title]]. */
+export function wikiLinks(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/\[\[([^\[\]\n]{1,140})\]\]/g)) {
+    const title = m[1].split('|')[0].trim();
+    if (title) out.add(title);
+  }
+  return [...out];
+}
+
+/** The same text with every [[old]] pointing at [[next]] instead. */
+export function renameWikiLink(text: string, old: string, next: string): string {
+  const esc = old.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(`\\[\\[\\s*${esc}\\s*(\\|[^\\]\\n]*)?\\]\\]`, 'gi'), (_m, alias?: string) => `[[${next}${alias ?? ''}]]`);
+}
+
+/** People named with @name. An email address is not a person. */
+export function peopleIn(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/(^|[\s(,;])@([\p{L}][\p{L}\p{N}_-]{1,30})/gu)) out.add(`@${m[2].toLowerCase()}`);
+  return [...out];
+}
+
+const ENGLISH = new Set(
+  'the a an and or but to of in on at for with from by is are was were be been it its this that these those i you he she we they my your our me not no do does did have has had will would can could should what when where why how if then so as about just more some any all there here up out into over than too very also only need want get got make made go going call buy check send write read ask tell remember idea note notes meeting today tomorrow week day time new next'.split(
+    ' ',
+  ),
+);
+
+/**
+ * Whether text is plainly English already, so it needs no translating. Used to
+ * avoid asking the translator about English notes at all. Anything in another
+ * script is not English; short Latin text with no common English word is "cannot tell".
+ */
+export function looksEnglish(text: string): boolean {
+  const words = text.toLowerCase().match(/[\p{L}']+/gu) ?? [];
+  if (words.length === 0) return true;
+  if (/[^\u0000-ɏ -⁯₠-⃏]/.test(words.join(''))) return false;
+  const ascii = words.every((w) => /^[a-z']+$/.test(w));
+  const hits = words.filter((w) => ENGLISH.has(w)).length;
+  // A word or two with no accents is taken as English: a pack download for "Milk" helps nobody.
+  if (words.length <= 3) return ascii;
+  return hits * 5 >= words.length;
+}
+
+const wordSet = (text: string) => new Set((text.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? []).filter((w) => !ENGLISH.has(w)));
+
+/**
+ * The first of `others` that says nearly the same thing as `text`: at least
+ * three telling words, and four fifths of the words of both in common.
+ */
+export function nearDuplicate<T extends { id: string; text: string }>(text: string, others: T[]): T | null {
+  const mine = wordSet(text);
+  if (mine.size < 3) return null;
+  for (const o of others) {
+    const theirs = wordSet(o.text);
+    if (theirs.size < 3) continue;
+    let both = 0;
+    for (const w of mine) if (theirs.has(w)) both += 1;
+    if (both / (mine.size + theirs.size - both) >= 0.8) return o;
+  }
+  return null;
+}

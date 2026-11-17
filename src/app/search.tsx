@@ -32,6 +32,35 @@ export default function SearchScreen() {
   const [hits, setHits] = useState<Thought[] | null>(null);
 
   const q = query.trim();
+  const [saved, setSaved] = useState<string[]>([]);
+  const [people, setPeople] = useState<string[]>([]);
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      let list: string[] = [];
+      try {
+        const v = JSON.parse((await repo.getMeta(db, 'saved_searches')) ?? '[]');
+        if (Array.isArray(v)) list = v.filter((x) => typeof x === 'string');
+      } catch {
+        list = [];
+      }
+      const names = [...new Set((await repo.allTagPairs(db)).map((p) => p.name).filter((n) => n.startsWith('@')))].sort();
+      if (!live) return;
+      setSaved(list);
+      setPeople(names);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [db, brain]);
+
+  const isSaved = saved.some((x) => x.toLowerCase() === q.toLowerCase());
+  const toggleSaved = () => {
+    const next = isSaved ? saved.filter((x) => x.toLowerCase() !== q.toLowerCase()) : [q, ...saved].slice(0, 12);
+    setSaved(next);
+    void repo.setMeta(db, 'saved_searches', JSON.stringify(next));
+  };
 
   useEffect(() => {
     let live = true;
@@ -83,11 +112,31 @@ export default function SearchScreen() {
       {q ? (
         <View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.filters}>
+            <Pill label={isSaved ? 'Saved' : 'Save this search'} icon="bookmark" selected={isSaved} onPress={toggleSaved} />
             <Pill label={`All, ${hits?.length ?? 0}`} selected={kind === null} onPress={() => setKind(null)} />
             {KINDS.map((k) => (
               <Pill key={k} label={`${PLURAL[k]}, ${counts.get(k) ?? 0}`} selected={kind === k} onPress={() => setKind(kind === k ? null : k)} />
             ))}
           </ScrollView>
+        </View>
+      ) : saved.length > 0 || people.length > 0 ? (
+        <View style={{ gap: 4 }}>
+          {saved.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.filters}>
+              <Text style={[type.meta, { color: c.soft, alignSelf: 'center' }]}>Saved</Text>
+              {saved.map((x) => (
+                <Pill key={x} label={x} icon="bookmark" onPress={() => setQuery(x)} />
+              ))}
+            </ScrollView>
+          ) : null}
+          {people.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.filters}>
+              <Text style={[type.meta, { color: c.soft, alignSelf: 'center' }]}>People</Text>
+              {people.map((x) => (
+                <Pill key={x} label={x} onPress={() => setQuery(x)} />
+              ))}
+            </ScrollView>
+          ) : null}
         </View>
       ) : null}
 
@@ -128,7 +177,7 @@ export default function SearchScreen() {
         ListEmptyComponent={
           <Text style={[type.body, styles.none, { color: c.soft }]}>
             {!q
-              ? 'Search the words in any thought, transcript or link.'
+              ? 'Search the words in any thought, transcript, link or picture. Write @name in a note and that person appears here.'
               : hits === null
                 ? ''
                 : 'Nothing matches. Try fewer words or another filter.'}

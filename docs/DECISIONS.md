@@ -264,3 +264,27 @@ _16 Nov 2026, owner's request._
 
 **Decision.** Three small additions aimed at coming back and at finishing things. Today shows one question a day that becomes a note's title when answered (hide it for the day, or switch it off in Settings). A weekly review shows the week in four numbers and a bar per day, the group most on your mind, and up to five notes untouched for two weeks to keep, turn into a to-do, or delete. A new note can start from one of five outlines.
 **Why these.** Each uses what is already stored and needs no new library or permission.
+
+## D41. Delete means trash; the trash and other marks are local (0.6)
+
+Deleting sets `trashed_at` and offers Undo; the row is removed for good after 30 days. Confirmation dialogs for delete were dropped in favour of undo. `pinned`, `trashed_at`, `recall_*`, `list` and `focus_min` are in `LOCAL_THOUGHT_COLUMNS` and are never sent to Engram Cloud, so the server schema did not change. Consequence: a note trashed on one phone stays on another until the 30 days pass and the real delete syncs. Revisit when the cloud flag is turned on.
+
+## D42. A group's name is stored against its members (0.6)
+
+Group ids are derived and change. A `projects` row keeps the member ids it was given for and is carried by whichever group now holds more than half of them (`matchProjects`). Merging groups is done with manual links, because groups only ever follow links.
+
+## D43. Reminders from words are cautious, and only for the person's own words (0.6)
+
+`parseWhen` reads the first line only, needs a day, a relative time or an unambiguous clock time, and treats "Sat", "Sun", "Wed" and "may" as words. Shared, pasted and imported text never sets a reminder. Every one set shows a toast with Undo.
+
+## D44. English notes never reach the translator (0.6)
+
+ML Kit downloads a model even for English to English, and one failure rejected the whole call. `looksEnglish` (script check plus common words) marks such notes as English without calling it. Short Latin text with no common English word still goes to the translator.
+
+## D45. OCR uses ML Kit through expo-text-extractor (0.6)
+
+On the phone, Latin script only, delivered by Google Play services (which may download the recogniser once; nothing of the person's is sent). Loaded with a lazy `require` like executorch. Words are derived data in `image_text`.
+
+## D46. Left out of 0.6 on purpose
+
+Wear OS (a second app target), an on-phone LLM (about 1 GB, heavy native code, untestable in CI), place reminders (background location against the privacy rule's spirit), encrypted backups (no vetted cipher in the dependency set), image cards (needs a view-capture library). Shake works only while the app is open: background listening would need a permanent foreground service.

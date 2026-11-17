@@ -60,6 +60,7 @@ export function TodoRow({ thought, divider = true }: { thought: Thought; divider
             </Text>
           </View>
         ) : null}
+        {!done && thought.focus_min ? <Text style={[type.meta, { color: c.soft }]}>{thought.focus_min} min of focus so far</Text> : null}
       </Pressable>
       {done ? null : (
         <Pressable

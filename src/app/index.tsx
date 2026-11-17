@@ -13,13 +13,21 @@ import { Button, Header, Pill, RoundButton } from '@/components/ui';
 import * as repo from '@/db/repo';
 import type { Thought } from '@/db/types';
 import { placement, useBrain } from '@/lib/brain';
+import { answerSuggestion, removeThought, type Suggestion, suggestLinks } from '@/lib/capture';
+import { askLater, keepRemembering, stopRemembering } from '@/lib/actions';
 import { type DayEvent, eventsToday, noteForEvent } from '@/lib/calendar';
+import { DECISION_STEP, dueRecalls, milestone, onThisDay, surprise } from '@/lib/recall';
+import { showToast } from '@/lib/toast';
 import { loadSamples } from '@/lib/samples';
-import { questionFor, weekOf } from '@/lib/habits';
-import { dayLabel, daysAgo, longDate, timeOfDay, when } from '@/lib/text';
+import { questionFor, streak, weekOf } from '@/lib/habits';
+import { dayLabel, daysAgo, longDate, timeOfDay, titleOf, when } from '@/lib/text';
 import { font, type, useTheme } from '@/theme';
 
 type HomeView = 'list' | 'split' | 'map';
+
+/** Link suggestions answered since the app opened. A few at a sitting is enough. */
+let suggestionsAnswered = 0;
+const SUGGESTIONS_PER_SITTING = 3;
 
 /**
  * Home. Three layouts, chosen in Settings: the list of thoughts (the default),
@@ -36,6 +44,47 @@ export default function HomeScreen() {
   const [view, setView] = useState<HomeView>('list');
   const [toured, setToured] = useState(false);
   const [question, setQuestion] = useState<'show' | 'hide'>('hide');
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+
+  // One pair that nearly linked, worked out a moment after the list has settled.
+  useEffect(() => {
+    if (!brain || brain.thoughts.length < 4 || suggestionsAnswered >= SUGGESTIONS_PER_SITTING) return;
+    let live = true;
+    const timer = setTimeout(() => {
+      void suggestLinks(db, 1)
+        .then((rows) => {
+          if (live) setSuggestion(rows[0] ?? null);
+        })
+        .catch(() => {});
+    }, 900);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [db, brain]);
+
+  // A milestone is mentioned once, quietly. Loading many thoughts at once (samples, a backup) passes them without comment.
+  useEffect(() => {
+    if (!brain) return;
+    void (async () => {
+      const n = brain.thoughts.length;
+      const before = Number(await repo.getMeta(db, 'count_seen')) || 0;
+      if (n === before) return;
+      await repo.setMeta(db, 'count_seen', String(n));
+      let seen: string[] = [];
+      try {
+        seen = JSON.parse((await repo.getMeta(db, 'milestones')) ?? '[]');
+      } catch {
+        seen = [];
+      }
+      const all: string[] = [];
+      for (let m = milestone(n, streak(brain.thoughts), [...seen, ...all]); m; m = milestone(n, streak(brain.thoughts), [...seen, ...all])) all.push(m.key);
+      if (all.length === 0) return;
+      const newest = milestone(n, streak(brain.thoughts), seen);
+      await repo.setMeta(db, 'milestones', JSON.stringify([...seen, ...all]));
+      if (newest && n - before === 1) showToast(newest.text);
+    })();
+  }, [db, brain]);
 
   // A new install starts with the tour. A phone that already holds thoughts has no need of it.
   useEffect(() => {
@@ -103,6 +152,12 @@ export default function HomeScreen() {
     return old.length ? old[Math.floor(now / 86_400_000) % old.length] : null;
   }, [brain, now]);
 
+  const pinned = useMemo(() => (brain?.thoughts ?? []).filter((t) => t.pinned).sort((a, b) => (b.pinned ?? 0) - (a.pinned ?? 0)), [brain]);
+  // Something that asked to come back today takes the place of "Worth another look".
+  const due = useMemo(() => dueRecalls(brain?.thoughts ?? [], now)[0] ?? null, [brain, now]);
+  const thisDay = useMemo(() => onThisDay(brain?.thoughts ?? [], now), [brain, now]);
+  const openThought = (id: string) => router.push({ pathname: '/thought/[id]', params: { id } });
+
   const today = brain?.thoughts.filter((t) => daysAgo(t.created_at) <= 0).length ?? 0;
   const empty = brain !== null && brain.thoughts.length === 0;
 
@@ -144,6 +199,15 @@ export default function HomeScreen() {
               }}
             />
           </View>
+        </View>
+      ) : null}
+
+      {pinned.length > 0 ? (
+        <View>
+          <Text style={[type.labelStrong, styles.heading, { color: c.ink }]}>Pinned</Text>
+          {pinned.map((t, i) => (
+            <Entry key={t.id} thought={t} size="small" divider={i < pinned.length - 1} onPress={() => openThought(t.id)} />
+          ))}
         </View>
       ) : null}
 
@@ -198,16 +262,95 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      {again ? (
+      {due ? (
+        <View style={[styles.ask, { backgroundColor: c.surface, borderColor: c.line }]}>
+          <Text style={[type.meta, { color: c.soft }]}>
+            {due.recall_step === DECISION_STEP ? `You decided this ${when(due.created_at)}. How did it turn out?` : `You asked to remember this. Still useful?`}
+          </Text>
+          <Pressable accessibilityRole="button" accessibilityHint="Opens this note" onPress={() => openThought(due.id)}>
+            <Text style={{ fontFamily: font.serifMedium, fontSize: 21, lineHeight: 27, color: c.ink }} numberOfLines={3}>
+              {titleOf(due)}
+            </Text>
+          </Pressable>
+          {due.recall_step === DECISION_STEP ? (
+            <View style={styles.askRow}>
+              <Button
+                title="Write what happened"
+                tone="solid"
+                onPress={() => {
+                  void stopRemembering(db, due);
+                  openThought(due.id);
+                }}
+              />
+              <Button title="Ask in a month" onPress={() => void askLater(db, due)} />
+            </View>
+          ) : (
+            <View style={styles.askRow}>
+              <Button
+                title="Keep"
+                tone="solid"
+                onPress={() => void keepRemembering(db, due).then((more) => showToast(more ? 'It will come back again later.' : 'That was the last time. It stays in your notes.'))}
+              />
+              <Button title="Done with it" onPress={() => void stopRemembering(db, due)} />
+              <Button title="Delete" tone="danger" onPress={() => void removeThought(db, due)} />
+            </View>
+          )}
+        </View>
+      ) : null}
+
+      {!due && (thisDay || again) ? (
         <View>
-          <Text style={[type.labelStrong, styles.heading, { color: c.ink }]}>Worth another look</Text>
-          <Entry
-            thought={again}
-            size="small"
-            sub={`You saved this ${when(again.created_at)}. Still true? Still to do?`}
-            divider={false}
-            onPress={() => router.push({ pathname: '/thought/[id]', params: { id: again.id } })}
-          />
+          <View style={styles.todoHead}>
+            <Text style={[type.labelStrong, { color: c.ink }]}>{thisDay ? thisDay.ago : 'Worth another look'}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityHint="Opens an older note chosen at random"
+              onPress={() => {
+                const pick = surprise(brain?.thoughts ?? [], Math.random());
+                if (pick) openThought(pick.id);
+              }}
+              hitSlop={8}
+              style={styles.seeAll}>
+              <Text style={[type.smallStrong, { color: c.accent }]}>Surprise me</Text>
+            </Pressable>
+          </View>
+          {thisDay ? (
+            <Entry thought={thisDay.thought} size="small" sub="You wrote this on this day." divider={false} onPress={() => openThought(thisDay.thought.id)} />
+          ) : again ? (
+            <Entry thought={again} size="small" sub={`You saved this ${when(again.created_at)}. Still true? Still to do?`} divider={false} onPress={() => openThought(again.id)} />
+          ) : null}
+        </View>
+      ) : null}
+
+      {suggestion ? (
+        <View style={[styles.ask, { backgroundColor: c.surface, borderColor: c.line }]}>
+          <Text style={[type.meta, { color: c.soft }]}>These two seem related</Text>
+          {[suggestion.a, suggestion.b].map((t) => (
+            <Pressable key={t.id} accessibilityRole="button" accessibilityHint="Opens this note" onPress={() => openThought(t.id)} style={styles.pair}>
+              <Text style={[type.thoughtSmall, { color: c.ink }]} numberOfLines={2}>
+                {titleOf(t)}
+              </Text>
+            </Pressable>
+          ))}
+          <View style={styles.askRow}>
+            <Button
+              title="Link them"
+              tone="solid"
+              onPress={() => {
+                suggestionsAnswered += 1;
+                setSuggestion(null);
+                void answerSuggestion(db, suggestion, true);
+              }}
+            />
+            <Button
+              title="Not related"
+              onPress={() => {
+                suggestionsAnswered += 1;
+                setSuggestion(null);
+                void answerSuggestion(db, suggestion, false);
+              }}
+            />
+          </View>
         </View>
       ) : null}
     </>
@@ -307,7 +450,8 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   ask: { marginHorizontal: 16, padding: 18, borderRadius: 20, borderWidth: 1, gap: 10 },
-  askRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  askRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
+  pair: { minHeight: 48, justifyContent: 'center' },
   week: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingHorizontal: 24 },
   groups: { gap: 8, paddingHorizontal: 24 },
   heading: { paddingHorizontal: 24, paddingBottom: 4 },

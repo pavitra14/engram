@@ -1,5 +1,7 @@
 # Roadmap
 
+> **0.6.0 shipped all 19 committed items below and most of the proposed list.** Still open: Wear OS tile, on-phone language model (ask your notes, summaries, better group names, suggested tags), place reminders, password-protected backups, share a note as an image, media in backups, inline tappable `[[links]]`. See `STATUS.md`.
+
 What is planned, in the owner's words where possible. `STATUS.md` says what works today; this page says what comes next. When an item ships, move it to `STATUS.md` and delete it here.
 
 Every item keeps the existing rules: works offline, nothing of the person's leaves the phone, 48 pt targets, colours from the theme.

@@ -14,9 +14,14 @@ import { plainDDL } from '../src/db/schema';
 import { type OpResult, type Remote, type RemoteRow, syncOnce } from '../src/cloud/sync';
 import { splitQuick } from '../src/lib/capture.logic';
 import { questionFor, streak, weekOf } from '../src/lib/habits';
+import { checkItems, progress, toggleCheck } from '../src/lib/checks';
 import { computeGroups } from '../src/lib/groups';
-import { meaningSimilarity, related, relateAll, surfaceTokens, tokenize, whyLinked } from '../src/lib/linker';
-import { dayLabel, daysAgo, dueBucket, dueLabel, fileSize, firstUrl, ftsQuery, highlightRuns, hostOf, htmlToText, isFormatted, nextRepeat, textToHtml, titleOf } from '../src/lib/text';
+import { fileNames, htmlToMarkdown, markdownToHtml, noteToMarkdown, parseKeep, parseTextFile } from '../src/lib/markdown';
+import { dueIn, matchProjects, orphaned } from '../src/lib/projects';
+import { DECISION_STEP, decisionRecall, dueRecalls, firstRecall, habitDoneToday, habitStreak, milestone, monthRecap, nextRecall, onThisDay, surprise, toggleHabit } from '../src/lib/recall';
+import { parseWhen } from '../src/lib/when';
+import { meaningSimilarity, nearMisses, related, relateAll, surfaceTokens, tokenize, whyLinked } from '../src/lib/linker';
+import { dayLabel, daysAgo, dueBucket, dueLabel, fileSize, firstUrl, ftsQuery, highlightRuns, hostOf, htmlToText, isFormatted, looksEnglish, nearDuplicate, nextRepeat, peopleIn, renameWikiLink, textToHtml, titleOf, wikiLinks } from '../src/lib/text';
 
 // --- database ---
 // The same repo code the phone runs, against node:sqlite. On the phone the tables are
@@ -468,9 +473,216 @@ assert.equal(dueBucket(noon + 24 * 3_600_000, noon), 'Tomorrow');
 assert.equal(dueBucket(noon + 3 * 86_400_000, noon), 'This week');
 assert.equal(dueBucket(noon + 30 * 86_400_000, noon), 'Later');
 
+
+// --- reminders in plain words ---
+// `noon` is Monday 16 November 2026, 12:00.
+const at = (y: number, mo: number, d: number, h = 9, mi = 0) => new Date(y, mo, d, h, mi).getTime();
+const whenIs = (text: string) => parseWhen(text, noon)?.at ?? null;
+assert.equal(whenIs('Call the bank Friday 10am'), at(2026, 10, 20, 10));
+assert.equal(whenIs('renew passport in 2 weeks'), at(2026, 10, 30));
+assert.equal(whenIs('Dentist tomorrow'), at(2026, 10, 17));
+assert.equal(whenIs('dinner with Meera tonight'), at(2026, 10, 16, 20));
+assert.equal(whenIs('dinner tonight at 8'), at(2026, 10, 16, 20));
+assert.equal(whenIs('stand-up today 5pm'), at(2026, 10, 16, 17));
+assert.equal(whenIs('stand-up today 9am'), null, 'a time already gone today sets nothing');
+assert.equal(whenIs('today was a good day'), null, '"today" alone says nothing about when');
+assert.equal(whenIs('take the bread out in 20 minutes'), noon + 20 * 60_000);
+assert.equal(whenIs('check the oven in an hour'), noon + 3_600_000);
+assert.equal(whenIs('plan the trip next week'), at(2026, 10, 23));
+assert.equal(whenIs('review budget next Friday'), at(2026, 10, 27), '"next Friday" is the one in the week after this');
+assert.equal(whenIs('gym on Monday 6:30 pm'), at(2026, 10, 16, 18, 30), 'today, when the day named is today and the time is still ahead');
+assert.equal(whenIs('gym on Monday'), at(2026, 10, 23), 'with no time, a weekday named on that weekday means the next one');
+assert.equal(whenIs('market on Sat'), at(2026, 10, 21));
+assert.equal(whenIs('pay rent 3 Dec'), at(2026, 11, 3));
+assert.equal(whenIs('birthday Dec 3 at 18:30'), at(2026, 11, 3, 18, 30));
+assert.equal(whenIs('file taxes 3 Jan'), at(2027, 0, 3), 'a date already past this year means next year');
+assert.equal(whenIs('report due on the 20th'), at(2026, 10, 20));
+assert.equal(whenIs('call mum at 6'), at(2026, 10, 16, 18), '"at 6" with no am or pm is the next six on the clock in waking hours');
+assert.equal(whenIs('take pill 7am'), at(2026, 10, 17, 7), 'a clock time already past is tomorrow');
+assert.equal(whenIs('Sourdough crumb was too dense'), null);
+assert.equal(whenIs('The 3 body problem'), null);
+assert.equal(whenIs('I may go for a run'), null, 'the word may is not the month');
+assert.equal(whenIs('Sat on the bench and thought, the sun was out'), null, '"Sat" and "sun" are words, not days, unless they follow on, next or this');
+assert.equal(whenIs('https://example.com/friday-10am'), null, 'web addresses are never read for dates');
+assert.equal(parseWhen('Call the bank Friday 10am', noon)?.phrase, 'Friday 10am');
+
+// --- check boxes inside notes ---
+const boxes = '<html><h2>Before we go</h2><ul data-type="checkbox"><li checked>Book <b>train</b></li><li>Rent a scooter</li><li></li></ul><ul><li>not a box</li></ul><ul data-type="checkbox"><li>Offline maps</li></ul></html>';
+assert.deepEqual(checkItems(boxes), [
+  { index: 0, text: 'Book train', done: true },
+  { index: 1, text: 'Rent a scooter', done: false },
+  { index: 3, text: 'Offline maps', done: false },
+]);
+const ticked = toggleCheck(boxes, 1, true);
+assert.equal(ticked, boxes.replace('<li>Rent a scooter</li>', '<li checked>Rent a scooter</li>'), 'only that box changes');
+assert.equal(toggleCheck(ticked, 1, false), boxes, 'ticking and unticking gives the note back unchanged');
+assert.equal(toggleCheck(boxes, 0, false), boxes.replace('<li checked>', '<li>'));
+assert.equal(toggleCheck(boxes, 3, true).endsWith('<li checked>Offline maps</li></ul></html>'), true);
+assert.deepEqual(progress([boxes, null, '<html><p>none</p></html>']), { done: 1, total: 3, next: 'Rent a scooter' });
+assert.deepEqual(checkItems('<html><ul><li checked>plain list</li></ul></html>'), [], 'an ordinary list is not check boxes');
+
+// --- remember this, on this day, surprise, milestones, the month ---
+const first = firstRecall(noon);
+assert.deepEqual(first, { step: 0, at: at(2026, 10, 17) });
+assert.deepEqual(nextRecall(0, noon), { step: 1, at: at(2026, 10, 19) });
+assert.deepEqual(nextRecall(3, noon), { step: 4, at: at(2027, 0, 15) });
+assert.equal(nextRecall(4, noon), null, 'after the fifth showing it stops');
+assert.equal(nextRecall(DECISION_STEP, noon), null, 'a decision comes back once');
+assert.equal(decisionRecall(noon).at, at(2027, 1, 14));
+assert.deepEqual(dueRecalls([{ id: 'x', recall_step: 0, recall_at: noon - 5 }, { id: 'y', recall_step: 1, recall_at: noon + 5 }, { id: 'z', recall_step: null, recall_at: null }, { id: 'w', recall_step: 2, recall_at: noon - 50 }], noon).map((t) => t.id), ['w', 'x']);
+const past = [{ id: 'm1', created_at: at(2026, 9, 16, 8) }, { id: 'y1', created_at: at(2025, 10, 16, 23) }, { id: 'no', created_at: at(2026, 9, 15) }];
+assert.equal(onThisDay(past, noon)?.thought.id, 'y1', 'the furthest back wins');
+assert.equal(onThisDay(past.slice(0, 1), noon)?.ago, 'A month ago today');
+assert.equal(onThisDay(past.slice(2), noon), null);
+assert.equal(onThisDay([{ id: 'x', created_at: at(2026, 2, 1) }], at(2026, 2, 31, 12)), null, 'the 31st has no match in a shorter month');
+assert.equal(surprise(past, 0.99, noon)?.id, 'no');
+assert.equal(surprise([], 0.5, noon), null);
+assert.equal(milestone(100, 3, [])?.key, 'notes-100');
+assert.equal(milestone(100, 3, ['notes-10', 'notes-50', 'notes-100']), null, 'each milestone shows once');
+assert.equal(milestone(12, 7, ['notes-10'])?.text, '7 days in a row.');
+const month = monthRecap(
+  [
+    { id: 'a', created_at: at(2026, 10, 2), updated_at: at(2026, 10, 2) },
+    { id: 'b', created_at: at(2026, 10, 3) },
+    { id: 'c', created_at: at(2026, 10, 3, 15), todo: 1, done_at: at(2026, 10, 5) },
+    { id: 'd', created_at: at(2026, 10, 4) },
+    { id: 'e', created_at: at(2026, 9, 30), todo: 1, done_at: at(2026, 10, 1) },
+  ],
+  (id) => (id === 'a' ? null : 'Sourdough'),
+  noon,
+);
+assert.equal(month.notes, 4);
+assert.equal(month.done, 2);
+assert.equal(month.days, 3);
+assert.deepEqual(month.busiest, { day: at(2026, 10, 3, 0), count: 2 });
+assert.equal(month.longestStreak, 3);
+assert.deepEqual(month.topGroup, { name: 'Sourdough', count: 3 });
+assert.equal(month.forgotten, 'a');
+assert.equal(monthRecap([], () => null, noon, -1).label.includes('October'), true);
+let habit = { id: 'h', name: 'Read', days: [] as number[] };
+assert.equal(habitDoneToday(habit, noon), false);
+habit = toggleHabit(habit, noon - 86_400_000);
+habit = toggleHabit(habit, noon);
+assert.equal(habitStreak(habit, noon), 2);
+assert.equal(habitStreak(toggleHabit(habit, noon), noon), 1, 'unticking today keeps the streak that ran through yesterday');
+assert.equal(habitStreak(habit, noon + 3 * 86_400_000), 0);
+
+// --- names and projects follow a group's members ---
+const g = (id: string, members: string[]) => ({ id, name: id, members, tone: 0, near: [], newest: 0 });
+const proj = (id: string, members: string[]) => ({ id, name: `P${id}`, goal: null, due_at: null, members, notif_id: null });
+const carried = matchProjects([g('g1', ['a', 'b', 'c', 'x']), g('g2', ['d', 'e'])], [proj('1', ['a', 'b', 'c']), proj('2', ['d', 'e', 'f', 'q']), proj('3', ['a', 'b'])]);
+assert.equal(carried.get('g1')?.id, '1', 'the name stays when new thoughts join, and the larger overlap wins a group');
+assert.equal(carried.has('g2'), false, 'half the members is not "most of them"');
+assert.deepEqual(orphaned([g('g1', ['a', 'b', 'c'])], [proj('1', ['a', 'b', 'c']), proj('9', ['zz'])]).map((p) => p.id), ['9']);
+assert.equal(matchProjects([g('gA', ['a', 'b']), g('gB', ['c'])], [proj('1', ['a', 'b', 'c'])]).get('gA')?.id, '1', 'after a split the name follows the larger part');
+assert.equal(dueIn(noon + 5 * 86_400_000, noon), 'Due in 5 days');
+assert.equal(dueIn(noon - 86_400_000, noon), 'A day past its date');
+
+// --- Markdown out and in, Google Keep in ---
+const md = htmlToMarkdown('<html><h2>Plan</h2><p>Some <b>bold</b> and <i>slanted</i> &amp; more</p><ul data-type="checkbox"><li checked>One</li><li>Two</li></ul><ol><li>First</li><li>Second</li></ol><blockquote>Said</blockquote></html>');
+assert.equal(md, '## Plan\n\nSome **bold** and *slanted* & more\n\n- [x] One\n- [ ] Two\n\n1. First\n2. Second\n\n> Said');
+assert.equal(htmlToMarkdown(markdownToHtml(md)), md, 'Markdown survives a round trip through the editor format');
+const file = noteToMarkdown({ title: 'Hampi trip', body: 'plain', body_html: null, url: null, created_at: Date.UTC(2026, 0, 2), tags: ['travel', '@meera'], links: ['Pack list'] });
+assert.equal(file, '---\ncreated: 2026-01-02T00:00:00.000Z\ntags: [travel, @meera]\n---\n\n# Hampi trip\n\nplain\n\n## Linked\n\n- [[Pack list]]\n');
+const back = parseTextFile('Hampi trip.md', file);
+assert.deepEqual(back, { title: 'Hampi trip', body: 'plain', html: null, tags: ['travel', '@meera'], created_at: Date.UTC(2026, 0, 2) });
+assert.equal(parseTextFile('notes/Shopping.txt', 'milk\neggs')?.title, 'Shopping');
+assert.equal(parseTextFile('a.md', '# Title\n\n- [ ] one\n- [x] two')?.html, '<html><ul data-type="checkbox"><li>one</li><li checked>two</li></ul></html>');
+assert.equal(parseTextFile('.md', '   '), null);
+assert.deepEqual(fileNames(['A/B', 'a b', '', 'A:B']), ['A B', 'a b 2', 'Untitled', 'A B 3']);
+const keep = parseKeep(JSON.stringify({ title: 'Shop', listContent: [{ text: 'Milk', isChecked: true }, { text: 'Eggs <6>', isChecked: false }], labels: [{ name: 'home' }], createdTimestampUsec: 1700000000000000 }));
+assert.deepEqual(keep, { title: 'Shop', body: 'Milk\nEggs <6>', html: '<html><ul data-type="checkbox"><li checked>Milk</li><li>Eggs &lt;6&gt;</li></ul></html>', tags: ['home'], created_at: 1700000000000 });
+assert.equal(parseKeep(JSON.stringify({ title: 'x', textContent: 'y', isTrashed: true })), null, "notes in Keep's bin are left behind");
+assert.equal(parseKeep('{"app":"engram"}'), null);
+assert.equal(parseKeep('not json'), null);
+
+// --- [[links]], @people, English or not, near-duplicates ---
+assert.deepEqual(wikiLinks('See [[Pack list]] and [[Hampi trip|the trip]], again [[Pack list]]. Not [[]] or [[a\nb]].'), ['Pack list', 'Hampi trip']);
+assert.equal(renameWikiLink('See [[pack list]] and [[Pack list|mine]]', 'Pack list', 'Packing'), 'See [[Packing]] and [[Packing|mine]]');
+assert.deepEqual(peopleIn('Ask @Meera and (@sam_k), not me@example.com or @ alone'), ['@meera', '@sam_k']);
+assert.equal(looksEnglish('Call the bank about the new card'), true);
+assert.equal(looksEnglish('Milk'), true, 'a word or two is taken as English');
+assert.equal(looksEnglish('कल बैंक जाना है'), false);
+assert.equal(looksEnglish('Acheter du pain et des œufs pour demain matin'), false);
+assert.equal(looksEnglish('Comprar pan y huevos para manana temprano'), false, 'Latin letters with no common English word are sent to the translator');
+assert.equal(looksEnglish('https://example.com 42'), true);
+assert.equal(nearDuplicate('Sourdough crumb was too dense, try a longer proof', [{ id: 'a', text: 'Hampi trip' }, { id: 'b', text: 'sourdough crumb too dense: try longer proof' }])?.id, 'b');
+assert.equal(nearDuplicate('Sourdough crumb was too dense', [{ id: 'b', text: 'Sourdough starter needs feeding tonight' }]), null);
+assert.equal(nearDuplicate('Milk', [{ id: 'b', text: 'Milk' }]), null, 'too short to call a repeat');
+
+// --- link suggestions ---
+const linkedNow = new Set(all.map((l) => `${l.a}:${l.b}`));
+const maybe = nearMisses(docs, linkedNow);
+assert.ok(maybe.every((m) => !linkedNow.has(`${m.a}:${m.b}`) && m.a < m.b), 'suggestions never repeat a link that exists');
+if (maybe.length > 0) assert.equal(nearMisses(docs, new Set([...linkedNow, `${maybe[0].a}:${maybe[0].b}`])).some((m) => m.a === maybe[0].a && m.b === maybe[0].b), false, 'a dismissed pair is not suggested again');
+
+async function localChecks(): Promise<void> {
+  const db = nodeDb();
+  await repo.prepare(db);
+  const a = await repo.insertThought(db, { id: 'a', kind: 'text', title: 'Pack list', body: 'power bank, hat', created_at: 1 });
+  await repo.insertThought(db, { id: 'b', kind: 'image', body: '', media_path: 'file:///x.png', created_at: 2 });
+  await repo.insertThought(db, { id: 'c', kind: 'text', title: 'Trip', body: 'see [[Pack list]]', created_at: 3 });
+  await repo.upsertLink(db, 'a', 'c', 'auto', 0.5);
+
+  // Words read from a picture are searchable and belong to the picture.
+  assert.deepEqual((await repo.imagesNotRead(db)).map((r) => r.id), ['b']);
+  await repo.saveImageText(db, 'b', 'RECEIPT Total 420 rupees');
+  assert.deepEqual((await repo.searchThoughts(db, 'receipt')).map((t) => t.id), ['b']);
+  assert.equal((await repo.getThought(db, 'b'))?.seen_text, 'RECEIPT Total 420 rupees');
+  assert.deepEqual(await repo.imagesNotRead(db), []);
+
+  // [[links]] find their note by title; mentions are found for renaming.
+  assert.equal((await repo.findByTitle(db, 'pack LIST'))?.id, 'a');
+  assert.deepEqual((await repo.mentioning(db, 'Pack list')).map((t) => t.id), ['c']);
+
+  // Pinning and parking are this phone's own; they are not queued for the cloud.
+  repo.setTracking(true);
+  await repo.setPinned(db, 'a', true);
+  await repo.setRecall(db, 'a', 0, 99);
+  await repo.setList(db, 'a', 'someday');
+  await repo.addFocus(db, 'a', 25);
+  await repo.addFocus(db, 'a', 5);
+  await repo.trashThought(db, 'c');
+  assert.equal(await repo.outboxCount(db), 0, 'local marks record nothing for sending');
+  repo.setTracking(false);
+  const marked = (await repo.getThought(db, 'a'))!;
+  assert.ok(marked.pinned);
+  assert.equal(marked.recall_at, 99);
+  assert.equal(marked.list, 'someday');
+  assert.equal(marked.focus_min, 30);
+  assert.equal(a.pinned, null);
+
+  // The trash: out of every list and search, links kept, back as it was on restore.
+  assert.deepEqual((await repo.listThoughts(db)).map((t) => t.id), ['b', 'a']);
+  assert.deepEqual(await repo.searchThoughts(db, 'trip'), []);
+  assert.deepEqual(await repo.neighboursOf(db, 'a'), []);
+  assert.equal(await repo.countThoughts(db), 2);
+  assert.deepEqual((await repo.listTrash(db)).map((t) => t.id), ['c']);
+  assert.deepEqual(await repo.listTrash(db, 5), [], 'nothing is old enough to throw away yet');
+  await repo.restoreThought(db, 'c');
+  assert.deepEqual((await repo.searchThoughts(db, 'trip')).map((t) => t.id), ['c']);
+  assert.deepEqual((await repo.neighboursOf(db, 'a')).map((t) => t.id), ['c']);
+
+  // A pair marked unrelated loses its automatic link and is remembered.
+  await repo.dismissPair(db, 'c', 'a');
+  assert.deepEqual(await repo.neighboursOf(db, 'a'), []);
+  assert.deepEqual([...(await repo.dismissedPairs(db))], ['a:c']);
+
+  // What the person said about a group is stored once and updated in place.
+  const pid = await repo.saveProject(db, { name: 'Hampi', goal: null, due_at: null, members: ['a', 'c'], notif_id: null });
+  await repo.saveProject(db, { id: pid, name: 'Hampi in January', goal: 'Go', due_at: 5, members: ['a', 'c', 'b'], notif_id: null });
+  assert.deepEqual(await repo.listProjects(db), [{ id: pid, name: 'Hampi in January', goal: 'Go', due_at: 5, members: ['a', 'c', 'b'], notif_id: null }]);
+  await repo.deleteProject(db, pid);
+  assert.deepEqual(await repo.listProjects(db), []);
+
+  await repo.deleteThought(db, 'b');
+  assert.equal((await db.first<{ n: number }>('SELECT COUNT(*) AS n FROM image_text'))!.n, 0, 'a deleted picture takes its words with it');
+}
+
 databaseChecks()
   .then(cloudChecks)
-  .then(() => console.log(`ok: database, old-database import, cloud sync between two phones, search, text helpers, formatted notes, linker, meaning, groups and reminders (${all.length} links in fixture)`))
+  .then(localChecks)
+  .then(() => console.log(`ok: database, trash and local marks, projects, dates in plain words, check boxes, recall, Markdown, old-database import, cloud sync between two phones, search, text helpers, formatted notes, linker, meaning, groups and reminders (${all.length} links in fixture)`))
   .catch((e) => {
     console.error(e);
     process.exit(1);

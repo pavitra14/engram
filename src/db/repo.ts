@@ -10,8 +10,8 @@
 import { ftsQuery } from '@/lib/text';
 
 import type { Db } from './db';
-import { EMBEDDINGS_DDL, OUTBOX_DDL, REVS_DDL, SEARCH_DDL, TRANSLATIONS_DDL, SYNCED_THOUGHT_COLUMNS, THOUGHT_COLUMNS } from './schema';
-import type { Link, LinkKind, NewThought, Repeat, Tag, Thought, ThoughtKind } from './types';
+import { DISMISSED_DDL, EMBEDDINGS_DDL, IMAGE_TEXT_DDL, OUTBOX_DDL, REVS_DDL, SEARCH_DDL, TRANSLATIONS_DDL, SYNCED_THOUGHT_COLUMNS, THOUGHT_COLUMNS } from './schema';
+import type { Link, LinkKind, NewThought, Project, Repeat, Tag, Thought, ThoughtKind, TodoList } from './types';
 
 const order = (x: string, y: string): [string, string] => (x < y ? [x, y] : [y, x]);
 
@@ -38,6 +38,8 @@ export async function prepare(db: Db): Promise<void> {
   await db.run(OUTBOX_DDL);
   await db.run(REVS_DDL);
   await db.run(TRANSLATIONS_DDL);
+  await db.run(IMAGE_TEXT_DDL);
+  await db.run(DISMISSED_DDL);
   try {
     await db.run(SEARCH_DDL);
     searchIndex = true;
@@ -55,7 +57,9 @@ async function index(db: Db, id: string, title: string | null, body: string): Pr
   if (!searchIndex) return;
   // The English version, when there is one, is searchable alongside the original words.
   const en = await db.first<{ title: string | null; body: string | null }>('SELECT title, body FROM translations WHERE thought_id = ?', [id]);
-  const extra = en ? [en.title, en.body].filter(Boolean).join('\n') : '';
+  // So are the words read from a picture.
+  const seen = await db.first<{ text: string }>('SELECT text FROM image_text WHERE thought_id = ?', [id]);
+  const extra = [en?.title, en?.body, seen?.text].filter(Boolean).join('\n');
   await db.run('DELETE FROM thoughts_fts WHERE id = ?', [id]);
   await db.run('INSERT INTO thoughts_fts (id, title, body) VALUES (?, ?, ?)', [id, title ?? '', extra ? `${body}\n${extra}` : body]);
 }
@@ -93,8 +97,10 @@ async function mark(db: Db, tbl: SyncTable, id: string, del = false): Promise<vo
 const COLS = ['id', ...THOUGHT_COLUMNS].join(', ');
 const T_COLS = ['id', ...THOUGHT_COLUMNS].map((c) => `t.${c}`).join(', ');
 // A note's English version, when it has one that differs from the original.
-const EN = `x.lang AS en_lang, x.title AS en_title, x.body AS en_body`;
-const EN_JOIN = `LEFT JOIN translations x ON x.thought_id = t.id AND x.lang <> 'en'`;
+const EN = `x.lang AS en_lang, x.title AS en_title, x.body AS en_body, o.text AS seen_text`;
+const EN_JOIN = `LEFT JOIN translations x ON x.thought_id = t.id AND x.lang <> 'en' LEFT JOIN image_text o ON o.thought_id = t.id`;
+// A thought in the trash is out of every list until it is put back.
+const LIVE = 't.trashed_at IS NULL';
 
 /** PowerSync hands back null for a column never written; the app expects these two as numbers and body as text. */
 function tidy<T extends Thought>(t: T): T {
@@ -131,6 +137,12 @@ export async function insertThought(db: Db, t: NewThought): Promise<Thought> {
     event_at: t.event_at ?? null,
     created_at: t.created_at ?? now,
     updated_at: now,
+    pinned: null,
+    trashed_at: null,
+    recall_step: null,
+    recall_at: null,
+    list: null,
+    focus_min: null,
   };
   await db.run(
     `INSERT INTO thoughts (${COLS}) VALUES (${['id', ...THOUGHT_COLUMNS].map(() => '?').join(', ')})`,
@@ -152,8 +164,8 @@ export async function listThoughts(
 ): Promise<Thought[]> {
   return tidyAll(
     kind
-      ? await db.all<Thought>(`SELECT ${T_COLS}, ${EN} FROM thoughts t ${EN_JOIN} WHERE t.kind = ? ORDER BY t.created_at DESC LIMIT ?`, [kind, limit])
-      : await db.all<Thought>(`SELECT ${T_COLS}, ${EN} FROM thoughts t ${EN_JOIN} ORDER BY t.created_at DESC LIMIT ?`, [limit]),
+      ? await db.all<Thought>(`SELECT ${T_COLS}, ${EN} FROM thoughts t ${EN_JOIN} WHERE ${LIVE} AND t.kind = ? ORDER BY t.created_at DESC LIMIT ?`, [kind, limit])
+      : await db.all<Thought>(`SELECT ${T_COLS}, ${EN} FROM thoughts t ${EN_JOIN} WHERE ${LIVE} ORDER BY t.created_at DESC LIMIT ?`, [limit]),
   );
 }
 
@@ -168,7 +180,7 @@ export async function searchThoughts(
     return tidyAll(
       await db.all<Thought>(
         `SELECT ${T_COLS} FROM thoughts_fts f JOIN thoughts t ON t.id = f.id
-         WHERE thoughts_fts MATCH ? ${kind ? 'AND t.kind = ?' : ''}
+         WHERE thoughts_fts MATCH ? AND ${LIVE} ${kind ? 'AND t.kind = ?' : ''}
          ORDER BY bm25(thoughts_fts, 0.0, 4.0, 1.0) LIMIT ?`,
         kind ? [match, kind, limit] : [match, limit],
       ),
@@ -179,7 +191,7 @@ export async function searchThoughts(
   const where = words.map(() => "(lower(coalesce(title, '') || ' ' || coalesce(body, '') || ' ' || coalesce(file_name, '')) LIKE ?)");
   return tidyAll(
     await db.all<Thought>(
-      `SELECT ${COLS} FROM thoughts WHERE ${where.join(' AND ')} ${kind ? 'AND kind = ?' : ''} ORDER BY created_at DESC LIMIT ?`,
+      `SELECT ${COLS} FROM thoughts WHERE trashed_at IS NULL AND ${where.join(' AND ')} ${kind ? 'AND kind = ?' : ''} ORDER BY created_at DESC LIMIT ?`,
       [...words.map((w) => `%${w.replace(/[%_]/g, '')}%`), ...(kind ? [kind] : []), limit],
     ),
   );
@@ -210,6 +222,7 @@ async function eraseThought(t: Db, id: string): Promise<void> {
   await t.run('DELETE FROM embeddings WHERE thought_id = ?', [id]);
   await t.run('DELETE FROM sync_revs WHERE id = ?', [id]);
   await t.run('DELETE FROM translations WHERE thought_id = ?', [id]);
+  await t.run('DELETE FROM image_text WHERE thought_id = ?', [id]);
   if (searchIndex) await t.run('DELETE FROM thoughts_fts WHERE id = ?', [id]);
   await t.run('DELETE FROM thoughts WHERE id = ?', [id]);
 }
@@ -229,7 +242,7 @@ export async function deleteThought(db: Db, id: string): Promise<void> {
 }
 
 export async function countThoughts(db: Db): Promise<number> {
-  const r = await db.first<{ n: number }>('SELECT COUNT(*) AS n FROM thoughts');
+  const r = await db.first<{ n: number }>('SELECT COUNT(*) AS n FROM thoughts WHERE trashed_at IS NULL');
   return r?.n ?? 0;
 }
 
@@ -255,7 +268,7 @@ export async function setNotifId(db: Db, id: string, notifId: string | null): Pr
 
 export async function clearTodo(db: Db, id: string): Promise<void> {
   await db.run(
-    'UPDATE thoughts SET todo = 0, remind_at = NULL, notif_id = NULL, repeat = NULL, priority = 0, done_at = NULL, updated_at = ? WHERE id = ?',
+    'UPDATE thoughts SET todo = 0, remind_at = NULL, notif_id = NULL, repeat = NULL, priority = 0, done_at = NULL, list = NULL, updated_at = ? WHERE id = ?',
     [Date.now(), id],
   );
   await mark(db, 'thoughts', id);
@@ -279,7 +292,7 @@ export async function setPriority(db: Db, id: string, important: boolean): Promi
 export async function listOpenTodos(db: Db): Promise<Thought[]> {
   return tidyAll(
     await db.all<Thought>(
-      `SELECT ${COLS} FROM thoughts WHERE todo = 1 AND done_at IS NULL
+      `SELECT ${COLS} FROM thoughts WHERE todo = 1 AND done_at IS NULL AND trashed_at IS NULL
        ORDER BY (remind_at IS NULL), remind_at ASC, created_at DESC`,
     ),
   );
@@ -287,7 +300,7 @@ export async function listOpenTodos(db: Db): Promise<Thought[]> {
 
 export async function listDoneTodos(db: Db, limit = 100): Promise<Thought[]> {
   return tidyAll(
-    await db.all<Thought>(`SELECT ${COLS} FROM thoughts WHERE todo = 1 AND done_at IS NOT NULL ORDER BY done_at DESC LIMIT ?`, [limit]),
+    await db.all<Thought>(`SELECT ${COLS} FROM thoughts WHERE todo = 1 AND done_at IS NOT NULL AND trashed_at IS NULL ORDER BY done_at DESC LIMIT ?`, [limit]),
   );
 }
 
@@ -327,7 +340,7 @@ export async function loadEmbeddings(db: Db, model: string): Promise<Map<string,
 export async function idsWithoutEmbedding(db: Db, model: string): Promise<string[]> {
   const rows = await db.all<{ id: string }>(
     `SELECT t.id FROM thoughts t LEFT JOIN embeddings e ON e.thought_id = t.id AND e.model = ?
-     WHERE e.thought_id IS NULL ORDER BY t.created_at DESC`,
+     WHERE e.thought_id IS NULL AND t.trashed_at IS NULL ORDER BY t.created_at DESC`,
     [model],
   );
   return rows.map((r) => r.id);
@@ -353,7 +366,7 @@ export async function saveTranslation(db: Db, id: string, lang: string, title: s
 export async function idsWithoutTranslation(db: Db, limit = 300): Promise<string[]> {
   const rows = await db.all<{ id: string }>(
     `SELECT t.id FROM thoughts t LEFT JOIN translations x ON x.thought_id = t.id
-     WHERE x.thought_id IS NULL ORDER BY t.created_at DESC LIMIT ?`,
+     WHERE x.thought_id IS NULL AND t.trashed_at IS NULL ORDER BY t.created_at DESC LIMIT ?`,
     [limit],
   );
   return rows.map((r) => r.id);
@@ -406,7 +419,7 @@ export async function neighboursOf(db: Db, id: string): Promise<Neighbour[]> {
     await db.all<Neighbour>(
       `SELECT ${T_COLS}, l.kind AS link_kind, l.weight AS weight
        FROM links l JOIN thoughts t ON t.id = CASE WHEN l.a_id = ? THEN l.b_id ELSE l.a_id END
-       WHERE l.a_id = ? OR l.b_id = ?
+       WHERE (l.a_id = ? OR l.b_id = ?) AND t.trashed_at IS NULL
        ORDER BY (l.kind = 'manual') DESC, l.weight DESC`,
       [id, id, id],
     ),
@@ -461,6 +474,136 @@ export async function removeTag(db: Db, thoughtId: string, tagId: string): Promi
   }
 }
 
+// ---------- this phone's own marks: pinned, trash, remember, parked, focus ----------
+// None of these are sent to Engram Cloud, so they record nothing for sending.
+
+export async function setPinned(db: Db, id: string, pinned: boolean): Promise<void> {
+  await db.run('UPDATE thoughts SET pinned = ? WHERE id = ?', [pinned ? Date.now() : null, id]);
+}
+
+/** Moves a thought to the trash. It stays there, with its links, until it is put back or thrown away. */
+export async function trashThought(db: Db, id: string): Promise<void> {
+  await db.run('UPDATE thoughts SET trashed_at = ?, notif_id = NULL, pinned = NULL WHERE id = ?', [Date.now(), id]);
+  if (searchIndex) await db.run('DELETE FROM thoughts_fts WHERE id = ?', [id]);
+}
+
+export async function restoreThought(db: Db, id: string): Promise<void> {
+  await db.run('UPDATE thoughts SET trashed_at = NULL WHERE id = ?', [id]);
+  const t = await db.first<{ title: string | null; body: string | null }>('SELECT title, body FROM thoughts WHERE id = ?', [id]);
+  if (t) await index(db, id, t.title, t.body ?? '');
+}
+
+/** What is in the trash, most recently thrown away first. `before` limits it to things trashed earlier than that. */
+export async function listTrash(db: Db, before?: number): Promise<Thought[]> {
+  return tidyAll(
+    await db.all<Thought>(
+      `SELECT ${COLS} FROM thoughts WHERE trashed_at IS NOT NULL ${before ? 'AND trashed_at < ?' : ''} ORDER BY trashed_at DESC`,
+      before ? [before] : [],
+    ),
+  );
+}
+
+/** Sets when a thought next comes back ("Remember this"), or clears it with nulls. */
+export async function setRecall(db: Db, id: string, step: number | null, at: number | null): Promise<void> {
+  await db.run('UPDATE thoughts SET recall_step = ?, recall_at = ? WHERE id = ?', [step, at, id]);
+}
+
+/** Parks a to-do under Waiting or Someday, or brings it back with null. */
+export async function setList(db: Db, id: string, list: TodoList | null): Promise<void> {
+  await db.run('UPDATE thoughts SET list = ? WHERE id = ?', [list, id]);
+}
+
+export async function addFocus(db: Db, id: string, minutes: number): Promise<void> {
+  await db.run('UPDATE thoughts SET focus_min = coalesce(focus_min, 0) + ? WHERE id = ?', [minutes, id]);
+}
+
+/** The newest thought with exactly this title, ignoring capitals. Used by [[links]]. */
+export async function findByTitle(db: Db, title: string): Promise<Thought | null> {
+  const t = await db.first<Thought>(
+    `SELECT ${COLS} FROM thoughts WHERE lower(title) = lower(?) AND trashed_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+    [title.trim()],
+  );
+  return t ? tidy(t) : null;
+}
+
+/** Thoughts whose words mention [[title]]. */
+export async function mentioning(db: Db, title: string): Promise<Thought[]> {
+  return tidyAll(
+    await db.all<Thought>(`SELECT ${COLS} FROM thoughts WHERE lower(body) LIKE ? AND trashed_at IS NULL`, [
+      `%[[${title.trim().toLowerCase().replace(/[%_]/g, '')}]]%`,
+    ]),
+  );
+}
+
+// ---------- words read from pictures ----------
+
+export async function saveImageText(db: Db, id: string, text: string): Promise<void> {
+  await db.run('INSERT INTO image_text (thought_id, text) VALUES (?, ?) ON CONFLICT (thought_id) DO UPDATE SET text = excluded.text', [id, text]);
+  const t = await db.first<{ title: string | null; body: string | null }>('SELECT title, body FROM thoughts WHERE id = ?', [id]);
+  if (t) await index(db, id, t.title, t.body ?? '');
+}
+
+export async function imagesNotRead(db: Db, limit = 200): Promise<{ id: string; media_path: string }[]> {
+  return db.all(
+    `SELECT t.id, t.media_path FROM thoughts t LEFT JOIN image_text o ON o.thought_id = t.id
+     WHERE t.kind = 'image' AND t.media_path IS NOT NULL AND o.thought_id IS NULL AND t.trashed_at IS NULL
+     ORDER BY t.created_at DESC LIMIT ?`,
+    [limit],
+  );
+}
+
+// ---------- pairs the person said are not related ----------
+
+export async function dismissPair(db: Db, x: string, y: string): Promise<void> {
+  const [a, b] = order(x, y);
+  await db.run('INSERT INTO dismissed_links (id) VALUES (?) ON CONFLICT (id) DO NOTHING', [`${a}:${b}`]);
+  // If Engram had linked them by itself, that link goes too.
+  await db.run(`DELETE FROM links WHERE id = ? AND kind = 'auto'`, [`${a}:${b}`]);
+}
+
+export async function dismissedPairs(db: Db): Promise<Set<string>> {
+  return new Set((await db.all<{ id: string }>('SELECT id FROM dismissed_links')).map((r) => r.id));
+}
+
+// ---------- groups the person has named or made into projects ----------
+
+type ProjectRow = { id: string; name: string | null; goal: string | null; due_at: number | null; members: string | null; notif_id: string | null };
+
+export async function listProjects(db: Db): Promise<Project[]> {
+  const rows = await db.all<ProjectRow>('SELECT id, name, goal, due_at, members, notif_id FROM projects');
+  return rows.map((r) => {
+    let members: string[] = [];
+    try {
+      const m = JSON.parse(r.members ?? '[]');
+      if (Array.isArray(m)) members = m.filter((x) => typeof x === 'string');
+    } catch {
+      members = [];
+    }
+    return { id: r.id, name: r.name, goal: r.goal, due_at: r.due_at, members, notif_id: r.notif_id };
+  });
+}
+
+/** Saves what the person said about a group. Pass the id of the one being changed, or none to make a new one. */
+export async function saveProject(db: Db, p: Omit<Project, 'id'> & { id?: string }): Promise<string> {
+  const now = Date.now();
+  const members = JSON.stringify(p.members);
+  if (p.id && (await db.first<{ id: string }>('SELECT id FROM projects WHERE id = ?', [p.id]))) {
+    await db.run('UPDATE projects SET name = ?, goal = ?, due_at = ?, members = ?, notif_id = ?, updated_at = ? WHERE id = ?', [
+      p.name, p.goal, p.due_at, members, p.notif_id, now, p.id,
+    ]);
+    return p.id;
+  }
+  const id = p.id ?? makeId();
+  await db.run('INSERT INTO projects (id, name, goal, due_at, members, notif_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [
+    id, p.name, p.goal, p.due_at, members, p.notif_id, now, now,
+  ]);
+  return id;
+}
+
+export async function deleteProject(db: Db, id: string): Promise<void> {
+  await db.run('DELETE FROM projects WHERE id = ?', [id]);
+}
+
 // ---------- settings ----------
 
 export async function getMeta(db: Db, key: string): Promise<string | null> {
@@ -483,7 +626,7 @@ export async function wipeAll(db: Db): Promise<void> {
         for (const r of await t.all<{ id: string }>(`SELECT id FROM ${tbl}${where}`)) await mark(t, tbl, r.id, true);
       }
     }
-    for (const table of ['links', 'thought_tags', 'tags', 'embeddings', 'sync_revs', 'translations', 'thoughts']) await t.run(`DELETE FROM ${table}`);
+    for (const table of ['links', 'thought_tags', 'tags', 'embeddings', 'sync_revs', 'translations', 'image_text', 'dismissed_links', 'projects', 'thoughts']) await t.run(`DELETE FROM ${table}`);
     if (searchIndex) await t.run('DELETE FROM thoughts_fts');
   });
 }

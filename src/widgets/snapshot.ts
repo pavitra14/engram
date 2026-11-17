@@ -10,9 +10,9 @@ import { requestWidgetUpdate } from 'react-native-android-widget';
 
 import type { Db } from '@/db/db';
 import * as repo from '@/db/repo';
-import { dueLabel, titleOf } from '@/lib/text';
+import { dueLabel, titleOf, when } from '@/lib/text';
 
-import { QuickThoughtWidget, TodoWidget, type WidgetData } from './widgets';
+import { MemoryWidget, noteForNow, QuickThoughtWidget, TodoWidget, type WidgetData } from './widgets';
 
 const file = () => new File(Paths.document, 'widgets.json');
 
@@ -34,8 +34,13 @@ export async function refreshWidgets(db: Db): Promise<void> {
     const setting = await repo.getMeta(db, 'appearance');
     const dark = setting === 'black' || (setting !== 'light' && Appearance.getColorScheme() === 'dark');
     const now = Date.now();
+    // A dozen older notes, spread through the collection, for the "From your notes" widget to turn over.
+    const old = (await repo.listThoughts(db, { limit: 2000 })).filter((t) => now - t.created_at > 7 * 86_400_000 && !t.todo);
+    const stride = Math.max(1, Math.floor(old.length / 12));
+    const older = old.filter((_, i) => i % stride === 0).slice(0, 12).map((t) => ({ id: t.id, title: titleOf(t).slice(0, 140), when: when(t.created_at, now) }));
     const data: WidgetData = {
       dark,
+      older,
       open: todos.length,
       todos: todos.slice(0, 4).map((t) => ({
         id: t.id,
@@ -48,6 +53,7 @@ export async function refreshWidgets(db: Db): Promise<void> {
     if (!f.exists) f.create();
     f.write(JSON.stringify(data));
     await requestWidgetUpdate({ widgetName: 'Todo', renderWidget: () => createElement(TodoWidget, data), widgetNotFound: () => {} });
+    await requestWidgetUpdate({ widgetName: 'Memory', renderWidget: () => createElement(MemoryWidget, { dark, note: noteForNow(older, now) }), widgetNotFound: () => {} });
     await requestWidgetUpdate({ widgetName: 'QuickThought', renderWidget: () => createElement(QuickThoughtWidget, { dark }), widgetNotFound: () => {} });
   } catch (e) {
     // Widgets are a convenience; the app carries on without them.

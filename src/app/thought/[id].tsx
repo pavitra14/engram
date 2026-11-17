@@ -17,7 +17,9 @@ import type { Tag, Thought } from '@/db/types';
 import { useBrain } from '@/lib/brain';
 import { dataChanged } from '@/lib/bus';
 import { addToCalendar } from '@/lib/calendar';
-import { relink, removeThought, saveNote } from '@/lib/capture';
+import { setPinned, setRemember } from '@/lib/actions';
+import { deleteForever, relink, removeThought, restoreThought, saveNote } from '@/lib/capture';
+import { startFocus } from '@/lib/focus';
 import { whyLinked } from '@/lib/linker';
 import { openFile } from '@/lib/open';
 import { type Assistant, chatWith, installedAssistants, planPrompt } from '@/lib/assistants';
@@ -25,6 +27,12 @@ import { addTodo, pickDateTime, reminderPresets, removeTodo, setDone, setImporta
 import { languageName } from '@/lib/translate';
 import { clock, dueLabel, fileSize, hostOf, repeatLabel, when } from '@/lib/text';
 import { font, kindLabel, type, useTheme } from '@/theme';
+
+/** "Written 4 months earlier. " for a linked note that is much older than this one, so old thinking stands out. */
+function earlier(theirs: number, mine: number): string {
+  const months = Math.round((mine - theirs) / (30 * 86_400_000));
+  return months >= 2 ? `Written ${months} months earlier. ` : '';
+}
 
 function AudioPlayer({ uri }: { uri: string }) {
   const { c } = useTheme();
@@ -182,20 +190,13 @@ export default function ThoughtScreen() {
     ]);
   };
 
-  const confirmDelete = () => {
-    Alert.alert('Delete this thought?', 'Its links and any recording are deleted too. This cannot be undone.', [
-      { text: 'Keep', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          saved.current = null;
-          await removeThought(db, thought);
-          if (router.canGoBack()) router.back();
-          else router.replace('/');
-        },
-      },
-    ]);
+  // Deleting moves the note to the trash; the message that follows offers Undo.
+  const confirmDelete = async () => {
+    await commit();
+    saved.current = null;
+    await removeThought(db, thought);
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
   };
 
   const remind = async (at: number | null) => {
@@ -240,6 +241,13 @@ export default function ThoughtScreen() {
   ];
 
   const moreOptions: SheetOption[] = [
+    { label: thought.pinned ? 'Unpin' : 'Pin to the top of Today', icon: 'bookmark', onPress: () => void setPinned(db, thought, !thought.pinned) },
+    thought.recall_at
+      ? { label: 'Stop bringing this back', icon: 'rotate-cw', onPress: () => void setRemember(db, thought, false) }
+      : { label: 'Remember this', icon: 'rotate-cw', onPress: () => void setRemember(db, thought, true) },
+    ...(thought.todo && !thought.done_at
+      ? [{ label: 'Focus on this for 25 minutes', icon: 'clock' as const, onPress: () => void startFocus(db, thought).then((ok) => setNote(ok ? 'Focus started. The phone tells you when 25 minutes are up.' : 'Focus started, but notifications are off for Engram, so the phone will not tell you when time is up.')) }]
+      : []),
     { label: 'Add to calendar', icon: 'calendar', onPress: () => void addToCalendar(thought).catch(() => setNote('The calendar could not be opened.')) },
     ...assistants.map((a) => ({
       label: `Think this through with ${a.name}`,
@@ -250,7 +258,7 @@ export default function ThoughtScreen() {
       },
     })),
     { label: 'Copy text', icon: 'copy', onPress: () => void Clipboard.setStringAsync([latest.current.title, latest.current.text].filter(Boolean).join('\n\n') || thought.url || thought.file_name || '') },
-    { label: 'Delete', icon: 'trash-2', danger: true, onPress: confirmDelete },
+    { label: 'Delete', icon: 'trash-2', danger: true, onPress: () => void confirmDelete() },
   ];
 
   const todoLabel = thought.done_at ? 'Done' : thought.remind_at ? dueLabel(thought.remind_at) : thought.todo ? 'On your to-do list' : 'To do';
@@ -275,6 +283,36 @@ export default function ThoughtScreen() {
           <KindGlyph kind={thought.kind} />
           <Text style={[type.meta, { color: c.soft }]}>{entryMeta(thought)}</Text>
         </View>
+
+        {thought.trashed_at ? (
+          <View style={{ gap: 10, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.surface }}>
+            <Text style={[type.small, { color: c.ink }]}>This note is in the trash. It is deleted for good 30 days after it was put there.</Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Button title="Put it back" tone="solid" onPress={() => void restoreThought(db, id)} />
+              <Button
+                title="Delete for good"
+                tone="danger"
+                onPress={() =>
+                  Alert.alert('Delete this for good?', 'The note, its links and any file are deleted. This cannot be undone.', [
+                    { text: 'Keep', style: 'cancel' },
+                    {
+                      text: 'Delete',
+                      style: 'destructive',
+                      onPress: async () => {
+                        saved.current = null;
+                        await deleteForever(db, thought);
+                        if (router.canGoBack()) router.back();
+                        else router.replace('/');
+                      },
+                    },
+                  ])
+                }
+              />
+            </View>
+          </View>
+        ) : null}
+
+        {thought.focus_min ? <Text style={[type.small, { color: c.soft }]}>{thought.focus_min} minutes of focus spent on this</Text> : null}
 
         {thought.event_id && thought.event_at ? (
           <Text style={[type.small, { color: c.soft }]}>
@@ -312,6 +350,20 @@ export default function ThoughtScreen() {
                 {thought.en_body}
               </Text>
             ) : null}
+          </View>
+        ) : null}
+
+        {thought.seen_text ? (
+          <View style={{ gap: 6, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.surface }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={[type.meta, { color: c.soft }]}>Text in this picture, read on this phone</Text>
+              <Pressable accessibilityRole="button" onPress={() => void Clipboard.setStringAsync(thought.seen_text ?? '').then(() => setNote('Copied the text in the picture.'))} hitSlop={8} style={styles.linkAnother}>
+                <Text style={[type.smallStrong, { color: c.accent }]}>Copy</Text>
+              </Pressable>
+            </View>
+            <Text selectable style={[type.small, { color: c.ink }]} numberOfLines={12}>
+              {thought.seen_text}
+            </Text>
           </View>
         ) : null}
 
@@ -445,7 +497,7 @@ export default function ThoughtScreen() {
                   thought={n}
                   size="small"
                   divider={false}
-                  sub={n.link_kind === 'manual' ? 'Linked by you' : whyLinked(me, { id: n.id, text: `${n.title ?? ''} ${n.body}`, url: n.url })}
+                  sub={`${earlier(n.created_at, thought.created_at)}${n.link_kind === 'manual' ? 'Linked by you' : whyLinked(me, { id: n.id, text: `${n.title ?? ''} ${n.body}`, url: n.url })}`}
                   onPress={() => router.push({ pathname: '/thought/[id]', params: { id: n.id } })}
                 />
               </View>

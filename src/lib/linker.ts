@@ -270,3 +270,32 @@ export function relateAll(
     return { a, b, score };
   });
 }
+
+/**
+ * Pairs that nearly linked: alike enough to ask the person about, not enough for
+ * Engram to link by itself. Strongest first. `skip` holds pair keys ("a:b", a < b)
+ * to leave out: pairs already linked, and pairs the person said are unrelated.
+ */
+export function nearMisses(
+  corpus: Doc[],
+  skip: Set<string>,
+  { threshold = LINK_THRESHOLD, max = 5 }: { threshold?: number; max?: number } = {},
+): { a: string; b: string; score: number }[] {
+  if (corpus.length < 2) return [];
+  const p = prepare(corpus);
+  const floor = threshold * 0.5;
+  const out: { a: string; b: string; score: number }[] = [];
+  const byMeaning = corpus.map((_, i) => meaningNeighbours(p.meaning, i));
+  for (let i = 0; i < corpus.length; i++) {
+    for (let j = i + 1; j < corpus.length; j++) {
+      const [a, b] = corpus[i].id < corpus[j].id ? [corpus[i].id, corpus[j].id] : [corpus[j].id, corpus[i].id];
+      if (skip.has(`${a}:${b}`)) continue;
+      const words = Math.min(1, similarity(p, i, j) + boost(corpus[i], corpus[j]));
+      // By meaning, a pair where only one of the two would pick the other is a near miss.
+      const oneWay = byMeaning[i].find((n) => n.j === j)?.cos ?? byMeaning[j].find((n) => n.j === i)?.cos ?? 0;
+      const score = Math.max(words >= floor ? words : 0, oneWay ? oneWay * threshold : 0);
+      if (score > 0) out.push({ a, b, score });
+    }
+  }
+  return out.sort((x, y) => y.score - x.score).slice(0, max);
+}

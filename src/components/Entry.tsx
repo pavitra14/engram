@@ -61,6 +61,7 @@ export function Entry({
         <Text style={[type.meta, { color: c.soft, flex: 1 }]} numberOfLines={1}>
           {entryMeta(thought)}
         </Text>
+        {thought.pinned ? <Feather name="bookmark" size={13} color={c.accent} accessibilityLabel="Pinned" /> : null}
         {trailing ? <Text style={[type.meta, { color: c.accent }]}>{trailing}</Text> : null}
       </View>
       <View style={styles.main}>

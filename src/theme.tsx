@@ -76,6 +76,20 @@ const black: Palette = {
 
 export const palettes = { light, black };
 
+/**
+ * Accent colours the person can choose. Each has a light and a black-theme
+ * value picked to keep text contrast: white on the light one, black on the other.
+ */
+export const ACCENTS = {
+  cobalt: { label: 'Cobalt', light: ['#1F3FBF', '#C7DEFF'], black: ['#8FA6FF', '#233971'] },
+  forest: { label: 'Forest', light: ['#1E6B3A', '#CDEBD5'], black: ['#7FD49B', '#17422A'] },
+  teal: { label: 'Teal', light: ['#0F6B73', '#C9EBEE'], black: ['#7FD3DB', '#0E4347'] },
+  plum: { label: 'Plum', light: ['#7A2E8E', '#EBD3F3'], black: ['#D7A3F0', '#46205A'] },
+  rust: { label: 'Rust', light: ['#A63D1F', '#FBD9CC'], black: ['#FFAB8F', '#5A2413'] },
+} as const;
+export type AccentName = keyof typeof ACCENTS;
+export const ACCENT_NAMES = Object.keys(ACCENTS) as AccentName[];
+
 export const font = {
   serif: 'Newsreader_400Regular',
   serifMedium: 'Newsreader_500Medium',
@@ -118,9 +132,11 @@ type ThemeValue = {
   dark: boolean;
   appearance: AppearanceSetting;
   setAppearance: (a: AppearanceSetting) => void;
+  accent: AccentName;
+  setAccent: (a: AccentName) => void;
 };
 
-const ThemeContext = createContext<ThemeValue>({ c: light, dark: false, appearance: 'system', setAppearance: () => {} });
+const ThemeContext = createContext<ThemeValue>({ c: light, dark: false, appearance: 'system', setAppearance: () => {}, accent: 'cobalt', setAccent: () => {} });
 
 /**
  * The phone's light/dark setting, read fresh.
@@ -139,6 +155,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const db = useDb();
   const [system, setSystem] = useState<'light' | 'dark'>(readSystemScheme);
   const [appearance, setState] = useState<AppearanceSetting>('system');
+  const [accent, setAccentState] = useState<AccentName>('cobalt');
 
   useEffect(() => {
     const scheme = Appearance.addChangeListener((p) => setSystem(p.colorScheme === 'dark' ? 'dark' : 'light'));
@@ -155,7 +172,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     repo.getMeta(db, 'appearance').then((v) => {
       if (v === 'light' || v === 'black' || v === 'system') setState(v);
     });
+    repo.getMeta(db, 'accent').then((v) => {
+      if (v && v in ACCENTS) setAccentState(v as AccentName);
+    });
   }, [db]);
+
+  const setAccent = useCallback(
+    (a: AccentName) => {
+      setAccentState(a);
+      repo.setMeta(db, 'accent', a).catch(() => {});
+    },
+    [db],
+  );
 
   const setAppearance = useCallback(
     (a: AppearanceSetting) => {
@@ -167,8 +195,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ThemeValue>(() => {
     const dark = appearance === 'black' || (appearance === 'system' && system === 'dark');
-    return { c: dark ? black : light, dark, appearance, setAppearance };
-  }, [appearance, system, setAppearance]);
+    const base = dark ? black : light;
+    const [main, highlight] = ACCENTS[accent][dark ? 'black' : 'light'];
+    return { c: accent === 'cobalt' ? base : { ...base, accent: main, highlight }, dark, appearance, setAppearance, accent, setAccent };
+  }, [appearance, system, setAppearance, accent, setAccent]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

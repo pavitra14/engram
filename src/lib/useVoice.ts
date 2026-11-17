@@ -11,7 +11,7 @@ import { Platform } from 'react-native';
 
 import * as repo from '@/db/repo';
 
-import { capture, deleteMedia, importMedia } from './capture';
+import { capture, deleteMedia, importMedia, remindFromWords } from './capture';
 
 export const SPEECH_LANGS = [
   { code: 'en-IN', label: 'English (India)' },
@@ -71,6 +71,8 @@ export function useVoice(onNotice: (message: string) => void) {
   const phaseRef = useRef<Phase>('idle');
   const modeRef = useRef<Mode>('transcribe');
   const finals = useRef('');
+  // Each stretch of speech between pauses, kept apart so a long note can be set out in paragraphs.
+  const segments = useRef<string[]>([]);
   const interim = useRef('');
   const audioUri = useRef<string | null>(null);
   const cancelled = useRef(false);
@@ -88,6 +90,7 @@ export function useVoice(onNotice: (message: string) => void) {
 
   const reset = useCallback(() => {
     finals.current = '';
+    segments.current = [];
     interim.current = '';
     audioUri.current = null;
     cancelled.current = false;
@@ -107,13 +110,18 @@ export function useVoice(onNotice: (message: string) => void) {
         }
         const media = uri ? await importMedia(uri, mime, ext) : null;
         if (uri && media) deleteMedia(uri);
-        await capture(db, {
+        // A note over a minute long with several pauses reads better as one paragraph per stretch of speech.
+        const long = Date.now() - started.current > 60_000 && segments.current.length >= 3;
+        const words = long ? [...segments.current, interim.current.trim()].filter(Boolean).join('\n\n') : body;
+        const saved = await capture(db, {
           kind: 'voice',
-          body,
+          body: words,
           media_path: media,
           duration_ms: Date.now() - started.current,
           source: 'voice',
         });
+        // "Call the bank Friday at ten" spoken aloud sets its reminder, the same as when typed.
+        await remindFromWords(db, saved, 'voice');
       } catch (e) {
         notice.current(`Could not save the voice note. ${e instanceof Error ? e.message : ''}`.trim());
       } finally {
@@ -144,6 +152,7 @@ export function useVoice(onNotice: (message: string) => void) {
     if (phaseRef.current !== 'idle') return;
     cancelled.current = false;
     finals.current = '';
+    segments.current = [];
     interim.current = '';
     audioUri.current = null;
     setText('');
@@ -211,6 +220,7 @@ export function useVoice(onNotice: (message: string) => void) {
     const t = e.results[0]?.transcript ?? '';
     if (e.isFinal) {
       finals.current = join(finals.current, t);
+      if (t.trim()) segments.current.push(t.trim());
       interim.current = '';
     } else {
       interim.current = t;

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Engram",
     "slug": "engram",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "engram",
@@ -10,7 +10,7 @@
     "backgroundColor": "#F3F4F1",
     "android": {
       "package": "com.pavitra14.engram",
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
         "backgroundColor": "#1F3FBF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -18,7 +18,11 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "softwareKeyboardLayoutMode": "resize",
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "blockedPermissions": [
+        "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.HIGH_SAMPLING_RATE_SENSORS"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -91,7 +95,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Engram saves the photos and videos you choose.",
-          "cameraPermission": false,
+          "cameraPermission": "Engram uses the camera when you scan paper into a note.",
           "microphonePermission": "Engram uses the microphone to record your voice notes."
         }
       ],
@@ -120,6 +124,17 @@
               "targetCellHeight": 2,
               "resizeMode": "horizontal|vertical",
               "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "Memory",
+              "label": "From your notes",
+              "description": "An older note, a different one through the day",
+              "minWidth": "250dp",
+              "minHeight": "70dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 10800000
             }
           ]
         }
@@ -131,6 +146,18 @@
             "com.anthropic.claude",
             "com.openai.chatgpt"
           ]
+        }
+      ],
+      [
+        "./plugins/withQuickCapture",
+        {
+          "tileLabel": "New thought"
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Engram uses Face ID to unlock your notes."
         }
       ],
       "expo-secure-store"

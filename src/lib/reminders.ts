@@ -25,7 +25,8 @@ Notifications.setNotificationHandler({
   }),
 });
 
-async function allowed(): Promise<boolean> {
+/** Sets up the reminder channel and buttons, and asks for permission to notify if that is still possible. */
+export async function allowed(): Promise<boolean> {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(CHANNEL, {
       name: 'Reminders',
@@ -40,6 +41,11 @@ async function allowed(): Promise<boolean> {
   if (current.granted) return true;
   if (!current.canAskAgain) return false;
   return (await Notifications.requestPermissionsAsync()).granted;
+}
+
+/** Cancels the phone alarm for a thought's reminder, if it has one. */
+export function cancelReminder(thought: { notif_id: string | null }): Promise<void> {
+  return cancel(thought.notif_id);
 }
 
 async function cancel(notifId: string | null): Promise<void> {
@@ -181,7 +187,7 @@ export async function reconcileReminders(db: Db, ids: string[]): Promise<void> {
     if (!t) continue;
     await cancel(t.notif_id);
     let notifId: string | null = null;
-    if (may && t.todo === 1 && !t.done_at && t.remind_at && t.remind_at > Date.now()) {
+    if (may && t.todo === 1 && !t.done_at && !t.trashed_at && t.remind_at && t.remind_at > Date.now()) {
       try {
         notifId = await Notifications.scheduleNotificationAsync({
           content: { title: titleOf(t), body: 'A reminder from Engram', data: { thoughtId: t.id }, categoryIdentifier: CATEGORY },

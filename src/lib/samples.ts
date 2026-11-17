@@ -25,6 +25,13 @@ const SAMPLES: (Omit<NewThought, 'created_at'> & { ago: number })[] = [
   { kind: 'link', body: 'Hampi three day itinerary', url: 'https://travel.example/hampi-three-days', ago: 52 },
   { kind: 'text', body: 'Pack list for the January trip: power bank, hat, offline maps', ago: 75 },
   { kind: 'voice', body: 'Ask Meera if she wants to join the Hampi trip and split the stay', duration_ms: 7000, ago: 80 },
+  {
+    kind: 'text',
+    title: 'Before the Hampi trip',
+    body: 'Book the train\nRent a scooter\nDownload offline maps',
+    body_html: '<html><ul data-type="checkbox"><li checked>Book the train</li><li>Rent a scooter</li><li>Download offline maps</li></ul></html>',
+    ago: 82,
+  },
 
   { kind: 'text', body: 'Book note, Thinking in Systems: stocks, flows and feedback loops everywhere', ago: 96 },
   { kind: 'text', body: 'Feedback loops explain why habits compound, small flows change big stocks', ago: 98 },

@@ -5,15 +5,24 @@ import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { DbProvider, useDb } from '@/db/provider';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { Accelerometer } from 'expo-sensors';
+import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import * as repo from '@/db/repo';
 import { ACTION_DONE, ACTION_LATER, actionFrom, setDone, snooze, thoughtIdFrom } from '@/lib/reminders';
 import { startSmartLinking } from '@/lib/smart';
+import { LockGate } from '@/components/LockGate';
 import { ThoughtMenuProvider } from '@/components/ThoughtMenu';
+import { ToastHost } from '@/components/Toast';
+import { backupIfDue } from '@/lib/backup';
+import { refreshBriefs, SPEAK } from '@/lib/briefs';
+import { emptyOldTrash, relink } from '@/lib/capture';
+import { endFocus, FOCUS_DONE, FOCUS_MORE, settleFocus, startFocus } from '@/lib/focus';
+import { readOldPictures } from '@/lib/ocr';
 import { ThemeProvider, useTheme } from '@/theme';
-import { useDataVersion } from '@/lib/bus';
+import { dataChanged, useDataVersion } from '@/lib/bus';
 import { refreshWidgets } from '@/widgets/snapshot';
 import { startCloud } from '@/cloud/cloud';
 
@@ -30,6 +39,55 @@ function Screens() {
     void refreshWidgets(db);
   }, [db, version, dark]);
 
+  // The morning brief and evening wrap-up are written from today's data, so they are rewritten when it changes.
+  useEffect(() => {
+    const t = setTimeout(() => void refreshBriefs(db), 2500);
+    return () => clearTimeout(t);
+  }, [db, version]);
+
+  // Housekeeping on opening the app, and on coming back to it: old trash, a finished focus session, the weekly backup, unread pictures.
+  useEffect(() => {
+    const tidy = () => {
+      void emptyOldTrash(db).catch(() => {});
+      void settleFocus(db).catch(() => {});
+      void backupIfDue(db);
+    };
+    tidy();
+    void readOldPictures(db, (id) => relink(db, id).then(() => dataChanged()));
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') tidy();
+    });
+    return () => sub.remove();
+  }, [db]);
+
+  // Shake to start a voice note, if switched on in Settings. Only while Engram is open:
+  // listening in the background would need a permanent notification and would drain the battery.
+  const [shake, setShake] = useState(false);
+  useEffect(() => {
+    void repo.getMeta(db, 'shake').then((v) => setShake(v === 'on'));
+  }, [db, version]);
+  useEffect(() => {
+    if (!shake) return;
+    let last = 0;
+    let hits = 0;
+    Accelerometer.setUpdateInterval(120);
+    const sub = Accelerometer.addListener(({ x, y, z }) => {
+      // Resting, the phone reads about 1 g. A shake swings well past that several times in a row.
+      const g = Math.sqrt(x * x + y * y + z * z);
+      const now = Date.now();
+      if (g < 2.2 || now < last) return;
+      hits = now - last < 600 ? hits + 1 : 1;
+      last = now;
+      if (hits >= 3) {
+        hits = 0;
+        // Ignore the rest of the same shake.
+        last = now + 3000;
+        router.push('/voice');
+      }
+    });
+    return () => sub.remove();
+  }, [shake]);
+
   // Engram Cloud does nothing unless someone has signed in on this phone.
   useEffect(() => {
     void startCloud(db);
@@ -42,8 +100,32 @@ function Screens() {
 
   // Tapping a reminder opens its thought. Its two buttons finish it or move it an hour on.
   useEffect(() => {
+    const data = lastResponse?.notification.request.content.data as { open?: unknown; focus?: unknown } | undefined;
+    const pressed = lastResponse?.actionIdentifier;
+    // The quick-note notification, the briefs and a project's date say where they lead.
+    if (pressed === SPEAK) {
+      const t = setTimeout(() => router.push('/voice'), 50);
+      return () => clearTimeout(t);
+    }
+    if (typeof data?.open === 'string' && data.open.startsWith('/')) {
+      const to = data.open;
+      const t = setTimeout(() => router.push(to as never), 50);
+      return () => clearTimeout(t);
+    }
     const id = thoughtIdFrom(lastResponse);
     if (!id) return;
+    // The focus timer ran out: finish the to-do, go on for five minutes, or just open it.
+    if (data?.focus) {
+      void (async () => {
+        await endFocus(db);
+        const t = await repo.getThought(db, id);
+        if (!t) return;
+        if (pressed === FOCUS_DONE) await setDone(db, t, true);
+        else if (pressed === FOCUS_MORE) await startFocus(db, t, 5);
+        else router.push('/todo');
+      })();
+      return;
+    }
     const action = actionFrom(lastResponse);
     if (action) {
       void repo.getThought(db, id).then((t) => {
@@ -67,6 +149,7 @@ function Screens() {
         through quickly. Things you start and finish (a note, a recording, a share)
         rise from the bottom like a sheet. Durations are short on purpose.
       */}
+      <LockGate>
       <ThoughtMenuProvider>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg }, animation: 'ios_from_right', animationDuration: 220 }}>
         <Stack.Screen name="index" options={{ animation: 'fade', animationDuration: 140 }} />
@@ -83,8 +166,14 @@ function Screens() {
         <Stack.Screen name="latest" options={{ animation: 'none' }} />
         <Stack.Screen name="review" options={{ animation: 'fade_from_bottom', animationDuration: 180 }} />
         <Stack.Screen name="tour" options={{ animation: 'fade', animationDuration: 160, gestureEnabled: false }} />
+        <Stack.Screen name="recap" options={{ animation: 'fade_from_bottom', animationDuration: 180 }} />
+        <Stack.Screen name="trash" options={{ animation: 'ios_from_right', animationDuration: 220 }} />
+        <Stack.Screen name="tile" options={{ animation: 'none' }} />
+        <Stack.Screen name="surprise" options={{ animation: 'none' }} />
       </Stack>
       </ThoughtMenuProvider>
+      <ToastHost />
+      </LockGate>
     </GestureHandlerRootView>
   );
 }

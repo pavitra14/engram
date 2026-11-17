@@ -9,7 +9,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppState, Keyboard, KeyboardAvoidingView, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { captureFile, captureText } from '@/lib/capture';
+import { captureFile, captureText, saveNote } from '@/lib/capture';
+import { wordsInPicture } from '@/lib/ocr';
 import { font, useTheme } from '@/theme';
 
 import { ActionSheet } from './ActionSheet';
@@ -110,6 +111,27 @@ export function CaptureBar({ clipboard = false }: { clipboard?: boolean }) {
     }
   };
 
+  // Photograph a page or a whiteboard: the picture is kept, and the words on it become the note's body.
+  const scan = async () => {
+    try {
+      const may = await ImagePicker.requestCameraPermissionsAsync();
+      if (!may.granted) {
+        setNotice('Camera access is off. Turn it on in system settings to scan paper.');
+        return;
+      }
+      const shot = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.9 });
+      if (shot.canceled || !shot.assets[0]) return;
+      const a = shot.assets[0];
+      const saved = await captureFile(db, a.uri, { mimeType: a.mimeType ?? 'image/jpeg', name: a.fileName, source: 'scan' });
+      const words = saved.media_path ? await wordsInPicture(saved.media_path).catch(() => '') : '';
+      if (words) await saveNote(db, saved.id, { title: '', text: words, html: null });
+      setNotice(words ? 'Scanned. The words are in the note.' : 'Saved the picture. No words could be read from it.');
+      router.push({ pathname: '/thought/[id]', params: { id: saved.id } });
+    } catch (e) {
+      setNotice(`Could not scan that. ${e instanceof Error ? e.message : ''}`.trim());
+    }
+  };
+
   const pickFiles = async () => {
     try {
       const picked = await DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true });
@@ -192,6 +214,7 @@ export function CaptureBar({ clipboard = false }: { clipboard?: boolean }) {
         options={[
           { label: 'Photo or video', icon: 'image', onPress: () => void pickMedia() },
           { label: 'File', icon: 'file-text', onPress: () => void pickFiles() },
+          { label: 'Scan paper or a whiteboard', icon: 'camera', onPress: () => void scan() },
         ]}
       />
     </KeyboardAvoidingView>
