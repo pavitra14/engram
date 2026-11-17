@@ -19,6 +19,17 @@ One commit, built from `docs/ROADMAP.md` (all 19 committed items and most of the
 - **Doing:** check boxes roll up to To do (`lib/checks.ts`), focus timer (`lib/focus.ts`), Waiting and Someday, habits, morning brief and evening wrap-up (`lib/briefs.ts`).
 - **Yours:** trash with undo (30 days), app lock (`LockGate`), accent colour, weekly backup, Markdown export, import from Markdown, text and Keep.
 
+### Verified in 0.6 on the emulator (run 43987356275 for `release/v0.6.0-beta.1`, screenshots on `smoke-shots-release-v0.6.0-beta.1`)
+- The APK builds with the Kotlin tile service, shortcuts, `expo-sensors`, `expo-local-authentication` and `expo-text-extractor`. Android lists `QuickTileService` and the three icon shortcuts.
+- "Call the bank tomorrow 9am" typed in the capture bar became a to-do for tomorrow 9:00 with the Undo message (`24-plain-reminder`).
+- To do shows unticked check boxes from the sample note under "In your notes", and the habits section (`25-todo-boxes`).
+- Today shows "Surprise me" and a "These two seem related" card (`02-home`). Month in review, empty trash and the new Settings sections draw correctly.
+- No crash through the whole walkthrough, both themes.
+
+### Seen to fail or not exercised on the emulator
+- **Text in pictures:** ML Kit's recogniser failed there (`picture not read 'err'`, its own failure listener; the file was found). The emulator probably lacks the Play services module. Unknown on a real phone. The app carried on; the picture was saved without words.
+- **Playing the map:** the sample data spans one week, which is a single step, so the play button is hidden and nothing played. Needs two weeks of notes to see.
+
 ### Not built
 Wear OS tile; on-phone language model features; place reminders; password-protected backups; share a note as an image; media in backups. Back-tap is a system gesture an app cannot claim.
 
