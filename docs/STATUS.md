@@ -17,7 +17,13 @@ _Last updated: 16 Nov 2026, v0.6.0-beta.1. Update this file whenever you finish 
 - **Ask your notes** (`ask.ts`, `/ask`) behind the `ask` flag, which is off in the cloud table. Never run on any device.
 - CI publishes betas as ordinary releases.
 
-Verification is added below once the release run has finished.
+### Verified in 0.7 on the emulator (run 43998727605 for `release/v0.7.0-beta.2`, screenshots on `smoke-shots-release-v0.7.0-beta.2`)
+- The APK builds under `dev.pavitra.engram` with `modules/engram-ocr`; the tile service is registered under the new id. Published as an ordinary release, 99 MB (86 MB in 0.6).
+- **Text in pictures works:** the shared screenshot was read (270 characters) and its words are shown under the picture (`11b-image-text`). Latin only was exercised.
+- No crash through the walkthrough, both themes.
+
+### Not verified in 0.7
+Devanagari text in a picture; backup zip export and restore with media; the crash screen (nothing crashed); Ask your notes (flag off, never run); everything listed as unverified for 0.6. Known small thing: a new picture is read twice on first save (once by capture, once by the catch-up pass at launch); harmless, worth tidying.
 
 ## What 0.6 changed
 
