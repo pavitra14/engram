@@ -11,7 +11,7 @@ export default function TileScreen() {
   const db = useDb();
   const { c } = useTheme();
   useEffect(() => {
-    void repo.getMeta(db, 'tile_opens').then((v) => router.replace(v === 'note' ? '/compose' : '/voice'));
+    void repo.getMeta(db, 'tile_opens').then((v) => router.replace(v === 'note' ? '/compose?from=tile' : '/voice?from=tile'));
   }, [db]);
   return <View style={{ flex: 1, backgroundColor: c.bg }} />;
 }

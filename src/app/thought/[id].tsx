@@ -28,6 +28,7 @@ import { addTodo, pickDateTime, reminderPresets, removeTodo, setDone, setImporta
 import { languageName } from '@/lib/translate';
 import { clock, dueLabel, fileSize, hostOf, repeatLabel, when } from '@/lib/text';
 import { font, kindLabel, type, useTheme } from '@/theme';
+import { count, M } from '@/lib/usage';
 
 /** "Written 4 months earlier. " for a linked note that is much older than this one, so old thinking stands out. */
 function earlier(theirs: number, mine: number): string {
@@ -71,6 +72,7 @@ function AudioPlayer({ uri }: { uri: string }) {
 
 export default function ThoughtScreen() {
   const { id, menu: startMenu } = useLocalSearchParams<{ id: string; menu?: string }>();
+  useEffect(() => count(M.openedNote), [id]);
   const db = useDb();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
@@ -202,6 +204,7 @@ export default function ThoughtScreen() {
 
   const remind = async (at: number | null) => {
     const alerting = await addTodo(db, thought, at);
+    if (at) count(M.reminderSet);
     setNote(alerting ? null : 'Saved, but notifications are off for Engram, so the phone will not alert you. Turn them on in system settings.');
   };
 

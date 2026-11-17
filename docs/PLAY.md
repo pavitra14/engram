@@ -29,7 +29,7 @@ _Written 17 Nov 2026. F-Droid was considered and dropped (D52): the code is all 
 
 - Store listing: title, short and full description, 512 px icon, 1024x500 feature graphic, 2 to 8 phone screenshots (`docs/screenshots`), category, contact email, website.
 - Privacy policy URL: https://engrm.app/privacy
-- Data safety form. Local only; optional Engram Cloud sync (off for everyone for now); no analytics or ads; the feature flags are read from Supabase at launch; model and language-pack downloads. Match `docs/PRIVACY.md`.
+- Data safety form. Local only; optional Engram Cloud sync (off for everyone for now); no ads; the feature flags are read from Supabase at launch; model and language-pack downloads. **App activity: app interactions**, collected only if the person opts in (optional), not shared, not linked to the person's identity, used for analytics; no device or other ids. Coarse location is not stored (the IP address is never kept with the counts). Match `docs/PRIVACY.md`.
 - Content rating questionnaire, target audience (not for children), no ads, no login needed.
 - Permission declarations. Check against the list the release job prints. Expected: microphone, camera, calendar read and write, notifications, foreground service (media playback, for audio), biometric, internet.
 - Account deletion: Engram Cloud sign-in is flagged off. If the flag is ever turned on, Play requires an in-app and a web way to delete the account.

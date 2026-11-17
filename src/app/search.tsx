@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useDb } from '@/db/provider';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,6 +12,7 @@ import * as repo from '@/db/repo';
 import type { Thought, ThoughtKind } from '@/db/types';
 import { placement, useBrain } from '@/lib/brain';
 import { font, KINDS, type, useTheme } from '@/theme';
+import { count, M } from '@/lib/usage';
 
 const PLURAL: Record<ThoughtKind, string> = {
   text: 'Notes',
@@ -29,6 +30,13 @@ export default function SearchScreen() {
   const brain = useBrain(db);
   const params = useLocalSearchParams<{ q?: string }>();
   const [query, setQuery] = useState(() => (typeof params.q === 'string' ? params.q : ''));
+  // One search per visit, however many letters are typed.
+  const searched = useRef(false);
+  useEffect(() => {
+    if (searched.current || !query.trim()) return;
+    searched.current = true;
+    count(M.searched);
+  }, [query]);
   const [kind, setKind] = useState<ThoughtKind | null>(null);
   const [hits, setHits] = useState<Thought[] | null>(null);
 

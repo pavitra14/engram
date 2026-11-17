@@ -16,6 +16,7 @@ import { embedText, MODEL_ID, modelReady } from './semantic';
 import { dueLabel, firstUrl, htmlToText, nearDuplicate, peopleIn, renameWikiLink, textToHtml, titleOf, wikiLinks } from './text';
 import { showToast } from './toast';
 import { parseWhen } from './when';
+import { count, M } from '@/lib/usage';
 
 async function corpus(db: Db): Promise<Doc[]> {
   const [thoughts, pairs, vectors] = await Promise.all([
@@ -124,6 +125,7 @@ export async function remindFromWords(db: Db, thought: Thought, source?: string 
   const found = parseWhen(thought.title ?? thought.body);
   if (!found) return thought;
   await addTodo(db, thought, found.at, null);
+  count(M.reminderSet);
   const now = (await repo.getThought(db, thought.id)) ?? thought;
   showToast(`Reminder set: ${dueLabel(found.at).toLowerCase()}`, 'Undo', () => void removeTodo(db, now));
   return now;

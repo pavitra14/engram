@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,13 +12,18 @@ import { captureNote } from '@/lib/capture';
 import { showToast } from '@/lib/toast';
 import { when } from '@/lib/text';
 import { type, useTheme } from '@/theme';
+import { count, M } from '@/lib/usage';
 
 /** A new note: a title and a body with formatting. Opened from the capture bar, a widget, or a calendar event. */
 export default function ComposeScreen() {
   const db = useDb();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ text?: string; title?: string; event_id?: string; event_at?: string }>();
+  const params = useLocalSearchParams<{ text?: string; title?: string; event_id?: string; event_at?: string; from?: string }>();
+  useEffect(() => {
+    if (params.from === 'widget') count(M.fromWidget);
+    else if (params.from === 'shortcut' || params.from === 'tile') count(M.fromTileOrShortcut);
+  }, [params.from]);
   const editor = useRef<NoteEditorHandle | null>(null);
   const [has, setHas] = useState(() => !!(params.text || params.title));
   const [typed, setTyped] = useState(false);
@@ -51,6 +56,7 @@ export default function ComposeScreen() {
         setSaving(false);
         return;
       }
+      count(M.titledNote);
       const made = await captureNote(
         db,
         note,

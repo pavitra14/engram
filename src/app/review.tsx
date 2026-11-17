@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import { weekOf } from '@/lib/habits';
 import { addTodo } from '@/lib/reminders';
 import { daysAgo, titleOf, when } from '@/lib/text';
 import { font, type, useTheme } from '@/theme';
+import { count, M } from '@/lib/usage';
 
 const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -22,6 +23,7 @@ const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
  * to decide on one at a time. Keep it, make it a to-do, or let it go.
  */
 export default function ReviewScreen() {
+  useEffect(() => count(M.review), []);
   const db = useDb();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();

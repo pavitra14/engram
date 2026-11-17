@@ -12,6 +12,7 @@ import { Platform } from 'react-native';
 import * as repo from '@/db/repo';
 
 import { capture, deleteMedia, importMedia, remindFromWords } from './capture';
+import { count, M } from '@/lib/usage';
 
 export const SPEECH_LANGS = [
   { code: 'en-IN', label: 'English (India)' },
@@ -120,6 +121,7 @@ export function useVoice(onNotice: (message: string) => void) {
           duration_ms: Date.now() - started.current,
           source: 'voice',
         });
+        count(M.voice);
         // "Call the bank Friday at ten" spoken aloud sets its reminder, the same as when typed.
         await remindFromWords(db, saved, 'voice');
       } catch (e) {

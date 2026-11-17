@@ -1,10 +1,10 @@
 # Status
 
-_Last updated: 17 Nov 2026, after `v0.7.0-beta.2`. Update this file whenever you finish work._
+_Last updated: 18 Nov 2026, building `v0.8.0-beta.3`. Update this file whenever you finish work._
 
 ## Where things are
 
-- The app is **0.7.0** (`versionCode` 7), released as `v0.7.0-beta.2`. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
+- The app is **0.8.0** (`versionCode` 8), released as `v0.8.0-beta.3`, a **pre-release** the owner will promote by hand once tested (the owner chose the beta.3 number). The last ordinary release is `v0.7.0-beta.2`; the website shows the latest ordinary release, so it keeps showing 0.7 until 0.8 is promoted. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
 - **Engram Cloud is switched off** by the `cloud` feature flag (D37). The code and the server side from 0.4 are still there. Status against issue #2 is in `CLOUD.md`.
 - **Ask your notes is switched off** by the `ask` flag. Its model is not yet in `package.json` (see "Before turning Ask on" below).
 - The old `v1.0.0`, `v2.0.0-beta.1` releases and the `redesign-diag` branch still need deleting by hand on GitHub. Branch deletion commands are in the owner's hands; the agent cannot delete them from a cloud session.
@@ -24,6 +24,19 @@ _Last updated: 17 Nov 2026, after `v0.7.0-beta.2`. Update this file whenever you
 - Translation in a non-English language. If it fails, the message shown on the phone is the first thing to report.
 - Quick Settings tile, icon shortcuts, app lock, focus timer, morning and evening notifications.
 - Anything that crashes shows the crash screen; note what it says.
+
+## What 0.8 adds: anonymous usage counts (18 Nov 2026)
+
+Opt-in usage counts, designed with the owner in chat (D53, `docs/METRICS.md`). The tour's last page asks; people updating or who skipped the tour get a one-time sheet on Today; Settings, Privacy has the switch and "What's sent". The phone tallies per local date and sends one message per finished day to `public.record_usage`; the server keeps only totals in the unexposed `usage` schema. Kill switch: the `metrics` flag, **off** until the owner has tested. Widget, tile and shortcut links now carry `?from=`. Privacy Policy, README, AGENTS and the website changed in the same push: "no analytics" is gone; the phrases are "no tracking" and "your notes stay on your phone".
+
+- **Verified:** migration `0004_usage_counts` applied to the project and tested in SQL as `anon` (adding up, the 500 cap, unknown ids dropped, one range per bucket set, old and future days and bad versions refused, `anon` cannot read the schema). `npm run check` covers the local table and the message logic.
+- **Not verified:** a real phone sending (debug builds never send and the emulator test answers no). The owner turns the flag on after testing: `update public.feature_flags set enabled = true, updated_at = now() where key = 'metrics';`, then checks `select * from usage.daily order by day desc;` the day after. The dashboard login needs a password set by the owner (METRICS.md).
+
+### Owner test list for 0.8
+- Fresh install: the tour ends with the question; both buttons work.
+- Over 0.7: the sheet appears once on Today and not again.
+- Settings, Privacy: switch on and off; What's sent.
+- With the flag on and counts on: the previous day's row appears in `usage.daily`.
 
 ## Preparing for Google Play (17 Nov 2026)
 

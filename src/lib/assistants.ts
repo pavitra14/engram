@@ -10,6 +10,7 @@ import { Linking, Platform } from 'react-native';
 import type { Thought } from '@/db/types';
 
 import { titleOf } from './text';
+import { count, M } from '@/lib/usage';
 
 export type Assistant = { id: 'claude' | 'chatgpt'; name: string; pkg: string; url: (prompt: string) => string };
 
@@ -63,6 +64,7 @@ export function planPrompt(topic: string | null, thoughts: Thought[]): string {
  * clipboard, in case the app opens without it.
  */
 export async function chatWith(a: Assistant, prompt: string): Promise<void> {
+  count(M.assistant);
   await Clipboard.setStringAsync(prompt).catch(() => {});
   await Linking.openURL(a.url(prompt));
 }

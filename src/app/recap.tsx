@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import { useDb } from '@/db/provider';
 import { useBrain } from '@/lib/brain';
 import { monthRecap } from '@/lib/recall';
 import { font, type, useTheme } from '@/theme';
+import { count, M } from '@/lib/usage';
 
 function Card({ figure, label, sub }: { figure: string; label: string; sub?: string }) {
   const { c } = useTheme();
@@ -25,6 +26,7 @@ function Card({ figure, label, sub }: { figure: string; label: string; sub?: str
 
 /** A month in a few cards: what was written, where, and one note that got no second look. */
 export default function RecapScreen() {
+  useEffect(() => count(M.recap), []);
   const db = useDb();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();

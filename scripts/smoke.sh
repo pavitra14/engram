@@ -27,6 +27,9 @@ launch
 # A new install opens on the tour.
 sleep 25; shot 01-tour
 tap 900 2290; sleep 2; shot 01b-tour-page-2
+# The last page asks about usage counts. The test answers no in Settings, so CI never sends any.
+for _ in 1 2 3 4; do tap 900 2290; sleep 2; done; shot 01c-tour-usage-question
+open "engram://settings?metrics=off"; sleep 5
 
 open "engram://samples"; sleep 18; shot 02-home
 

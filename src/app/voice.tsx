@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { Button, Notice } from '@/components/ui';
 import { clock } from '@/lib/text';
 import { useVoice } from '@/lib/useVoice';
 import { type, useTheme } from '@/theme';
+import { count, M } from '@/lib/usage';
 
 const BARS = 24;
 
@@ -23,6 +24,11 @@ function Timer({ since }: { since: number }) {
 
 /** Full-screen voice capture: your words appear as you speak, with one big button to save. */
 export default function VoiceScreen() {
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  useEffect(() => {
+    if (from === 'widget') count(M.fromWidget);
+    else if (from === 'shortcut' || from === 'tile') count(M.fromTileOrShortcut);
+  }, [from]);
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const [notice, setNotice] = useState<string | null>(null);

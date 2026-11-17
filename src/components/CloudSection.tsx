@@ -100,7 +100,7 @@ export function CloudSection() {
     <View style={{ gap: 12 }}>
       <Text style={[type.meta, { color: c.soft }]}>
         Optional. Sign in to keep a copy of your notes, to-dos and tags in Engram Cloud and see them on your other devices.
-        Without an account nothing leaves this phone. The cloud copy is encrypted in transit and at rest, but it is not
+        Without an account your notes never leave this phone. The cloud copy is encrypted in transit and at rest, but it is not
         end-to-end encrypted: the service could read it.
       </Text>
       <TextInput

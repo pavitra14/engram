@@ -1,11 +1,12 @@
 import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { openDatabase } from '@/db/powersync';
 import { exportBackup } from '@/lib/backup';
 import { type, useTheme } from '@/theme';
+import { count, M } from '@/lib/usage';
 
 /**
  * Shown in place of a screen that failed while drawing. It may be drawn outside
@@ -13,6 +14,7 @@ import { type, useTheme } from '@/theme';
  * to the light palette) and opens the database for itself if a backup is asked for.
  */
 export function CrashScreen({ error, retry }: { error: Error; retry: () => Promise<void> }) {
+  useEffect(() => count(M.crashScreen), []);
   const { c } = useTheme();
   const [note, setNote] = useState<string | null>(null);
   const details = [

@@ -9,6 +9,7 @@ import type { Repeat, Thought } from '@/db/types';
 
 import { dataChanged } from './bus';
 import { nextRepeat, titleOf } from './text';
+import { count, M } from '@/lib/usage';
 
 const CHANNEL = 'reminders';
 /** Reminders carry two buttons: Done, and In an hour. */
@@ -93,6 +94,7 @@ export async function removeTodo(db: Db, thought: Thought): Promise<void> {
  * it moves to its next time and stays on the list. Returns that next time, if so.
  */
 export async function setDone(db: Db, thought: Thought, done: boolean): Promise<number | null> {
+  if (done) count(M.todoDone);
   if (done && thought.repeat && thought.remind_at) {
     const next = nextRepeat(thought.remind_at, thought.repeat);
     await addTodo(db, thought, next, thought.repeat);

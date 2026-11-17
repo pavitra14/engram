@@ -15,6 +15,7 @@ import type { Thought } from '@/db/types';
 import { dataChanged, useDataVersion } from './bus';
 import { allowed } from './reminders';
 import { titleOf } from './text';
+import { count, M } from '@/lib/usage';
 
 export const FOCUS_MINUTES = 25;
 export const FOCUS_DONE = 'focus_done';
@@ -64,6 +65,7 @@ export async function endFocus(db: Db, now: number = Date.now()): Promise<number
   if (s.notifId && now < s.until) await Notifications.cancelScheduledNotificationAsync(s.notifId).catch(() => {});
   const minutes = Math.round((Math.min(now, s.until) - s.start) / 60_000);
   if (minutes > 0) await repo.addFocus(db, s.id, minutes);
+  if (now >= s.until) count(M.focusDone);
   await repo.setMeta(db, 'focus', 'null');
   dataChanged();
   return minutes;

@@ -45,4 +45,4 @@ The emulator job stays on GitHub's runners unless you change its `runs-on` too; 
 
 ## Releasing
 
-Push a branch named `release/vX.Y.Z-beta.N` from a commit on `main`. The hyphen makes the release a pre-release. See "Releasing" in `AGENTS.md`.
+Push a branch named `release/vX.Y.Z-beta.N` from a commit on `main`. Betas are ordinary releases; `-alpha` and `-rc` names, and any release whose `docs/release-notes.md` starts with `<!-- prerelease -->`, are published as pre-releases. See "Releasing" in `AGENTS.md`.

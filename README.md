@@ -90,7 +90,7 @@ Engram is built around those two moments.
 
 > Your thoughts live in a database on your phone. They are not uploaded, analysed or sold.
 
-- **No analytics, no ads, no tracking.**
+- **No ads, no tracking.** Engram asks once whether you'd like to share an anonymous daily count of which features you use. It's off unless you say yes, and never includes your notes.
 - **Voice** is turned into text by Android's offline recogniser, not a cloud service.
 - **Text in pictures** is read by a recogniser built into the app, with no download and no upload.
 - **Downloads happen only when you ask:** the model for linking by meaning (about 130 MB), a language pack per language for translation (about 30 MB each). After that, both run on the phone.

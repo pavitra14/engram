@@ -1,32 +1,22 @@
-This is **beta 2**: the first Engram build meant for more than one tester. Expect rough edges, and please report what breaks.
+<!-- prerelease -->
+This is a **pre-release** for testing. It becomes an ordinary release once it has been tried on real phones.
 
-**Install:** download the APK below on an Android phone (Android 7 or newer, 64-bit) and open it.
+**Install:** download the APK below on an Android phone (Android 7 or newer, 64-bit) and open it. It installs over 0.7 and keeps your notes.
 
-**Coming from 0.6 or earlier? Read this first.** The app's id changed to `dev.pavitra.engram`, so Android treats this as a new app: it installs beside the old Engram and starts empty.
+**New in 0.8**
 
-1. Update the old app's backup: in the **old** Engram, Settings, Back up, Export. (0.6 backups hold words, tags and links, not photos or recordings.)
-2. In the **new** Engram, Settings, Restore, Import that file.
-3. Check your notes are there, then uninstall the old one. Widgets and the Quick Settings tile need adding again.
+- **A question about usage counts.** At the end of the tour (or once, the first time you open 0.8), Engram asks whether you'd like to share an anonymous daily count of which features you used. It's entirely your choice: nothing is counted unless you say yes, it never includes your notes, and there is no id for you or your phone. Change your answer any time in Settings, Privacy. **What's sent** shows today's counts in plain words. The full details are in the [Privacy Policy](https://engrm.app/privacy).
+- **Widgets, the Quick Settings tile and icon shortcuts** now say where they were opened from, so the counts can tell which ones people use.
+- Small wording changes: Engram now says "your notes stay on your phone", which stays true whether or not you share counts.
 
-This build is signed with a development key. Install it only from this releases page. A proper signing key is on the way; when it arrives you will need to back up and reinstall once more.
+**Please try these on your phone**
 
-**New in 0.7**
-
-- **Text in pictures now works without Google Play services** and reads **Hindi and other Devanagari text** as well as Latin. The recogniser is inside the app: nothing is downloaded and it works offline. A photo with no words says so and offers "Try again".
-- **Backups include your photos, recordings and files.** "Back up" makes one zip; "Restore" puts everything back.
-- **A screen for when something breaks.** If a screen fails, Engram shows what happened with Try again, Copy details and Export a backup. Nothing is reported automatically, so please send the details.
-- **Ask your notes** is built but switched off until it has been tested on real phones.
-
-**Please try these on your phone; they could not be tested automatically**
-
-- Share or scan a photo with printed text, then search for a word in it. Try one in Hindi.
-- Back up, then Restore into a fresh install: do photos and recordings come back?
-- Translation in a language other than English: if it fails, what does the message say?
-- The Quick Settings tile, icon shortcuts, app lock, the focus timer and the morning and evening notifications.
+- Fresh install: does the tour end with the question, and do both buttons work?
+- Over 0.7: does the question appear once on Today, and not again after you answer?
+- Settings, Privacy: turn usage counts on and off, and open What's sent.
+- With counts on, use Engram on two days: the first day's totals should reach the server after you open it the next day.
 
 **Known limits**
 
 - The weekly automatic backup still holds words, tags and links only.
 - A backup zip is built in memory; with more than about 400 MB of media, the largest files are left out and the count is shown.
-- The trash, pins, group names and goals stay on this phone.
-- Engram Cloud is still switched off.

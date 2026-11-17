@@ -28,7 +28,7 @@ When you finish a piece of work, update `docs/STATUS.md` (and `DECISIONS.md` if 
 - **Platform:** Android first. iOS is out of scope for now, but avoid Android-only code where a cross-platform option is equally good.
 - **Package id:** `dev.pavitra.engram`. App name: Engram. URL scheme: `engram://`.
 - **Stack:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript, Expo Router, PowerSync (`@powersync/react-native` on `@op-engineering/op-sqlite`, local-only), `react-native-enriched-html` (the note editor), `react-native-android-widget`, `d3-force` (layout only), Reanimated 4.7, `expo-clipboard`, `expo-speech-recognition`, `expo-notifications`, `expo-calendar`, `expo-image-picker`, `react-native-executorch` (text embeddings only). Skia was removed in v2; nothing draws on a canvas.
-- **Versions are 0.x.** The app is `0.7.0` (`versionCode` 7), released as `v0.7.0-beta.2`. Two earlier releases were numbered 1.0.0 and 2.0.0-beta.1 by mistake; the owner asked for them to be removed. Never number a release 1.0 or higher unless the owner says so.
+- **Versions are 0.x.** The app is `0.8.0` (`versionCode` 8), released as `v0.8.0-beta.3` (a pre-release until the owner promotes it); the last ordinary release is `v0.7.0-beta.2`. Two earlier releases were numbered 1.0.0 and 2.0.0-beta.1 by mistake; the owner asked for them to be removed. Never number a release 1.0 or higher unless the owner says so.
 
 ## Repository map
 
@@ -41,7 +41,7 @@ src/
     group/[id].tsx     one group's thoughts ("loose" = ungrouped, "largest" = test hook)
     thought/[id].tsx   a note: title and formatted body edited in place, file, to-do, tags, links
     latest.tsx         engram://latest opens the newest thought (test hook)
-    tour.tsx           the first-run tour; shown once, and from Settings
+    tour.tsx           the first-run tour and the usage-counts question; shown once, and from Settings
     review.tsx         the weekly review: the week in numbers, then older notes to decide on
     search.tsx         full-text search with kind filters and group matches
     voice.tsx          full-screen voice capture with live transcript
@@ -71,7 +71,7 @@ src/
                        assistants.ts (Chat with Claude / ChatGPT), open.ts, useVoice.ts,
                        translate.ts (English versions, on the phone), habits.ts (daily question,
                        streak, week numbers, note templates), when.ts (dates in plain words), checks.ts (check boxes),
-                       recall.ts, projects.ts, markdown.ts, ocr.ts, ask.ts (+ ask.logic.ts), focus.ts, briefs.ts, lock.ts, toast.ts, actions.ts, backup.ts, samples.ts, bus.ts, text.ts
+                       recall.ts, projects.ts, markdown.ts, ocr.ts, ask.ts (+ ask.logic.ts), usage.ts (+ usage.logic.ts, anonymous usage counts), focus.ts, briefs.ts, lock.ts, toast.ts, actions.ts, backup.ts, samples.ts, bus.ts, text.ts
   theme.tsx            light and black palettes, type scale, ThemeProvider, useTheme()
 assets/brand/          SVG sources for the mark and wordmark; PNGs in assets/images are rendered from them
 index.ts               entry point: expo-router plus the widget task handler
@@ -116,7 +116,7 @@ You do not need the Android SDK locally. CI builds the APK.
 - **A quickly captured line is the note's title**, not its body (`splitQuick` in `capture.logic.ts`). Several lines: the first is the title, the rest the body.
 - **Capture is save-first.** Insert the row, then link. Never make capture wait on anything slower than one insert.
 - **Links are undirected** and stored with `a_id < b_id` (a CHECK constraint enforces it). Use `repo.upsertLink`, which orders ids and never downgrades a manual link to an automatic one.
-- **Nothing of the person's leaves the device unless they sign in to Engram Cloud.** No analytics, no cloud speech. Voice uses `requiresOnDeviceRecognition: true`. Signed out, the app makes three kinds of request, none carrying the person's words: one public read of the feature flags at launch (`src/cloud/flags.ts`), the language model downloads after they turn on "Understand meaning" or download the Ask model, and ML Kit's language pack download after they turn on translation. Signed in, `src/cloud/` sends notes, to-dos, tags and hand-made links to the project's Supabase database and nothing else; see `docs/CLOUD.md` for the exact list. Do not add anything to what is sent, a new network request, a download or a permission without updating that page, `docs/PRIVACY.md` and the sign-in text. `react-native-executorch` reports downloads to its maker by default; `semantic.ts` switches that off and it must stay off.
+- **Nothing of the person's leaves the device unless they sign in to Engram Cloud.** No tracking, no cloud speech. Voice uses `requiresOnDeviceRecognition: true`. Signed out, the app makes four kinds of request, none carrying the person's words: one public read of the feature flags at launch (`src/cloud/flags.ts`), the language model downloads after they turn on "Understand meaning" or download the Ask model, ML Kit's language pack download after they turn on translation, and, only if the person said yes, one anonymous usage-count message a day (`src/lib/usage.ts`, `docs/METRICS.md`). Usage counts never carry an id of any kind, a time of day, an order of actions, device details or anything the person wrote; they are counts of a fixed list, sent per finished day and kept only as totals. A new metric means updating `usage.logic.ts`, a new migration for `usage.metrics`, `docs/METRICS.md` and `docs/PRIVACY.md` (and the website copy) in the same release. Never count anything before the person has said yes. Signed in, `src/cloud/` sends notes, to-dos, tags and hand-made links to the project's Supabase database and nothing else; see `docs/CLOUD.md` for the exact list. Do not add anything to what is sent, a new network request, a download or a permission without updating that page, `docs/PRIVACY.md` and the sign-in text. `react-native-executorch` reports downloads to its maker by default; `semantic.ts` switches that off and it must stay off.
 - **Sync is recorded only while signed in.** `repo.setTracking(true)` makes writes note themselves in `outbox`. Anything that changes a synced row must go through a `repo.ts` function that calls `mark()`, or other devices will never hear of it. Applying rows from the cloud goes through `repo.applyRemote`, which records nothing.
 - **The cloud is written only through `apply_sync_batch`.** Never grant direct insert, update or delete on the cloud tables. Server changes are new files in `supabase/migrations/`, applied to the project and tested there; never edit a migration that has been applied.
 - **Unfinished features sit behind a flag that is off by default.** Flags are rows in the cloud's `feature_flags` table, read by `src/cloud/flags.ts`. A flag that is missing, false, or never fetched is off; the last fetched answer is remembered for when the phone is offline. Engram Cloud is behind `cloud`, which is off: with it off the Settings section is hidden, no session is restored and no change is recorded for sending. To add a flag, add its name to `FLAGS` and a row to the table.
@@ -171,7 +171,7 @@ These caught the first build out. The installed versions behave this way:
 1. Bump `expo.version` and `expo.android.versionCode` in `app.json`.
 2. Update `docs/release-notes.md` (it becomes the GitHub release body) and `docs/STATUS.md`.
 3. Merge to `main` and wait for CI to pass.
-4. Push a branch named `release/vX.Y.Z-beta.N` from that commit, or a tag of the same name if your environment allows pushing tags (Claude Code cloud sessions cannot). From 0.7 a beta is published as an ordinary release; only `-alpha` and `-rc` names are marked pre-release. The phone APK is only built for these refs.
+4. Push a branch named `release/vX.Y.Z-beta.N` from that commit, or a tag of the same name if your environment allows pushing tags (Claude Code cloud sessions cannot). From 0.7 a beta is published as an ordinary release; `-alpha` and `-rc` names are marked pre-release, and so is any release whose `docs/release-notes.md` starts with the line `<!-- prerelease -->` (the owner promotes it by hand once tested; remove the line for the next release). The phone APK is only built for these refs.
 5. CI builds, runs the emulator test, and publishes the release with `engram-vX.Y.Z.apk` (arm64) attached.
 
 Release builds are signed with the owner's keystore when the `ENGRAM_KEYSTORE_BASE64`, `ENGRAM_KEYSTORE_PASSWORD`, `ENGRAM_KEY_ALIAS` and `ENGRAM_KEY_PASSWORD` secrets exist (`plugins/withReleaseSigning.js`); without them the build falls back to the template debug key. The release job also builds an AAB for Google Play. See `docs/PLAY.md`. Never commit a keystore or print a secret.

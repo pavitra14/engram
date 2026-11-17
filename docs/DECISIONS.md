@@ -313,3 +313,15 @@ The owner wants people to read the code and use the app, but not copy, modify or
 
 The owner chose to skip F-Droid. The code stays all rights reserved (D51), which F-Droid's main repository does not accept, and ML Kit (text in pictures, translation) is proprietary. Distribution is the GitHub releases page and Google Play. Release builds are signed with an owner-held key supplied by CI secrets, and also produce an AAB for Play. Steps and open checks are in `docs/PLAY.md`.
 
+
+## D53. Anonymous usage counts, opt-in, counts not events (0.8)
+
+The owner wants to know that people use Engram and which features matter, without tracking. Choices:
+
+- **Opt-in.** The tour's last page asks; people updating, or who skipped the tour, get the same question once on Today. Closing it is a no. Nothing is counted before a yes. Settings can change it; no deletes what is waiting.
+- **Counts, not events.** The phone keeps a tally per local date and sends one message per finished day: action counts, settings that are on, and three rough ranges (days active in the last 7, time installed, notes kept). No id of any kind, no time of day, no order, no device model, no content. Sending each action as it happened would reveal timing and order in request logs, and with no id could not tell reach from repetition.
+- **Lost, not doubled.** A day is deleted on the phone before it is sent; a failed send loses it. At most 7 finished days wait.
+- **Our own Supabase**, not an analytics vendor: a `usage` schema the API does not expose, one `security definer` function that validates, caps (500 per metric) and adds to totals. Views hide anything from fewer than 3 installs. Aptabase was considered and rejected: its SDK sends per-event timestamps and a session id, and its server derives a daily hash of IP and user agent.
+- **Kill switch:** the `metrics` flag. Debug builds never send; the emulator test answers no.
+
+Do not add ids, per-event logging or new metrics without updating `docs/PRIVACY.md` (and the website) first.

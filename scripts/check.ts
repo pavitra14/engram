@@ -21,6 +21,7 @@ import { fileNames, htmlToMarkdown, markdownToHtml, noteToMarkdown, parseKeep, p
 import { dueIn, matchProjects, orphaned } from '../src/lib/projects';
 import { DECISION_STEP, decisionRecall, dueRecalls, firstRecall, habitDoneToday, habitStreak, milestone, monthRecap, nextRecall, onThisDay, surprise, toggleHabit } from '../src/lib/recall';
 import { parseWhen } from '../src/lib/when';
+import { activeBucket, ageBucket, buildMessage, CAP, daysActiveIn, describe, localDay, notesBucket, plan, rememberDay } from '../src/lib/usage.logic';
 import { meaningSimilarity, nearMisses, related, relateAll, surfaceTokens, tokenize, whyLinked } from '../src/lib/linker';
 import { dayLabel, daysAgo, dueBucket, dueLabel, fileSize, firstUrl, ftsQuery, highlightRuns, hostOf, htmlToText, isFormatted, looksEnglish, nearDuplicate, nextRepeat, peopleIn, renameWikiLink, textToHtml, titleOf, wikiLinks } from '../src/lib/text';
 
@@ -688,10 +689,47 @@ async function localChecks(): Promise<void> {
   assert.equal((await db.first<{ n: number }>('SELECT COUNT(*) AS n FROM image_text'))!.n, 0, 'a deleted picture takes its words with it');
 }
 
+async function usageChecks(): Promise<void> {
+  const db = nodeDb();
+  await repo.prepare(db);
+  // Counts add up per day and metric, and a day is deleted on its own.
+  await repo.addUsage(db, '2026-11-16', 10);
+  await repo.addUsage(db, '2026-11-16', 10, 2);
+  await repo.addUsage(db, '2026-11-17', 1);
+  assert.deepEqual(await repo.usageDays(db), ['2026-11-16', '2026-11-17']);
+  assert.deepEqual(await repo.usageFor(db, '2026-11-16'), [{ metric: 10, uses: 3 }]);
+  await repo.clearUsage(db, '2026-11-16');
+  assert.deepEqual(await repo.usageDays(db), ['2026-11-17']);
+  await repo.clearUsage(db);
+  assert.deepEqual(await repo.usageDays(db), [], 'saying no deletes everything waiting');
+
+  // Only finished days are sent, at most a week of them; older ones are dropped.
+  const days = ['2026-11-01', '2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-17'];
+  assert.deepEqual(plan(days, '2026-11-17'), { send: days.slice(1, 8), drop: ['2026-11-01'] });
+  assert.deepEqual(plan(['2026-11-17'], '2026-11-17'), { send: [], drop: [] }, 'today waits until it is over');
+
+  // The message carries known actions only, capped, and nothing else.
+  const m = buildMessage('2026-11-16', '0.8.0', [{ metric: 10, uses: 4 }, { metric: 11, uses: 9000 }, { metric: 999, uses: 2 }, { metric: 50, uses: 1 }, { metric: 21, uses: 0 }], [53, 50, 53], [71, 81, 91]);
+  assert.deepEqual(m, { day: '2026-11-16', v: '0.8.0', a: { '10': 4, '11': CAP }, s: [50, 53], b: [71, 81, 91] });
+  assert.deepEqual(Object.keys(m).sort(), ['a', 'b', 's', 'v', 'day'].sort(), 'no id, no time, no content');
+  assert.ok(describe(m).includes('Typed a quick thought: 4'));
+
+  // The rough ranges.
+  assert.deepEqual([1, 2, 3, 4, 6, 7].map(activeBucket), [70, 71, 71, 72, 72, 73]);
+  const D = 86_400_000;
+  assert.deepEqual([0, 7, 28, 91].map((d) => ageBucket(0, d * D)), [80, 81, 82, 83]);
+  assert.deepEqual([0, 9, 10, 99, 100, 1000].map(notesBucket), [90, 90, 91, 91, 92, 93]);
+  const seen = rememberDay(rememberDay(['2026-11-10'], '2026-11-16'), '2026-11-16');
+  assert.deepEqual(seen, ['2026-11-16', '2026-11-10']);
+  assert.equal(daysActiveIn(['2026-11-16', '2026-11-10', '2026-11-09'], '2026-11-16'), 2, 'only the 7 days ending that day count');
+  assert.match(localDay(Date.now()), /^\d{4}-\d{2}-\d{2}$/);
+}
+
 databaseChecks()
   .then(cloudChecks)
   .then(localChecks)
-  .then(() => console.log(`ok: database, trash and local marks, projects, dates in plain words, check boxes, recall, Markdown, old-database import, cloud sync between two phones, search, text helpers, formatted notes, linker, meaning, groups and reminders (${all.length} links in fixture)`))
+  .then(usageChecks)
+  .then(() => console.log(`ok: usage counts, database, trash and local marks, projects, dates in plain words, check boxes, recall, Markdown, old-database import, cloud sync between two phones, search, text helpers, formatted notes, linker, meaning, groups and reminders (${all.length} links in fixture)`))
   .catch((e) => {
     console.error(e);
     process.exit(1);

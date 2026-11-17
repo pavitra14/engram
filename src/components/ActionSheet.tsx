@@ -20,11 +20,14 @@ const OUT = 160;
 export function ActionSheet({
   visible,
   title,
+  message,
   options,
   onClose,
 }: {
   visible: boolean;
   title?: string;
+  /** A few lines under the title, for a question that needs explaining. */
+  message?: string;
   options: SheetOption[];
   onClose: () => void;
 }) {
@@ -61,6 +64,7 @@ export function ActionSheet({
           ]}>
           <View style={[styles.handle, { backgroundColor: c.line }]} />
           {title ? <Text style={[type.labelStrong, styles.title, { color: c.ink }]}>{title}</Text> : null}
+          {message ? <Text style={[type.small, styles.message, { color: c.soft }]}>{message}</Text> : null}
           {/* A long menu scrolls inside the sheet, so its last choice is never off the screen. */}
           <ScrollView style={{ maxHeight: Math.round(window.height * 0.7) }} bounces={false}>
           {options.map((o) => (
@@ -88,5 +92,6 @@ const styles = StyleSheet.create({
   sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, paddingTop: 12 },
   handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, marginBottom: 8 },
   title: { paddingHorizontal: 24, paddingVertical: 10 },
+  message: { paddingHorizontal: 24, paddingBottom: 12 },
   option: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 24 },
 });

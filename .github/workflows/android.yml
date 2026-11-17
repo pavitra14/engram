@@ -181,6 +181,8 @@ jobs:
         run: |
           TAG="${REF_NAME#release/}"
           mv out/engram.apk "out/engram-$TAG.apk"
-          # Betas are ordinary releases from 0.7 on. Only alpha and rc builds are marked as pre-releases.
+          # Betas are ordinary releases from 0.7 on. Alpha and rc builds are pre-releases, and so is any
+          # release whose notes start with <!-- prerelease --> (the owner promotes it once tested).
           PRE=""; case "$TAG" in *-alpha*|*-rc*) PRE="--prerelease";; esac
+          if head -n 1 docs/release-notes.md | grep -q '<!-- prerelease -->'; then PRE="--prerelease"; fi
           gh release create "$TAG" "out/engram-$TAG.apk" $PRE --target "$GITHUB_SHA" --title "Engram $TAG" --notes-file docs/release-notes.md

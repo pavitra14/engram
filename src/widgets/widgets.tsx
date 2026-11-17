@@ -34,7 +34,7 @@ export function QuickThoughtWidget({ dark = false }: { dark?: boolean }) {
         paddingLeft: 20,
         paddingRight: 8,
       }}>
-      <FlexWidget {...open('engram://compose')} style={{ flex: 1, height: 'match_parent', justifyContent: 'center' }}>
+      <FlexWidget {...open('engram://compose?from=widget')} style={{ flex: 1, height: 'match_parent', justifyContent: 'center' }}>
         <TextWidget text="Write a thought" maxLines={1} style={{ fontSize: 16, color: c.soft }} />
       </FlexWidget>
       <FlexWidget
@@ -43,7 +43,7 @@ export function QuickThoughtWidget({ dark = false }: { dark?: boolean }) {
         <TextWidget text="✓" style={{ fontSize: 18, color: c.ink }} />
       </FlexWidget>
       <FlexWidget
-        {...open('engram://voice')}
+        {...open('engram://voice?from=widget')}
         style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent }}>
         <TextWidget text="●" style={{ fontSize: 16, color: c.onAccent }} />
       </FlexWidget>
@@ -71,7 +71,7 @@ export function TodoWidget({ dark = false, todos = [], open: count = 0 }: Partia
           <TextWidget text={count > 0 ? `To do, ${count}` : 'To do'} style={{ fontSize: 15, fontWeight: '600', color: c.ink }} />
         </FlexWidget>
         <FlexWidget
-          {...open('engram://compose')}
+          {...open('engram://compose?from=widget')}
           style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent }}>
           <TextWidget text="+" style={{ fontSize: 20, color: c.onAccent }} />
         </FlexWidget>

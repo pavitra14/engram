@@ -56,6 +56,10 @@ Project `engram` (region ap-south-1). Schema in `supabase/migrations/0001_engram
 
 Checked against the real database, in a transaction that was rolled back: first write, replayed batch, stale edit with different words (conflict), stale edit with the same words (accepted), a second user reading nothing and unable to delete the first user's row, direct insert refused, delete then edit ("gone"), paging, `delete_my_data`, and a call with no user refused.
 
+## Usage counts (separate from the cloud)
+
+`supabase/migrations/0004_usage_counts.sql` adds a `usage` schema, which the Data API does not expose: `usage.metrics` (the fixed list), `usage.daily` (totals per day, version and metric) and five read-only views. The app can only call `public.record_usage(payload)`, executable by `anon`, which checks the message and adds it to the totals. Sign-in plays no part; nothing in it is tied to an account. Kill switch: the `metrics` flag. Full details, queries and the dashboard login: `docs/METRICS.md`.
+
 ## What the app needs
 
 Two values at build time, both public by design: `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_KEY` (the **publishable** key). CI reads them from repository secrets of the same names. For a local build put them in a `.env` file, which is gitignored. A build without them works normally and shows no cloud option.

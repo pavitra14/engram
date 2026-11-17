@@ -2,7 +2,7 @@
   "expo": {
     "name": "Engram",
     "slug": "engram",
-    "version": "0.7.0",
+    "version": "0.8.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "engram",
@@ -10,7 +10,7 @@
     "backgroundColor": "#F3F4F1",
     "android": {
       "package": "dev.pavitra.engram",
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "backgroundColor": "#1F3FBF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

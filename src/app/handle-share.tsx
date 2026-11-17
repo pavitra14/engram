@@ -23,6 +23,7 @@ import * as repo from '@/db/repo';
 import { captureFile, captureText, mergeInto } from '@/lib/capture';
 import { firstUrl, titleOf } from '@/lib/text';
 import { font, type, useTheme } from '@/theme';
+import { count, M } from '@/lib/usage';
 
 type State =
   | { phase: 'saving' }
@@ -52,6 +53,7 @@ async function savePayload(
 ): Promise<Thought | null> {
   const value = p.value?.trim();
   if (!value) return null;
+  count(M.shared);
   const kind = p.shareType;
   if (kind === 'text' || kind === 'url') return captureText(db, value, 'share');
   if (kind === 'image' || kind === 'video' || kind === 'audio' || kind === 'file') {

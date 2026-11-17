@@ -25,6 +25,8 @@ import { MODEL_SIZE_NOTE, useSemanticState } from '@/lib/semantic';
 import { disableSmartLinking, enableSmartLinking } from '@/lib/smart';
 import { canTranscribeOnDevice, SPEECH_LANGS, speechLang } from '@/lib/useVoice';
 import { ACCENT_NAMES, ACCENTS, type AppearanceSetting, type, useTheme } from '@/theme';
+import { count as countUse, M, previewUsage, readUsageAnswer, setUsage, type UsageAnswer } from '@/lib/usage';
+import { describe } from '@/lib/usage.logic';
 
 function Row({ title, sub, action, onPress, danger }: { title: string; sub: string; action: string; onPress: () => void; danger?: boolean }) {
   const { c } = useTheme();
@@ -110,7 +112,8 @@ export default function SettingsScreen() {
   const [status, setStatus] = useState<string | null>(null);
   const onDevice = canTranscribeOnDevice();
   const smart = useSemanticState();
-  const params = useLocalSearchParams<{ smart?: string; home?: string }>();
+  const params = useLocalSearchParams<{ smart?: string; home?: string; metrics?: string }>();
+  const [usage, setUsageState] = useState<UsageAnswer>(null);
   const [calendar, setCalendar] = useState(false);
   const [choosingLang, setChoosingLang] = useState(false);
   const cloudOn = useFlag('cloud');
@@ -228,6 +231,26 @@ export default function SettingsScreen() {
       return r.status === 'opened_dialog' ? 'Finish the download in the Android window that opened.' : null;
     });
 
+  // engram://settings?metrics=off answers no to usage counts (used by the automated test, so CI never sends any).
+  useEffect(() => {
+    if (params.metrics === 'off') void setUsage(db, false).then(() => setUsageState('no'));
+    else void readUsageAnswer(db).then(setUsageState);
+  }, [db, params.metrics, version]);
+
+  const toggleUsage = () => {
+    const yes = usage !== 'yes';
+    setUsageState(yes ? 'yes' : 'no');
+    void setUsage(db, yes);
+  };
+
+  const showUsage = async () => {
+    const lines = describe(await previewUsage(db));
+    Alert.alert(
+      "What's sent",
+      `${usage === 'yes' ? 'Today so far. Sent tomorrow, once, as totals:' : 'Nothing is sent while this is off. If it were on, today would look like this:'}\n\n${lines.join('\n')}\n\nNo notes, no words you wrote, no id, no time of day.`,
+    );
+  };
+
   // engram://settings?smart=on switches meaning-based linking on (used by the automated test).
   useEffect(() => {
     if (params.smart === 'on') void enableSmartLinking(db);
@@ -326,7 +349,7 @@ export default function SettingsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 40, gap: 26 }}>
-        <Header title="Settings" back="Today" sub="Everything stays on this phone" />
+        <Header title="Settings" back="Today" sub="Your notes stay on this phone" />
         <View style={{ paddingHorizontal: 24, gap: 26 }}>
           <Notice text={status} />
 
@@ -469,6 +492,19 @@ export default function SettingsScreen() {
             <Text style={[type.meta, { color: c.soft }]}>
               Sharing into Engram, widgets and new notes still work while it is locked. Reading anything needs the unlock.
             </Text>
+            <View>
+              <Row
+                title="Share usage counts"
+                sub={
+                  usage === 'yes'
+                    ? 'On. Once a day, anonymous totals of which features you used. Never your notes, never an id.'
+                    : 'Off. Nothing about how you use Engram is counted or sent.'
+                }
+                action={usage === 'yes' ? 'Turn off' : 'Turn on'}
+                onPress={toggleUsage}
+              />
+              <Row title="What's sent" sub="The exact counts for today, in plain words" action="Show" onPress={() => void showUsage()} />
+            </View>
           </Section>
 
           {askOn ? (
@@ -605,6 +641,7 @@ export default function SettingsScreen() {
                 onPress={() =>
                   run(async () => {
                     const r = await exportFullBackup(db);
+                    countUse(M.backupExport);
                     return `Backup created with ${r.thoughts} thoughts and ${r.files} files.${r.leftOut ? ` ${r.leftOut} files could not be included.` : ''}`;
                   })
                 }
@@ -616,6 +653,7 @@ export default function SettingsScreen() {
                 onPress={() =>
                   run(async () => {
                     const r = await importBackup(db);
+                    countUse(M.backupRestore);
                     return r ? `Added ${r.added} thoughts and ${r.files} files. ${r.skipped} were already here.` : null;
                   })
                 }

@@ -35,6 +35,11 @@ function set(patch: Partial<CloudState>) {
   state = { ...state, ...patch };
   listeners.forEach((l) => l());
 }
+/** True while someone is signed in on this phone. */
+export function signedIn(): boolean {
+  return state.email !== null;
+}
+
 export function useCloud(): CloudState {
   return useSyncExternalStore(
     (l) => {

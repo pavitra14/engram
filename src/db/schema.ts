@@ -108,3 +108,6 @@ export const IMAGE_TEXT_DDL = 'CREATE TABLE IF NOT EXISTS image_text (thought_id
 
 /** Pairs the person said are not related. id is "a:b" with a < b. Engram never links or suggests them again. */
 export const DISMISSED_DDL = 'CREATE TABLE IF NOT EXISTS dismissed_links (id TEXT PRIMARY KEY NOT NULL)';
+
+/** Usage counts waiting to be sent: one row per local date and metric. Kept only if the person said yes; never synced. */
+export const USAGE_DDL = 'CREATE TABLE IF NOT EXISTS usage_counts (day TEXT NOT NULL, metric INTEGER NOT NULL, uses INTEGER NOT NULL, PRIMARY KEY (day, metric))';

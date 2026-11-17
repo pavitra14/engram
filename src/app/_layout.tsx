@@ -26,6 +26,7 @@ import { ThemeProvider, useTheme } from '@/theme';
 import { dataChanged, useDataVersion } from '@/lib/bus';
 import { refreshWidgets } from '@/widgets/snapshot';
 import { startCloud } from '@/cloud/cloud';
+import { appOpened, sendUsage, startUsage } from '@/lib/usage';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -89,9 +90,19 @@ function Screens() {
     return () => sub.remove();
   }, [shake]);
 
-  // Engram Cloud does nothing unless someone has signed in on this phone.
+  // Engram Cloud does nothing unless someone has signed in on this phone. The flags it loads
+  // also decide whether usage counts may be sent; they only ever are if the person said yes.
   useEffect(() => {
-    void startCloud(db);
+    void startUsage(db)
+      .then(() => startCloud(db))
+      .then(() => sendUsage(db))
+      .catch(() => {});
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      appOpened();
+      void sendUsage(db).catch(() => {});
+    });
+    return () => sub.remove();
   }, [db]);
 
   // Load the language model in the background if meaning-based linking is on.
@@ -205,8 +216,9 @@ export default function RootLayout() {
 }
 
 /**
- * What is shown if a screen fails while drawing. Engram has no analytics, so this
- * is the only way a fault gets reported: the person copies the details and sends them.
+ * What is shown if a screen fails while drawing. Usage counts (if the person said yes)
+ * only record that this screen appeared, never the error, so the details here are the
+ * only way a fault gets described: the person copies them and sends them.
  * A backup can be taken from here too, in case the fault stops the app being used.
  */
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {

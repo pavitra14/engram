@@ -10,7 +10,7 @@
 import { ftsQuery } from '@/lib/text';
 
 import type { Db } from './db';
-import { DISMISSED_DDL, EMBEDDINGS_DDL, IMAGE_TEXT_DDL, OUTBOX_DDL, REVS_DDL, SEARCH_DDL, TRANSLATIONS_DDL, SYNCED_THOUGHT_COLUMNS, THOUGHT_COLUMNS } from './schema';
+import { DISMISSED_DDL, USAGE_DDL, EMBEDDINGS_DDL, IMAGE_TEXT_DDL, OUTBOX_DDL, REVS_DDL, SEARCH_DDL, TRANSLATIONS_DDL, SYNCED_THOUGHT_COLUMNS, THOUGHT_COLUMNS } from './schema';
 import type { Link, LinkKind, NewThought, Project, Repeat, Tag, Thought, ThoughtKind, TodoList } from './types';
 
 const order = (x: string, y: string): [string, string] => (x < y ? [x, y] : [y, x]);
@@ -40,6 +40,7 @@ export async function prepare(db: Db): Promise<void> {
   await db.run(TRANSLATIONS_DDL);
   await db.run(IMAGE_TEXT_DDL);
   await db.run(DISMISSED_DDL);
+  await db.run(USAGE_DDL);
   try {
     await db.run(SEARCH_DDL);
     searchIndex = true;
@@ -602,6 +603,36 @@ export async function saveProject(db: Db, p: Omit<Project, 'id'> & { id?: string
 
 export async function deleteProject(db: Db, id: string): Promise<void> {
   await db.run('DELETE FROM projects WHERE id = ?', [id]);
+}
+
+// ---------- usage counts (derived, local, never synced) ----------
+
+/** Adds to today's tally for one metric. */
+export async function addUsage(db: Db, day: string, metric: number, n = 1): Promise<void> {
+  const has = await db.first<{ uses: number }>('SELECT uses FROM usage_counts WHERE day = ? AND metric = ?', [day, metric]);
+  if (has) await db.run('UPDATE usage_counts SET uses = uses + ? WHERE day = ? AND metric = ?', [n, day, metric]);
+  else await db.run('INSERT INTO usage_counts (day, metric, uses) VALUES (?, ?, ?)', [day, metric, n]);
+}
+
+/** Days with counts waiting, oldest first. */
+export async function usageDays(db: Db): Promise<string[]> {
+  return (await db.all<{ day: string }>('SELECT DISTINCT day FROM usage_counts ORDER BY day')).map((r) => r.day);
+}
+
+export async function usageFor(db: Db, day: string): Promise<{ metric: number; uses: number }[]> {
+  return db.all<{ metric: number; uses: number }>('SELECT metric, uses FROM usage_counts WHERE day = ? ORDER BY metric', [day]);
+}
+
+/** Deletes one day's counts, or all of them. */
+export async function clearUsage(db: Db, day?: string): Promise<void> {
+  if (day) await db.run('DELETE FROM usage_counts WHERE day = ?', [day]);
+  else await db.run('DELETE FROM usage_counts');
+}
+
+/** When the oldest note still kept was made, for the "installed for" range. */
+export async function firstThoughtAt(db: Db): Promise<number | null> {
+  const r = await db.first<{ at: number | null }>('SELECT MIN(created_at) AS at FROM thoughts WHERE trashed_at IS NULL');
+  return r?.at ?? null;
 }
 
 // ---------- settings ----------

@@ -19,6 +19,7 @@ import { captureText } from '@/lib/capture';
 import { addTodo } from '@/lib/reminders';
 import { type DueBucket, DUE_ORDER, dueBucket, titleOf, when } from '@/lib/text';
 import { font, type, useTheme } from '@/theme';
+import { count, M } from '@/lib/usage';
 
 /** The to-do list: add one in a line, see what is overdue and what is coming, and tick things off. */
 export default function TodoScreen() {
@@ -118,6 +119,7 @@ export default function TodoScreen() {
     if (!text) return;
     setDraft('');
     const thought = await captureText(db, text);
+    count(M.typed);
     // "Call the bank Friday 10am" has already become a to-do with its reminder.
     if (!thought.todo) await addTodo(db, thought, null);
   };

@@ -22,6 +22,7 @@ import { loadSamples } from '@/lib/samples';
 import { questionFor, streak, weekOf } from '@/lib/habits';
 import { dayLabel, daysAgo, longDate, timeOfDay, titleOf, when } from '@/lib/text';
 import { font, type, useTheme } from '@/theme';
+import { UsageQuestion } from '@/components/UsageQuestion';
 
 type HomeView = 'list' | 'split' | 'map';
 
@@ -397,6 +398,7 @@ export default function HomeScreen() {
           ) : null}
         </ScrollView>
         <CaptureBar clipboard />
+        <UsageQuestion />
       </View>
     );
   }
@@ -444,6 +446,7 @@ export default function HomeScreen() {
         ListEmptyComponent={emptyState}
       />
       <CaptureBar clipboard />
+        <UsageQuestion />
     </View>
   );
 }

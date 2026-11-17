@@ -44,8 +44,8 @@ class QuickTileService : TileService() {
 `;
 
 const SHORTCUTS = [
-  { id: 'voice', label: 'engram_shortcut_voice', text: 'Voice note', url: 'engram://voice' },
-  { id: 'note', label: 'engram_shortcut_note', text: 'New note', url: 'engram://compose' },
+  { id: 'voice', label: 'engram_shortcut_voice', text: 'Voice note', url: 'engram://voice?from=shortcut' },
+  { id: 'note', label: 'engram_shortcut_note', text: 'New note', url: 'engram://compose?from=shortcut' },
   { id: 'todo', label: 'engram_shortcut_todo', text: 'To do', url: 'engram://todo' },
 ];
 

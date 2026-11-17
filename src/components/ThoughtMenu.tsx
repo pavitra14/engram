@@ -13,6 +13,7 @@ import { addTodo, reminderPresets, removeTodo, setDone, setImportant } from '@/l
 import { titleOf } from '@/lib/text';
 
 import { ActionSheet, type SheetOption } from './ActionSheet';
+import { count, M } from '@/lib/usage';
 
 const Ctx = createContext<(t: Thought) => void>(() => {});
 
@@ -47,7 +48,10 @@ export function ThoughtMenuProvider({ children }: { children: ReactNode }) {
     const todo: SheetOption[] = !t.todo
       ? [
           { label: 'Add to my to-do list', icon: 'check-square', onPress: () => void addTodo(db, t, null) },
-          ...(tomorrow ? [{ label: `Remind me ${tomorrow.label.charAt(0).toLowerCase()}${tomorrow.label.slice(1)}`, icon: 'bell' as const, onPress: () => void addTodo(db, t, tomorrow.at) }] : []),
+          ...(tomorrow ? [{ label: `Remind me ${tomorrow.label.charAt(0).toLowerCase()}${tomorrow.label.slice(1)}`, icon: 'bell' as const, onPress: () => {
+              count(M.reminderSet);
+              void addTodo(db, t, tomorrow.at);
+            } }] : []),
         ]
       : [
           t.done_at

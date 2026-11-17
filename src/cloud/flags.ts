@@ -19,7 +19,7 @@ import * as repo from '@/db/repo';
 import { cloudConfigured, select } from './api';
 
 /** Every flag the app knows. Add a name here and a row in the feature_flags table. */
-export const FLAGS = ['cloud', 'ask'] as const;
+export const FLAGS = ['cloud', 'ask', 'metrics'] as const;
 export type Flag = (typeof FLAGS)[number];
 
 let on = new Set<Flag>();

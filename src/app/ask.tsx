@@ -11,6 +11,7 @@ import type { Thought } from '@/db/types';
 import { ask, restoreAsk, useAskState } from '@/lib/ask';
 import { citedNumbers } from '@/lib/ask.logic';
 import { font, type, useTheme } from '@/theme';
+import { count, M } from '@/lib/usage';
 
 /** Ask a question; get an answer written from your own notes, with the notes it used listed under it. */
 export default function AskScreen() {
@@ -31,6 +32,7 @@ export default function AskScreen() {
   const go = async () => {
     const q = question.trim();
     if (!q || busy) return;
+    count(M.ask);
     setBusy(true);
     setAnswer('');
     setSources([]);

@@ -10,9 +10,11 @@ import { useDb } from '@/db/provider';
 import { brainAt, placement, useBrain } from '@/lib/brain';
 import { titleOf } from '@/lib/text';
 import { type, useTheme } from '@/theme';
+import { count, M } from '@/lib/usage';
 
 /** The map: groups as named circles, and thoughts that belong to no group as small circles of their own. */
 export default function MapScreen() {
+  useEffect(() => count(M.map), []);
   const db = useDb();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();

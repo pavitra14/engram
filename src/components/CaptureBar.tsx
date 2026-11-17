@@ -15,6 +15,7 @@ import { font, useTheme } from '@/theme';
 
 import { ActionSheet } from './ActionSheet';
 import { Notice, RoundButton } from './ui';
+import { count, M } from '@/lib/usage';
 
 /**
  * Knows whether the clipboard holds text, without reading it. Reading happens
@@ -69,6 +70,7 @@ export function CaptureBar({ clipboard = false }: { clipboard?: boolean }) {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await captureText(db, text, source);
+      count(M.typed);
       return true;
     } catch (e) {
       setNotice(`Could not save that. ${e instanceof Error ? e.message : ''}`.trim());
@@ -104,6 +106,7 @@ export function CaptureBar({ clipboard = false }: { clipboard?: boolean }) {
       if (picked.canceled) return;
       for (const a of picked.assets) {
         await captureFile(db, a.uri, { mimeType: a.mimeType, name: a.fileName, durationMs: a.duration ?? null });
+        count(M.file);
       }
       setNotice(picked.assets.length === 1 ? 'Saved.' : `Saved ${picked.assets.length} items.`);
     } catch (e) {
@@ -123,6 +126,7 @@ export function CaptureBar({ clipboard = false }: { clipboard?: boolean }) {
       if (shot.canceled || !shot.assets[0]) return;
       const a = shot.assets[0];
       const saved = await captureFile(db, a.uri, { mimeType: a.mimeType ?? 'image/jpeg', name: a.fileName, source: 'scan' });
+      count(M.photo);
       const words = saved.media_path ? await wordsInPicture(saved.media_path).catch(() => '') : '';
       if (words) await saveNote(db, saved.id, { title: '', text: words, html: null });
       setNotice(words ? 'Scanned. The words are in the note.' : 'Saved the picture. No words could be read from it.');
@@ -137,6 +141,7 @@ export function CaptureBar({ clipboard = false }: { clipboard?: boolean }) {
       const picked = await DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true });
       if (picked.canceled) return;
       for (const a of picked.assets) await captureFile(db, a.uri, { mimeType: a.mimeType, name: a.name });
+      count(M.file);
       setNotice(picked.assets.length === 1 ? 'Saved.' : `Saved ${picked.assets.length} files.`);
     } catch (e) {
       setNotice(`Could not add that. ${e instanceof Error ? e.message : ''}`.trim());
