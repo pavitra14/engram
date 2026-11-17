@@ -138,7 +138,7 @@ export default function SettingsScreen() {
   const [lock, setLock] = useState<LockSetting>({ on: false, afterMs: 0 });
   const [backupTo, setBackupTo] = useState<{ folder: string | null; last: number }>({ folder: null, last: 0 });
   const [trashed, setTrashed] = useState(0);
-  const [choice, setChoice] = useState<{ title: string; options: SheetOption[] } | null>(null);
+  const [choice, setChoice] = useState<{ title: string; message?: string; options: SheetOption[] } | null>(null);
   useEffect(() => {
     let live = true;
     (async () => {
@@ -245,10 +245,11 @@ export default function SettingsScreen() {
 
   const showUsage = async () => {
     const lines = describe(await previewUsage(db));
-    Alert.alert(
-      "What's sent",
-      `${usage === 'yes' ? 'Today so far. Sent tomorrow, once, as totals:' : 'Nothing is sent while this is off. If it were on, today would look like this:'}\n\n${lines.join('\n')}\n\nNo notes, no words you wrote, no id, no time of day.`,
-    );
+    setChoice({
+      title: "What's sent",
+      message: `${usage === 'yes' ? 'Today so far. Sent tomorrow, once, as totals:' : 'Nothing is sent while this is off. If it were on, today would look like this:'}\n\n${lines.join('\n')}\n\nNo notes, no words you wrote, no id, no time of day.`,
+      options: [{ label: 'Done', icon: 'check', onPress: () => {} }],
+    });
   };
 
   // engram://settings?smart=on switches meaning-based linking on (used by the automated test).
@@ -713,7 +714,7 @@ export default function SettingsScreen() {
           <Text style={[type.meta, { color: c.faint }]}>Engram {Constants.expoConfig?.version ?? ''}</Text>
         </View>
       </ScrollView>
-      <ActionSheet visible={choice !== null} title={choice?.title} options={choice?.options ?? []} onClose={() => setChoice(null)} />
+      <ActionSheet visible={choice !== null} title={choice?.title} message={choice?.message} options={choice?.options ?? []} onClose={() => setChoice(null)} />
       <ActionSheet
         visible={choosingLang}
         title="Voice language"
