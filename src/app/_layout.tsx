@@ -1,7 +1,7 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { Newsreader_400Regular, Newsreader_500Medium, useFonts } from '@expo-google-fonts/newsreader';
 import * as Notifications from 'expo-notifications';
-import { router, Stack } from 'expo-router';
+import { type ErrorBoundaryProps, router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { DbProvider, useDb } from '@/db/provider';
 import { StatusBar } from 'expo-status-bar';
@@ -13,6 +13,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as repo from '@/db/repo';
 import { ACTION_DONE, ACTION_LATER, actionFrom, setDone, snooze, thoughtIdFrom } from '@/lib/reminders';
 import { startSmartLinking } from '@/lib/smart';
+import { CrashScreen } from '@/components/CrashScreen';
 import { LockGate } from '@/components/LockGate';
 import { ThoughtMenuProvider } from '@/components/ThoughtMenu';
 import { ToastHost } from '@/components/Toast';
@@ -166,6 +167,7 @@ function Screens() {
         <Stack.Screen name="latest" options={{ animation: 'none' }} />
         <Stack.Screen name="review" options={{ animation: 'fade_from_bottom', animationDuration: 180 }} />
         <Stack.Screen name="tour" options={{ animation: 'fade', animationDuration: 160, gestureEnabled: false }} />
+        <Stack.Screen name="ask" options={{ animation: 'fade_from_bottom', animationDuration: 180 }} />
         <Stack.Screen name="recap" options={{ animation: 'fade_from_bottom', animationDuration: 180 }} />
         <Stack.Screen name="trash" options={{ animation: 'ios_from_right', animationDuration: 220 }} />
         <Stack.Screen name="tile" options={{ animation: 'none' }} />
@@ -200,4 +202,13 @@ export default function RootLayout() {
       </ThemeProvider>
     </DbProvider>
   );
+}
+
+/**
+ * What is shown if a screen fails while drawing. Engram has no analytics, so this
+ * is the only way a fault gets reported: the person copies the details and sends them.
+ * A backup can be taken from here too, in case the fault stops the app being used.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return <CrashScreen error={error} retry={retry} />;
 }

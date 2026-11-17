@@ -1,6 +1,6 @@
 # Roadmap
 
-> **0.6.0 shipped all 19 committed items below and most of the proposed list.** Still open: Wear OS tile, on-phone language model (ask your notes, summaries, better group names, suggested tags), place reminders, password-protected backups, share a note as an image, media in backups, inline tappable `[[links]]`. See `STATUS.md`.
+> **0.6.0 shipped all 19 committed items below and most of the proposed list.** 0.7 added bundled OCR, media in backups and Ask your notes (flagged off). Still open: Wear OS tile, summaries, better group names and suggested tags from the on-phone model, place reminders, password-protected backups, share a note as an image, media in backups, inline tappable `[[links]]`. See `STATUS.md`.
 
 What is planned, in the owner's words where possible. `STATUS.md` says what works today; this page says what comes next. When an item ships, move it to `STATUS.md` and delete it here.
 

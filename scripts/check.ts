@@ -12,6 +12,7 @@ import { importLegacy, LEGACY_MIGRATIONS } from '../src/db/legacy';
 import * as repo from '../src/db/repo';
 import { plainDDL } from '../src/db/schema';
 import { type OpResult, type Remote, type RemoteRow, syncOnce } from '../src/cloud/sync';
+import { askPrompt, citedNumbers, cleanAnswer, questionTerms } from '../src/lib/ask.logic';
 import { splitQuick } from '../src/lib/capture.logic';
 import { questionFor, streak, weekOf } from '../src/lib/habits';
 import { checkItems, progress, toggleCheck } from '../src/lib/checks';
@@ -615,6 +616,14 @@ const linkedNow = new Set(all.map((l) => `${l.a}:${l.b}`));
 const maybe = nearMisses(docs, linkedNow);
 assert.ok(maybe.every((m) => !linkedNow.has(`${m.a}:${m.b}`) && m.a < m.b), 'suggestions never repeat a link that exists');
 if (maybe.length > 0) assert.equal(nearMisses(docs, new Set([...linkedNow, `${maybe[0].a}:${maybe[0].b}`])).some((m) => m.a === maybe[0].a && m.b === maybe[0].b), false, 'a dismissed pair is not suggested again');
+
+// --- ask your notes: the plain parts ---
+assert.deepEqual(questionTerms('What did I decide about the Hampi trip?'), ['decide', 'hampi', 'trip']);
+assert.deepEqual(questionTerms('the of and'), []);
+assert.equal(askPrompt(' When is it? ', [{ id: 'a', title: 'Trip', text: 'January', when: '2 days ago' }]), 'Notes:\n\n[1] Trip (2 days ago)\nJanuary\n\nQuestion: When is it?');
+assert.equal(cleanAnswer('<think>hmm</think> January [1]<|im_end|>'), 'January [1]');
+assert.equal(cleanAnswer('<think>still thinking'), '', 'an unfinished thought is not shown');
+assert.deepEqual(citedNumbers('January [2], by train [1] [2] [9]', 3), [2, 1]);
 
 async function localChecks(): Promise<void> {
   const db = nodeDb();

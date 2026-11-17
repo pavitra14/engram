@@ -1,5 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { File, Paths } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 import { StorageAccessFramework } from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
@@ -21,7 +21,7 @@ type Backup = {
   tags: { thought_id: string; name: string }[];
 };
 
-/** Writes every thought, link and tag to a JSON file and opens the share sheet. */
+/** Words, links and tags only, as one JSON file. Kept for the crash screen, where the smallest thing that can work is wanted. */
 export async function exportBackup(db: Db): Promise<number> {
   const [thoughts, links, tags] = await Promise.all([
     repo.listThoughts(db, { limit: 100000 }),
@@ -38,14 +38,69 @@ export async function exportBackup(db: Db): Promise<number> {
   return thoughts.length;
 }
 
-/** Merges a backup file into this device. Existing thoughts (same id) are kept as they are. */
-export async function importBackup(db: Db): Promise<{ added: number; skipped: number } | null> {
-  const picked = await DocumentPicker.getDocumentAsync({
-    type: ['application/json', 'text/plain', '*/*'],
-    copyToCacheDirectory: true,
-  });
+/** Photos and recordings above this size in total are left out of a backup: the zip is built in memory. */
+const MEDIA_LIMIT = 400 * 1024 * 1024;
+
+/**
+ * Writes everything to one .zip and opens the share sheet: backup.json with the
+ * words, links and tags, and a media folder with the photos, recordings and files.
+ * Returns how many thoughts went in and how many files had to be left out.
+ */
+export async function exportFullBackup(db: Db): Promise<{ thoughts: number; files: number; leftOut: number }> {
+  const [thoughts, links, tags] = await Promise.all([repo.listThoughts(db, { limit: 100000 }), repo.listLinks(db), repo.allTagPairs(db)]);
+  const backup: Backup = { app: 'engram', version: 1, exported_at: Date.now(), thoughts, links, tags };
+  // Media is stored as it is (level 0): pictures and recordings are compressed already.
+  const entries: Record<string, Uint8Array | [Uint8Array, { level: 0 }]> = { 'backup.json': strToU8(JSON.stringify(backup)) };
+  let files = 0;
+  let leftOut = 0;
+  let size = 0;
+  for (const t of thoughts) {
+    if (!t.media_path) continue;
+    try {
+      const f = new File(t.media_path);
+      if (!f.exists || size + (f.size ?? 0) > MEDIA_LIMIT) {
+        leftOut += 1;
+        continue;
+      }
+      const bytes = await f.bytes();
+      size += bytes.length;
+      entries[`media/${mediaName(t.media_path)}`] = [bytes, { level: 0 }];
+      files += 1;
+    } catch {
+      leftOut += 1;
+    }
+  }
+  const stamp = new Date().toISOString().slice(0, 10);
+  const out = new File(Paths.cache, `engram-backup-${stamp}.zip`);
+  if (out.exists) out.delete();
+  out.create();
+  out.write(zipSync(entries, { level: 6 }));
+  await Sharing.shareAsync(out.uri, { mimeType: 'application/zip', dialogTitle: 'Save Engram backup' });
+  return { thoughts: thoughts.length, files, leftOut };
+}
+
+const mediaName = (path: string) => decodeURIComponent(path.split('/').pop() ?? 'file');
+
+/**
+ * Merges a backup into this device: a .zip made by "Export a backup" (with its
+ * files) or an older .json one (words only). Existing thoughts (same id) are kept as they are.
+ */
+export async function importBackup(db: Db): Promise<{ added: number; skipped: number; files: number } | null> {
+  const picked = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
   if (picked.canceled || !picked.assets[0]) return null;
-  const raw = await new File(picked.assets[0].uri).text();
+  const file = new File(picked.assets[0].uri);
+  let raw: string;
+  let media: Record<string, Uint8Array> = {};
+  const head = (await file.bytes()).subarray(0, 2);
+  if (head[0] === 0x50 && head[1] === 0x4b) {
+    // A zip: the words are in backup.json, the files beside it.
+    const all = unzipSync(await file.bytes());
+    if (!all['backup.json']) throw new Error('That zip is not an Engram backup. For notes from other apps, use "Bring in notes".');
+    raw = strFromU8(all['backup.json']);
+    media = all;
+  } else {
+    raw = await file.text();
+  }
   let data: Backup;
   try {
     data = JSON.parse(raw);
@@ -57,14 +112,26 @@ export async function importBackup(db: Db): Promise<{ added: number; skipped: nu
   }
   let added = 0;
   let skipped = 0;
+  let files = 0;
+  const dir = new Directory(Paths.document, 'media');
+  if (!dir.exists) dir.create({ idempotent: true, intermediates: true });
   const present = new Set<string>();
   for (const t of data.thoughts) {
     if (!t?.id || !t.kind) continue;
     if (await repo.getThought(db, t.id)) {
       skipped += 1;
     } else {
-      // Audio and images are not part of a backup, so drop the dangling path.
-      await repo.insertThought(db, { ...t, media_path: null });
+      // The file comes back under its old name in this app's own storage; without one the path is dropped.
+      let media_path: string | null = null;
+      const bytes = t.media_path ? media[`media/${mediaName(t.media_path)}`] : undefined;
+      if (bytes && t.media_path) {
+        const dest = new File(dir, mediaName(t.media_path));
+        if (!dest.exists) dest.create();
+        dest.write(bytes);
+        media_path = dest.uri;
+        files += 1;
+      }
+      await repo.insertThought(db, { ...t, media_path });
       added += 1;
     }
     present.add(t.id);
@@ -76,7 +143,7 @@ export async function importBackup(db: Db): Promise<{ added: number; skipped: nu
     if (present.has(g.thought_id)) await repo.addTag(db, g.thought_id, g.name);
   }
   dataChanged();
-  return { added, skipped };
+  return { added, skipped, files };
 }
 
 // ---------- Markdown out ----------

@@ -8,6 +8,17 @@ _Last updated: 16 Nov 2026, v0.6.0-beta.1. Update this file whenever you finish 
 - **Engram Cloud is switched off** by the `cloud` feature flag (D37). The code and the server side from 0.4 are still there.
 - The old `v1.0.0` and `v2.0.0-beta.1` releases still need deleting by hand on GitHub.
 
+## What 0.7 changed (released as `v0.7.0-beta.2`, the first ordinary release)
+
+- **Package id is `dev.pavitra.engram`** (D47). Installs beside older builds; people move by backup and restore.
+- **Text in pictures** moved to `modules/engram-ocr` with bundled Latin and Devanagari recognisers (D48). `expo-text-extractor` removed.
+- **Backups carry media**: `exportFullBackup` writes a zip; `importBackup` reads that or an old JSON.
+- **Crash screen** (`CrashScreen`, exported as `ErrorBoundary` from `_layout.tsx`).
+- **Ask your notes** (`ask.ts`, `/ask`) behind the `ask` flag, which is off in the cloud table. Never run on any device.
+- CI publishes betas as ordinary releases.
+
+Verification is added below once the release run has finished.
+
 ## What 0.6 changed
 
 One commit, built from `docs/ROADMAP.md` (all 19 committed items and most of the proposed list). Verification is filled in below once the release run has finished.

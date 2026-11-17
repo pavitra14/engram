@@ -5,7 +5,7 @@
 set -uo pipefail
 
 APK="${1:?path to apk}"
-PKG=com.pavitra14.engram
+PKG=dev.pavitra.engram
 OUT=smoke
 mkdir -p "$OUT"
 
@@ -125,6 +125,7 @@ sleep 30
 open "engram://trash"; sleep 4; shot 28-trash
 open "engram://settings"; sleep 5
 adb shell input swipe 540 2000 540 900 300; sleep 2; shot 29-settings-new
+adb logcat -d -s ReactNativeJS | grep -E "engram: picture (read|not read)" | tail -3 > "$OUT/ocr.txt" || true
 adb shell dumpsys package "$PKG" | grep -i -m3 "QuickTileService" > "$OUT/tile.txt" || true
 adb shell dumpsys shortcut | grep -A12 "Package: $PKG" | head -30 > "$OUT/shortcuts.txt" || true
 
@@ -149,5 +150,6 @@ grep -E "ReactNativeJS" "$OUT/logcat.txt" | tail -40 || true
 cat "$OUT/alarms.txt" || true
 cat "$OUT/widgets.txt" || true
 cat "$OUT/tile.txt" || true
+echo "Text in pictures:"; cat "$OUT/ocr.txt" || true
 cat "$OUT/shortcuts.txt" || true
 echo "Smoke test passed."

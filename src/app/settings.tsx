@@ -12,10 +12,11 @@ import { CloudSection } from '@/components/CloudSection';
 import { ActionSheet, type SheetOption } from '@/components/ActionSheet';
 import { Header, Notice, Pill } from '@/components/ui';
 import * as repo from '@/db/repo';
-import { autoBackupFolder, chooseBackupFolder, exportBackup, exportMarkdown, importBackup, importNotes, stopAutoBackup } from '@/lib/backup';
+import { autoBackupFolder, chooseBackupFolder, exportFullBackup, exportMarkdown, importBackup, importNotes, stopAutoBackup } from '@/lib/backup';
 import { type Briefs, briefSettings, EVENINGS, MORNINGS, saveBriefSettings } from '@/lib/briefs';
 import { canLock, confirmItIsYou, LOCK_DELAYS, type LockSetting, lockSetting, saveLockSetting } from '@/lib/lock';
 import { allowed as notificationsAllowed } from '@/lib/reminders';
+import { ASK_SIZE_NOTE, prepareAsk, removeAsk, restoreAsk, useAskState } from '@/lib/ask';
 import { dataChanged, useDataVersion } from '@/lib/bus';
 import { askForCalendar, calendarAllowed } from '@/lib/calendar';
 import { rebuildAllLinks } from '@/lib/capture';
@@ -113,6 +114,11 @@ export default function SettingsScreen() {
   const [calendar, setCalendar] = useState(false);
   const [choosingLang, setChoosingLang] = useState(false);
   const cloudOn = useFlag('cloud');
+  const askOn = useFlag('ask');
+  const askModel = useAskState();
+  useEffect(() => {
+    void restoreAsk(db);
+  }, [db]);
   const [translate, setTranslate] = useState(false);
   const [dailyQ, setDailyQ] = useState(true);
   useEffect(() => {
@@ -465,6 +471,31 @@ export default function SettingsScreen() {
             </Text>
           </Section>
 
+          {askOn ? (
+            <Section title="Ask your notes">
+              <Row
+                title="Language model"
+                sub={
+                  askModel.status === 'ready'
+                    ? 'On this phone. Open Search to ask a question.'
+                    : askModel.status === 'downloading'
+                      ? `Downloading: ${Math.round(askModel.progress * 100)}%. Keep Engram open.`
+                      : askModel.status === 'error'
+                        ? `The download did not finish. ${askModel.message ?? ''}`.trim()
+                        : `Not downloaded. It is ${ASK_SIZE_NOTE}; use Wi-Fi.`
+                }
+                action={askModel.status === 'ready' ? 'Remove' : askModel.status === 'downloading' ? 'Wait' : 'Download'}
+                onPress={() => {
+                  if (askModel.status === 'ready') void removeAsk(db);
+                  else if (askModel.status !== 'downloading') void prepareAsk(db);
+                }}
+              />
+              <Text style={[type.meta, { color: c.soft }]}>
+                Questions are answered on this phone from your notes. Nothing you write or ask is sent anywhere; only the model itself is downloaded.
+              </Text>
+            </Section>
+          ) : null}
+
           <Section title="Voice notes">
             <View>
               <Row title="Voice language" sub={langLabel} action="Change" onPress={() => setChoosingLang(true)} />
@@ -567,15 +598,25 @@ export default function SettingsScreen() {
 
           <Section title="Your thoughts">
             <View>
-              <Row title="Back up" sub="One file with thoughts, tags and links. Files and recordings are not included." action="Export" onPress={() => run(async () => `Backup created with ${await exportBackup(db)} thoughts.`)} />
+              <Row
+                title="Back up"
+                sub="One zip with your thoughts, tags, links, photos, recordings and files"
+                action="Export"
+                onPress={() =>
+                  run(async () => {
+                    const r = await exportFullBackup(db);
+                    return `Backup created with ${r.thoughts} thoughts and ${r.files} files.${r.leftOut ? ` ${r.leftOut} files could not be included.` : ''}`;
+                  })
+                }
+              />
               <Row
                 title="Restore"
-                sub="Add thoughts from a backup file"
+                sub="Add thoughts from a backup, with their files. Also how you move from an older Engram."
                 action="Import"
                 onPress={() =>
                   run(async () => {
                     const r = await importBackup(db);
-                    return r ? `Added ${r.added} thoughts. ${r.skipped} were already here.` : null;
+                    return r ? `Added ${r.added} thoughts and ${r.files} files. ${r.skipped} were already here.` : null;
                   })
                 }
               />

@@ -20,6 +20,7 @@ import { addToCalendar } from '@/lib/calendar';
 import { setPinned, setRemember } from '@/lib/actions';
 import { deleteForever, relink, removeThought, restoreThought, saveNote } from '@/lib/capture';
 import { startFocus } from '@/lib/focus';
+import { canReadPictures, readPicture } from '@/lib/ocr';
 import { whyLinked } from '@/lib/linker';
 import { openFile } from '@/lib/open';
 import { type Assistant, chatWith, installedAssistants, planPrompt } from '@/lib/assistants';
@@ -364,6 +365,28 @@ export default function ThoughtScreen() {
             <Text selectable style={[type.small, { color: c.ink }]} numberOfLines={12}>
               {thought.seen_text}
             </Text>
+          </View>
+        ) : null}
+
+        {thought.kind === 'image' && thought.media_path && !thought.seen_text && canReadPictures() ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <Text style={[type.small, { color: c.soft, flex: 1 }]}>
+              {thought.seen_text === '' ? 'No words were found in this picture.' : 'This picture has not been read for words yet.'}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                void readPicture(db, thought.id, thought.media_path ?? '')
+                  .then((found) => {
+                    setNote(found ? 'Read the words in the picture.' : 'Still no words found. Clear, printed text works best.');
+                    return relink(db, thought.id);
+                  })
+                  .catch((e) => setNote(`The picture could not be read. ${e instanceof Error ? e.message : ''}`.trim()))
+              }
+              hitSlop={8}
+              style={styles.linkAnother}>
+              <Text style={[type.smallStrong, { color: c.accent }]}>{thought.seen_text === '' ? 'Try again' : 'Read it'}</Text>
+            </Pressable>
           </View>
         ) : null}
 

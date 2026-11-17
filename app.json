@@ -2,15 +2,15 @@
   "expo": {
     "name": "Engram",
     "slug": "engram",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "engram",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#F3F4F1",
     "android": {
-      "package": "com.pavitra14.engram",
-      "versionCode": 6,
+      "package": "dev.pavitra.engram",
+      "versionCode": 7,
       "adaptiveIcon": {
         "backgroundColor": "#1F3FBF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

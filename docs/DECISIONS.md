@@ -288,3 +288,19 @@ On the phone, Latin script only, delivered by Google Play services (which may do
 ## D46. Left out of 0.6 on purpose
 
 Wear OS (a second app target), an on-phone LLM (about 1 GB, heavy native code, untestable in CI), place reminders (background location against the privacy rule's spirit), encrypted backups (no vetted cipher in the dependency set), image cards (needs a view-capture library). Shake works only while the app is open: background listening would need a permanent foreground service.
+
+## D47. The package id becomes `dev.pavitra.engram` in 0.7
+
+The owner asked for it, to match the domain. Android treats a new id as a different app: 0.7 installs beside 0.6 and earlier instead of over them, and their notes are not carried across. People move with Settings, Export a backup in the old app, Import in the new one, then uninstall the old one. Files and recordings only move once backups include them, so that ships in the same release. The old id was `com.pavitra14.engram` (see D1).
+
+## D48. Text recognition is our own module with bundled models (0.7)
+
+`expo-text-extractor` uses the Play services recogniser, which is fetched on first use and failed on the CI emulator. `modules/engram-ocr` uses `com.google.mlkit:text-recognition` and `text-recognition-devanagari` 16.0.1, whose models ship in the APK: no download, works offline, testable in CI, and Hindi is read. Both recognisers run on each picture and the longer result is kept. Cost: a larger APK and native code we maintain.
+
+## D49. Ask your notes uses one downloaded model on every phone (0.7)
+
+The owner did not want behaviour that depends on the device, so Android's built-in Gemini Nano (available on a short list of flagships) is not used. `react-native-executorch` runs LFM 2.5 1.2B (XNNPACK build), downloaded on request. Retrieval happens first with search and meaning vectors; the model sees at most five notes and must cite them. Hindi notes are passed in their English translation when one exists. Behind the `ask` flag until tried on real phones; the choice of model is the first thing to revisit.
+
+## D50. Betas are ordinary releases from 0.7 (0.7)
+
+The owner wants 0.7 usable by several people. CI marks only `-alpha` and `-rc` names as pre-releases. The APK is still signed with the template debug key; the release notes say to install only from the releases page, and a real key will force one more reinstall.

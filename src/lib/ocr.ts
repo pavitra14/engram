@@ -2,37 +2,37 @@
  * Reads the words in a picture, on the phone, so a photo of a receipt or a
  * whiteboard can be found by what is written on it.
  *
- * Done with Google's ML Kit text recogniser (through expo-text-extractor). The
- * picture is not sent anywhere. The recogniser itself is delivered by Google
- * Play services, which may download it the first time it is used; that download
- * carries nothing of the person's. Latin-script text only.
+ * Done by Engram's own small native module (modules/engram-ocr), which carries
+ * Google's ML Kit recognisers for Latin and Devanagari script inside the app.
+ * Nothing is downloaded and the picture is not sent anywhere.
  *
  * The words are derived data, like translations: kept in their own table, never
  * synced, and made again from the picture when needed.
  */
+import { requireOptionalNativeModule } from 'expo';
+
 import type { Db } from '@/db/db';
 import * as repo from '@/db/repo';
 
-type Module = { isSupported: boolean; extractTextFromImage: (uri: string) => Promise<string[]> };
+type Module = { read: (uri: string) => Promise<string[]> };
 
-/** Loaded lazily, so a fault in the native library cannot stop the app from starting. */
+/** Null when the native module is missing (an old build, or a platform without it), so nothing here can stop the app. */
 function recogniser(): Module | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('expo-text-extractor') as Module;
-    return mod?.isSupported ? mod : null;
+    return requireOptionalNativeModule<Module>('EngramOcr');
   } catch {
     return null;
   }
 }
 
+/** Whether this build can read pictures at all. */
+export const canReadPictures = (): boolean => recogniser() !== null;
+
 /** The words in a picture, one block per line. Empty when there are none or the recogniser is not available. */
 export async function wordsInPicture(uri: string): Promise<string> {
   const mod = recogniser();
   if (!mod) return '';
-  // The library takes a plain file path, not a file:// address.
-  const path = uri.startsWith('file://') ? decodeURIComponent(uri.slice(7)) : uri;
-  const blocks = await mod.extractTextFromImage(path);
+  const blocks = await mod.read(uri);
   return (Array.isArray(blocks) ? blocks : [])
     .map((b) => String(b).trim())
     .filter(Boolean)
@@ -45,6 +45,7 @@ export async function readPicture(db: Db, id: string, uri: string): Promise<bool
   const text = await wordsInPicture(uri);
   // An empty result is stored too, so the same picture is not read again on every launch.
   await repo.saveImageText(db, id, text);
+  console.log(`engram: picture read, ${text.length} characters`);
   return text.length > 0;
 }
 
@@ -66,7 +67,7 @@ export async function readOldPictures(db: Db, then: (id: string) => unknown): Pr
     try {
       if (await readPicture(db, p.id, p.media_path)) await then(p.id);
     } catch {
-      // Stop at the first failure; the recogniser is probably still being delivered.
+      // Stop at the first failure rather than fail the same way on every picture.
       return;
     }
   }

@@ -6,6 +6,7 @@ import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Entry } from '@/components/Entry';
+import { useFlag } from '@/cloud/flags';
 import { Pill, RoundButton } from '@/components/ui';
 import * as repo from '@/db/repo';
 import type { Thought, ThoughtKind } from '@/db/types';
@@ -32,6 +33,7 @@ export default function SearchScreen() {
   const [hits, setHits] = useState<Thought[] | null>(null);
 
   const q = query.trim();
+  const askOn = useFlag('ask');
   const [saved, setSaved] = useState<string[]>([]);
   const [people, setPeople] = useState<string[]>([]);
 
@@ -119,7 +121,13 @@ export default function SearchScreen() {
             ))}
           </ScrollView>
         </View>
-      ) : saved.length > 0 || people.length > 0 ? (
+      ) : null}
+      {!q && askOn ? (
+        <View style={{ paddingHorizontal: 24, paddingBottom: 4 }}>
+          <Pill label="Ask your notes a question" icon="message-circle" onPress={() => router.push('/ask')} />
+        </View>
+      ) : null}
+      {q ? null : saved.length > 0 || people.length > 0 ? (
         <View style={{ gap: 4 }}>
           {saved.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.filters}>

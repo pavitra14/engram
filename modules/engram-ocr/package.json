@@ -1,0 +1,6 @@
+{
+  "name": "engram-ocr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reads the words in a picture with ML Kit's bundled recognisers (Latin and Devanagari). Nothing is downloaded and nothing leaves the phone."
+}
