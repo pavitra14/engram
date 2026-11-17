@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: 18 Nov 2026, building `v0.8.0-beta.3`. Update this file whenever you finish work._
+_Last updated: 18 Nov 2026, after `v0.8.0-beta.3` (pre-release). Update this file whenever you finish work._
 
 ## Where things are
 
@@ -30,6 +30,7 @@ _Last updated: 18 Nov 2026, building `v0.8.0-beta.3`. Update this file whenever 
 Opt-in usage counts, designed with the owner in chat (D53, `docs/METRICS.md`). The tour's last page asks; people updating or who skipped the tour get a one-time sheet on Today; Settings, Privacy has the switch and "What's sent". The phone tallies per local date and sends one message per finished day to `public.record_usage`; the server keeps only totals in the unexposed `usage` schema. Kill switch: the `metrics` flag, **off** until the owner has tested. Widget, tile and shortcut links now carry `?from=`. Privacy Policy, README, AGENTS and the website changed in the same push: "no analytics" is gone; the phrases are "no tracking" and "your notes stay on your phone".
 
 - **Verified:** migration `0004_usage_counts` applied to the project and tested in SQL as `anon` (adding up, the 500 cap, unknown ids dropped, one range per bucket set, old and future days and bad versions refused, `anon` cannot read the schema). `npm run check` covers the local table and the message logic.
+- **Released:** `v0.8.0-beta.3` published as a pre-release by run 44176097163 (build, emulator test and release all passed); main run 44172213565 passed too. Screenshot `01c-tour-usage-question` on `smoke-shots` shows the question page. Signed with the template debug key (no keystore secrets yet), so it installs over 0.7. The website (engram-web `8a29c2c`) carries the matching Privacy Policy and no longer hard-codes a release number.
 - **Not verified:** a real phone sending (debug builds never send and the emulator test answers no). The owner turns the flag on after testing: `update public.feature_flags set enabled = true, updated_at = now() where key = 'metrics';`, then checks `select * from usage.daily order by day desc;` the day after. The dashboard login needs a password set by the owner (METRICS.md).
 
 ### Owner test list for 0.8
