@@ -8,7 +8,8 @@ _Last updated: 17 Nov 2026, after `v0.7.0-beta.2`. Update this file whenever you
 - **Engram Cloud is switched off** by the `cloud` feature flag (D37). The code and the server side from 0.4 are still there. Status against issue #2 is in `CLOUD.md`.
 - **Ask your notes is switched off** by the `ask` flag. Its model is not yet in `package.json` (see "Before turning Ask on" below).
 - The old `v1.0.0`, `v2.0.0-beta.1` releases and the `redesign-diag` branch still need deleting by hand on GitHub. Branch deletion commands are in the owner's hands; the agent cannot delete them from a cloud session.
-- **Privacy Policy and Terms** are in `docs/PRIVACY.md` and `docs/TERMS.md` (17 Nov 2026), linked from the README. Written from the code, not reviewed by a lawyer. `LICENSE` is all rights reserved (D51). They give no governing law and no contact email (GitHub issues only); both are the owner's to add before any Play Store listing, which also needs the policy at a public URL.
+- **Website** live at https://engram.pavitra.dev (17 Nov 2026; repo `pavitra14/engram-web`): landing page, Privacy Policy, Terms and contact (engram@pavitra.dev). README, LICENSE and the docs now link there.
+- **Privacy Policy and Terms** are in `docs/PRIVACY.md` and `docs/TERMS.md` (17 Nov 2026) and published at https://engram.pavitra.dev/privacy and /terms, which a Play Store listing can use. Written from the code, not reviewed by a lawyer. `LICENSE` is all rights reserved (D51). They give no governing law; that is the owner's to add before any Play Store listing. The app itself does not yet link to them from Settings.
 - The owner's next test is on a Samsung S24 Ultra (see "Owner test list for 0.7" below).
 
 ### Before turning Ask on

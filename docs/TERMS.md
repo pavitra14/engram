@@ -2,11 +2,13 @@
 
 _Effective 17 November 2026. Applies to Engram for Android, version 0.7 and later._
 
+> The published version is at **[https://engram.pavitra.dev/terms](https://engram.pavitra.dev/terms)**, which also covers the website. Keep the two in step: the page's source is `app/terms/page.tsx` in [pavitra14/engram-web](https://github.com/pavitra14/engram-web).
+
 These terms are between you and the developer of Engram, pavitra14 on GitHub ("we"). By installing or using Engram you agree to them. If you don't agree, please don't use the app.
 
 ## 1. What Engram is
 
-Engram is a note-taking app that stores your notes on your phone. Engram Cloud is an optional account that syncs notes between your devices; it is currently switched off. How we handle information is described in the [Privacy Policy](PRIVACY.md), which is part of these terms.
+Engram is a note-taking app that stores your notes on your phone. Engram Cloud is an optional account that syncs notes between your devices; it is currently switched off. How we handle information is described in the [Privacy Policy](https://engram.pavitra.dev/privacy), which is part of these terms.
 
 ## 2. Beta software
 
@@ -61,4 +63,4 @@ You can stop using Engram at any time by uninstalling it and, if you have one, d
 
 ## 10. Contact
 
-Questions about these terms: open an issue at [github.com/pavitra14/engram/issues](https://github.com/pavitra14/engram/issues).
+Questions about these terms: email [engram@pavitra.dev](mailto:engram@pavitra.dev) or open an issue at [github.com/pavitra14/engram/issues](https://github.com/pavitra14/engram/issues).

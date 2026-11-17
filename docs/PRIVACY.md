@@ -2,6 +2,8 @@
 
 _Effective 17 November 2026. Applies to Engram for Android, version 0.7 and later._
 
+> The published version is at **[https://engram.pavitra.dev/privacy](https://engram.pavitra.dev/privacy)**, which also covers the website. Keep the two in step: the page's source is `app/privacy/page.tsx` in [pavitra14/engram-web](https://github.com/pavitra14/engram-web).
+
 Engram is a note-taking app made by its developer, pavitra14 on GitHub ("we"). This policy says what the app does with your information. The short version: **what you write stays on your phone unless you choose to sign in to Engram Cloud.**
 
 ## The short version
@@ -89,7 +91,7 @@ Engram is not directed at children. If you are under the age at which your local
 - **See and export your data:** Settings, Back up, or export as Markdown.
 - **Correct it:** edit any note in the app.
 - **Delete it:** delete notes (they go to the trash for 30 days, then are removed), empty the trash, or uninstall the app. With Engram Cloud, sign out or delete your account in Settings.
-- **Ask us:** depending on where you live, you may have the right to access, correct or erase personal information we hold, or to complain to a data protection authority. The only personal information we can hold is an Engram Cloud account. To make a request, open an issue at [github.com/pavitra14/engram/issues](https://github.com/pavitra14/engram/issues) without putting personal details in it, and we will reply with a private way to continue.
+- **Ask us:** depending on where you live, you may have the right to access, correct or erase personal information we hold, or to complain to a data protection authority. The only personal information we can hold is an Engram Cloud account. To make a request, email [engram@pavitra.dev](mailto:engram@pavitra.dev).
 
 ## Changes to this policy
 
@@ -97,4 +99,4 @@ When the app changes what it does with information, this page changes first. The
 
 ## Contact
 
-Open an issue at [github.com/pavitra14/engram/issues](https://github.com/pavitra14/engram/issues).
+Email [engram@pavitra.dev](mailto:engram@pavitra.dev), or open an issue at [github.com/pavitra14/engram/issues](https://github.com/pavitra14/engram/issues) (please leave personal details out of public issues).
