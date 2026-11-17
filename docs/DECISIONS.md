@@ -304,3 +304,7 @@ The owner did not want behaviour that depends on the device, so Android's built-
 ## D50. Betas are ordinary releases from 0.7 (0.7)
 
 The owner wants 0.7 usable by several people. CI marks only `-alpha` and `-rc` names as pre-releases. The APK is still signed with the template debug key; the release notes say to install only from the releases page, and a real key will force one more reinstall.
+
+## D51. All rights reserved, not open source (17 Nov 2026)
+
+The owner wants people to read the code and use the app, but not copy, modify or reuse the code. `LICENSE` says so explicitly rather than leaving the repository without a licence, which means the same in law but is easy to misread. It allows installing from the official releases for personal use, issues, and the viewing and forking that GitHub's terms already allow on GitHub; it takes rights to any contribution sent in. `docs/TERMS.md` section 6 and the README match it. Do not add an open-source licence, or code under a licence that would force one, without the owner's say-so.

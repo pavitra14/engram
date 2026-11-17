@@ -1,0 +1,37 @@
+Copyright (c) 2026 pavitra14 (https://github.com/pavitra14). All rights reserved.
+
+This repository is published so that people can read how Engram works,
+report problems and suggest ideas. Publishing it does not grant a licence.
+
+You may:
+  - read the source code and documentation;
+  - install the Engram app from this repository's official Releases page
+    and use it for your own personal purposes, under the Terms of Use
+    (docs/TERMS.md) and the Privacy Policy (docs/PRIVACY.md);
+  - open issues and take part in discussions in this repository.
+
+Without prior written permission from the copyright holder, you may not:
+  - copy, reproduce or redistribute the source code, the app, or any part
+    of them, in source or compiled form;
+  - modify the source code, or make derivative works based on it;
+  - use the source code, or any part of it, in another project, product
+    or service, whether commercial or not;
+  - use the name "Engram", its logo or other branding.
+
+GitHub's Terms of Service let GitHub users view this public repository and
+fork it on GitHub. That is the only further permission; a fork on GitHub
+may not be used, modified or distributed in any of the ways listed above.
+
+If you send a contribution (for example a pull request or a patch), you
+agree that the copyright holder may use, modify and distribute it as part
+of Engram under any terms, and you confirm that you have the right to give
+that permission.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+For permission to use the code in other ways, open an issue at
+https://github.com/pavitra14/engram/issues.

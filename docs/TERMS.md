@@ -43,7 +43,7 @@ Some optional features use other services: language models downloaded from Huggi
 
 ## 6. The app and its code
 
-The source code is published on GitHub so anyone can read how Engram works. Unless a licence file in the repository says otherwise, it is not licensed for reuse, and the name "Engram" and its logo stay with the developer. Don't use them in a way that suggests your work comes from us.
+You may install Engram from the official GitHub Releases page and use it for your own personal purposes. The source code is published so anyone can read how Engram works, but it is **not open source**: all rights are reserved, as set out in the [LICENSE](../LICENSE) file. Without written permission you may not copy, modify, redistribute or reuse the code or the app, or use the name "Engram" or its logo.
 
 ## 7. No warranty
 

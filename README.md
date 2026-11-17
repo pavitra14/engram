@@ -10,6 +10,7 @@ A second brain for your Android phone. Everything stays on the phone, and there'
 ![Android 7+](https://img.shields.io/badge/Android-7%2B%20·%2064--bit-1F3FBF)
 ![Local-first](https://img.shields.io/badge/data-stays%20on%20your%20phone-15171A)
 ![No account](https://img.shields.io/badge/account-not%20needed-15171A)
+![License: all rights reserved](https://img.shields.io/badge/license-all%20rights%20reserved-5A5F66)
 
 **[Download the APK](../../releases)** &nbsp;·&nbsp; [What works today](docs/STATUS.md) &nbsp;·&nbsp; [Privacy](docs/PRIVACY.md) &nbsp;·&nbsp; [Terms](docs/TERMS.md)
 
@@ -148,6 +149,10 @@ npm run typecheck && npm run lint && npm run check
 </details>
 
 Start with **[AGENTS.md](AGENTS.md)**, the guide for anyone, human or AI, changing this code. The spec, design rules, decisions and status are in [`docs/`](docs/), and how builds work is in [docs/CI.md](docs/CI.md).
+
+## License
+
+Engram's source is published so you can see how it works, but it is **not open source**. You're welcome to install the app from [Releases](../../releases), use it and report issues. Copying, modifying or redistributing the code needs written permission. See [LICENSE](LICENSE).
 
 <br>
 
