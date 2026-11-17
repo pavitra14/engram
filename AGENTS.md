@@ -17,14 +17,14 @@ This file is the entry point for any coding agent (Claude Code, Codex, Cursor, C
 | [`docs/research.md`](docs/research.md) | When choosing libraries or revisiting design inspiration. |
 | [`docs/CI.md`](docs/CI.md) | Before changing the workflow, or to make builds faster. |
 | [`docs/CLOUD.md`](docs/CLOUD.md) | Before touching sync, accounts or anything in `supabase/`. |
-| [`docs/PRIVACY.md`](docs/PRIVACY.md), [`docs/TERMS.md`](docs/TERMS.md) | Before changing what the app stores, sends, downloads or asks permission for. Keep them true to the code, and keep the published copies on https://engram.pavitra.dev in step. |
+| [`docs/PRIVACY.md`](docs/PRIVACY.md), [`docs/TERMS.md`](docs/TERMS.md) | Before changing what the app stores, sends, downloads or asks permission for. Keep them true to the code, and keep the published copies on https://engrm.app in step. |
 
 When you finish a piece of work, update `docs/STATUS.md` (and `DECISIONS.md` if you made a choice someone might later question). These files are the shared memory between agents and sessions; if they are stale, the next agent starts wrong.
 
 ## Project facts
 
 - **Owner:** pavitra14 on GitHub. Repo: `pavitra14/engram`. Default branch: `main`.
-- **Website:** https://engram.pavitra.dev (repo `pavitra14/engram-web`, Next.js on Coolify). It hosts the published Privacy Policy (`/privacy`), Terms (`/terms`) and contact page (`/contact`, engram@pavitra.dev). Link to the website rather than to `docs/PRIVACY.md` or `docs/TERMS.md` in anything people read, and when you change either doc, make the same change in `engram-web` (`app/privacy/page.tsx`, `app/terms/page.tsx`).
+- **Website:** https://engrm.app. The domain is spelled without the "a" on purpose (engram.app was taken); the product is still called Engram everywhere, so never write "Engrm" as a name. It moved from engram.pavitra.dev on 17 Nov 2026, which now redirects. Contact: contact@engrm.app. (Repo `pavitra14/engram-web`, Next.js on Coolify). It hosts the published Privacy Policy (`/privacy`), Terms (`/terms`) and contact page (`/contact`, contact@engrm.app). Link to the website rather than to `docs/PRIVACY.md` or `docs/TERMS.md` in anything people read, and when you change either doc, make the same change in `engram-web` (`app/privacy/page.tsx`, `app/terms/page.tsx`).
 - **Platform:** Android first. iOS is out of scope for now, but avoid Android-only code where a cross-platform option is equally good.
 - **Package id:** `dev.pavitra.engram`. App name: Engram. URL scheme: `engram://`.
 - **Stack:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript, Expo Router, PowerSync (`@powersync/react-native` on `@op-engineering/op-sqlite`, local-only), `react-native-enriched-html` (the note editor), `react-native-android-widget`, `d3-force` (layout only), Reanimated 4.7, `expo-clipboard`, `expo-speech-recognition`, `expo-notifications`, `expo-calendar`, `expo-image-picker`, `react-native-executorch` (text embeddings only). Skia was removed in v2; nothing draws on a canvas.

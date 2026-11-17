@@ -11,9 +11,9 @@ A second brain for your Android phone. Everything stays on the phone, and there'
 ![Local-first](https://img.shields.io/badge/data-stays%20on%20your%20phone-15171A)
 ![No account](https://img.shields.io/badge/account-not%20needed-15171A)
 ![License: all rights reserved](https://img.shields.io/badge/license-all%20rights%20reserved-5A5F66)
-[![Website](https://img.shields.io/badge/website-engram.pavitra.dev-1F3FBF)](https://engram.pavitra.dev)
+[![Website](https://img.shields.io/badge/website-engrm.app-1F3FBF)](https://engrm.app)
 
-**[engram.pavitra.dev](https://engram.pavitra.dev)** &nbsp;·&nbsp; [Download the APK](../../releases/latest) &nbsp;·&nbsp; [What works today](docs/STATUS.md) &nbsp;·&nbsp; [Privacy](https://engram.pavitra.dev/privacy) &nbsp;·&nbsp; [Terms](https://engram.pavitra.dev/terms) &nbsp;·&nbsp; [Contact](https://engram.pavitra.dev/contact)
+**[engrm.app](https://engrm.app)** &nbsp;·&nbsp; [Download the APK](../../releases/latest) &nbsp;·&nbsp; [What works today](docs/STATUS.md) &nbsp;·&nbsp; [Privacy](https://engrm.app/privacy) &nbsp;·&nbsp; [Terms](https://engrm.app/terms) &nbsp;·&nbsp; [Contact](https://engrm.app/contact)
 
 <br>
 
@@ -96,7 +96,7 @@ Engram is built around those two moments.
 - **Downloads happen only when you ask:** the model for linking by meaning (about 130 MB), a language pack per language for translation (about 30 MB each). After that, both run on the phone.
 - **At launch** the app asks Engram's server which unfinished features are switched on. That request carries no account and none of your words.
 
-The full details are in the **[Privacy Policy](https://engram.pavitra.dev/privacy)**.
+The full details are in the **[Privacy Policy](https://engrm.app/privacy)**.
 
 <details>
 <summary><b>Engram Cloud</b>: optional sync, built but not yet switched on</summary>
@@ -112,7 +112,7 @@ To be clear about what it is: the cloud copy is encrypted in transit and at rest
 
 ## Install
 
-1. On an Android phone (Android 7 or newer, 64-bit), go to **[engram.pavitra.dev](https://engram.pavitra.dev)** and tap **Download for Android**, or open **[the latest release](../../releases/latest)** directly, and download the `engram-…apk` file.
+1. On an Android phone (Android 7 or newer, 64-bit), go to **[engrm.app](https://engrm.app)** and tap **Download for Android**, or open **[the latest release](../../releases/latest)** directly, and download the `engram-…apk` file.
 2. Open the file and allow the install.
 
 > [!IMPORTANT]
@@ -153,7 +153,7 @@ Start with **[AGENTS.md](AGENTS.md)**, the guide for anyone, human or AI, changi
 
 ## License
 
-Engram's source is published so you can see how it works, but it is **not open source**. You're welcome to install the app from [Releases](../../releases/latest), use it and [report issues](../../issues/new). Questions: [engram@pavitra.dev](mailto:engram@pavitra.dev). Copying, modifying or redistributing the code needs written permission. See [LICENSE](LICENSE).
+Engram's source is published so you can see how it works, but it is **not open source**. You're welcome to install the app from [Releases](../../releases/latest), use it and [report issues](../../issues/new). Questions: [contact@engrm.app](mailto:contact@engrm.app). Copying, modifying or redistributing the code needs written permission. See [LICENSE](LICENSE).
 
 <br>
 

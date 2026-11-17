@@ -666,9 +666,9 @@ export default function SettingsScreen() {
 
           <Section title="About">
             <View>
-              <Row title="Privacy Policy" sub="What Engram stores and sends" action="Open" onPress={() => void Linking.openURL('https://engram.pavitra.dev/privacy')} />
-              <Row title="Terms of Use" sub="The rules for using Engram" action="Open" onPress={() => void Linking.openURL('https://engram.pavitra.dev/terms')} />
-              <Row title="Contact" sub="engram@pavitra.dev" action="Email" onPress={() => void Linking.openURL('mailto:engram@pavitra.dev')} />
+              <Row title="Privacy Policy" sub="What Engram stores and sends" action="Open" onPress={() => void Linking.openURL('https://engrm.app/privacy')} />
+              <Row title="Terms of Use" sub="The rules for using Engram" action="Open" onPress={() => void Linking.openURL('https://engrm.app/terms')} />
+              <Row title="Contact" sub="contact@engrm.app" action="Email" onPress={() => void Linking.openURL('mailto:contact@engrm.app')} />
             </View>
           </Section>
 

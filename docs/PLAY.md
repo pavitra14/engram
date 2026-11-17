@@ -28,7 +28,7 @@ _Written 17 Nov 2026. F-Droid was considered and dropped (D52): the code is all 
 ## Console checklist
 
 - Store listing: title, short and full description, 512 px icon, 1024x500 feature graphic, 2 to 8 phone screenshots (`docs/screenshots`), category, contact email, website.
-- Privacy policy URL: https://engram.pavitra.dev/privacy
+- Privacy policy URL: https://engrm.app/privacy
 - Data safety form. Local only; optional Engram Cloud sync (off for everyone for now); no analytics or ads; the feature flags are read from Supabase at launch; model and language-pack downloads. Match `docs/PRIVACY.md`.
 - Content rating questionnaire, target audience (not for children), no ads, no login needed.
 - Permission declarations. Check against the list the release job prints. Expected: microphone, camera, calendar read and write, notifications, foreground service (media playback, for audio), biometric, internet.
