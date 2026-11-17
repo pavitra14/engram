@@ -6,7 +6,7 @@ _Written 17 Nov 2026. F-Droid was considered and dropped (D52): the code is all 
 
 - **Release signing:** `plugins/withReleaseSigning.js` signs release builds with Engram's own key when `ENGRAM_KEYSTORE_PATH`, `ENGRAM_KEYSTORE_PASSWORD`, `ENGRAM_KEY_ALIAS` and `ENGRAM_KEY_PASSWORD` are set. Without them the build keeps the template debug key. CI sets them for release builds from the repository secrets below.
 - **Play bundle:** release builds also produce `engram.aab` (arm64), uploaded with the APK as the `engram-apk` artifact. It is not attached to the GitHub release.
-- **Target SDK 36** and compile SDK 36 are set in `app.json` through `expo-build-properties`. Play requires 36 for new apps.
+- **Target SDK 36** is set in `app.json` through `expo-build-properties`. Play requires 36 for new apps. Do not set `compileSdkVersion`: Expo SDK 58's libraries need 37, which is the default (a 36 override broke the build on 17 Nov).
 - **In-app links** to the Privacy Policy, Terms and Contact are in Settings, under About.
 - `SYSTEM_ALERT_WINDOW` is blocked in `app.json`; nothing in the app draws over other apps.
 - The release job prints the merged manifest's permissions and counts Firebase and Play services entries in the APK, so they can be compared with the Play Console declarations.
