@@ -22,6 +22,13 @@ A GitHub runner starts empty every time, so the C++ of React Native and of each 
 
 Building one APK on ordinary pushes should take several minutes off the build job; this has not been measured yet. Releases still build both APKs.
 
+## Skipping a run
+
+- **Docs-only pushes** (`*.md`, `docs/**`, `LICENSE`) start no run. Nothing to do.
+- **Other pushes that need no build** (status records, notes): end the last commit message with `[skip ci]`. Also accepted: `[ci skip]`, `[no ci]`, `[skip actions]`, `[actions skip]`. GitHub checks only the head commit of the push.
+- **Pushes that must build** (code, `package.json`, `app.json`, `modules/`, `plugins/`, `supabase/`, the workflow): never skip. Test locally first; see `AGENTS.md`.
+- Pushing a `release/vX.Y.Z-beta.N` branch or a `v*` tag always runs the release, so do not mark those commits.
+
 ## Using your own machine as the runner
 
 This is the big one. A machine that keeps its files between runs compiles only what changed, so the build job drops to a few minutes.
