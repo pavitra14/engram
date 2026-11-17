@@ -1,12 +1,27 @@
 # Status
 
-_Last updated: 16 Nov 2026, v0.6.0-beta.1. Update this file whenever you finish work._
+_Last updated: 17 Nov 2026, after `v0.7.0-beta.2`. Update this file whenever you finish work._
 
 ## Where things are
 
-- The app is **0.5.0**. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
-- **Engram Cloud is switched off** by the `cloud` feature flag (D37). The code and the server side from 0.4 are still there.
-- The old `v1.0.0` and `v2.0.0-beta.1` releases still need deleting by hand on GitHub.
+- The app is **0.7.0** (`versionCode` 7), released as `v0.7.0-beta.2`. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
+- **Engram Cloud is switched off** by the `cloud` feature flag (D37). The code and the server side from 0.4 are still there. Status against issue #2 is in `CLOUD.md`.
+- **Ask your notes is switched off** by the `ask` flag. Its model is not yet in `package.json` (see "Before turning Ask on" below).
+- The old `v1.0.0`, `v2.0.0-beta.1` releases and the `redesign-diag` branch still need deleting by hand on GitHub. Branch deletion commands are in the owner's hands; the agent cannot delete them from a cloud session.
+- The owner's next test is on a Samsung S24 Ultra (see "Owner test list for 0.7" below).
+
+### Before turning Ask on
+
+- `react-native-executorch` needs the `llm` feature to fetch the chat model's native libraries. `package.json` lists only `textEmbeddings`. Add `llm` to `react-native-executorch.features` in the same commit as the flag change, then check the generated manifest and run a full CI build, since this changes native packaging. Not done yet on purpose: adding it now would start a build with no visible effect.
+- Turn the flag on only after the owner decides: `update public.feature_flags set enabled = true where key = 'ask';`. It applies to every install, not only the owner's phone.
+
+### Owner test list for 0.7 (S24 Ultra, not yet reported)
+
+- A photo with Hindi text: does it read and show under the picture?
+- Backup, then restore on a fresh install: do photos and recordings come back?
+- Translation in a non-English language. If it fails, the message shown on the phone is the first thing to report.
+- Quick Settings tile, icon shortcuts, app lock, focus timer, morning and evening notifications.
+- Anything that crashes shows the crash screen; note what it says.
 
 ## What 0.7 changed (released as `v0.7.0-beta.2`, the first ordinary release)
 
@@ -158,7 +173,7 @@ On the Android 14 emulator, from the 0.3.0-beta.1 run's screenshots and log:
 - A repeating to-do has no end date. Reminders are not rescheduled after a backup is restored on another phone.
 - Widgets use fixed colours and refresh when the app changes data, or every 30 minutes.
 - The share sheet appears over a dimmed Engram screen, not over the app you shared from.
-- Backups exclude files, pictures and recordings.
+- Backups carry pictures, recordings and files as of 0.7 (the zip). A backup made by 0.6 or earlier has only words, tags and links, so media from the old install does not come across.
 - Signed with the debug keystore. Fine for sideloading, not for the Play Store.
 - The smoke test's tap coordinates are hard-coded for 1080×2400.
 - Do not reintroduce `useIncomingShare` from `expo-sharing`: it fetches any shared web address.
@@ -174,7 +189,7 @@ New features are in [`ROADMAP.md`](ROADMAP.md). This list is for fixing and chec
 2. **Try Engram Cloud end to end**, then switch its flag on. See `CLOUD.md`, "Things only the owner can do".
    _Done when:_ sign-up, confirmation, sign-in, sync between two devices and account deletion each work once.
 3. **Translucent share target.** A native transparent activity (config plugin) so the share sheet appears over the app you shared from.
-4. **Backups include files and recordings.**
+4. ~~**Backups include files and recordings.**~~ Done in 0.7 (`exportFullBackup`). Still to check on a phone: a restore on a fresh install brings the media back.
 5. **A real signing key** before any Play Store submission.
 
 ## Open questions for the owner
