@@ -36,6 +36,7 @@ jobs:
       RELEASING: ${{ startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/v') || github.event_name == 'workflow_dispatch' }}
       # Engram Cloud's public address and publishable key, baked into the app at build time.
       # Without them the app builds and works, with no cloud option. Never put a secret key here.
+      KEYSTORE_B64: ${{ secrets.ENGRAM_KEYSTORE_BASE64 }}
       EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
       EXPO_PUBLIC_SUPABASE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_KEY }}
     steps:
@@ -61,6 +62,17 @@ jobs:
           npm run typecheck
           npm run lint
           npm run check
+      - name: Set up the release signing key
+        if: env.RELEASING == 'true' && env.KEYSTORE_B64 != ''
+        run: |
+          # The key comes from repository secrets and is written outside the checkout.
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/engram-release.jks"
+          {
+            echo "ENGRAM_KEYSTORE_PATH=$RUNNER_TEMP/engram-release.jks"
+            echo "ENGRAM_KEYSTORE_PASSWORD=${{ secrets.ENGRAM_KEYSTORE_PASSWORD }}"
+            echo "ENGRAM_KEY_ALIAS=${{ secrets.ENGRAM_KEY_ALIAS }}"
+            echo "ENGRAM_KEY_PASSWORD=${{ secrets.ENGRAM_KEY_PASSWORD }}"
+          } >> "$GITHUB_ENV"
       - name: Generate the Android project
         run: npx expo prebuild --platform android --no-install
       - name: Build the emulator APK (x86_64)
@@ -71,19 +83,29 @@ jobs:
             || { echo "The build failed; trying once more."; ./gradlew assembleRelease --no-daemon --build-cache -PreactNativeArchitectures=x86_64; }
           mkdir -p ../out
           cp app/build/outputs/apk/release/app-release.apk ../out/engram-x86_64.apk
-      - name: Build the phone APK (arm64)
+      - name: Build the phone APK and the Play bundle (arm64)
         if: env.RELEASING == 'true'
         working-directory: android
         run: |
           # One retry: the runner's download of the Android NDK sometimes arrives corrupt.
-          ./gradlew assembleRelease --no-daemon --build-cache -PreactNativeArchitectures=arm64-v8a \
-            || { echo "The build failed; trying once more."; ./gradlew assembleRelease --no-daemon --build-cache -PreactNativeArchitectures=arm64-v8a; }
+          ./gradlew assembleRelease bundleRelease --no-daemon --build-cache -PreactNativeArchitectures=arm64-v8a \
+            || { echo "The build failed; trying once more."; ./gradlew assembleRelease bundleRelease --no-daemon --build-cache -PreactNativeArchitectures=arm64-v8a; }
           cp app/build/outputs/apk/release/app-release.apk ../out/engram.apk
+          echo "Permissions in the merged manifest (check against the Play Console declarations):"
+          grep -ho 'uses-permission[^>]*android:name="[^"]*"' app/build/intermediates/merged_manifests/release*/AndroidManifest.xml | sed 's/.*name="//;s/"//' | sort -u || true
+          echo "Entries in the APK from Firebase (expect 0) and from Google Play services base classes (ML Kit brings some):"
+          unzip -l ../out/engram.apk | grep -ci "com/google/firebase" || true
+          unzip -l ../out/engram.apk | grep -ci "com/google/android/gms" || true
+          cp app/build/outputs/bundle/release/app-release.aab ../out/engram.aab
           ls -lh ../out
+          echo "Signer of the phone APK:"
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs ../out/engram.apk | grep -i "certificate DN\|SHA-256" || true
       - uses: actions/upload-artifact@v4
         with:
           name: engram-apk
-          path: out/*.apk
+          path: |
+            out/*.apk
+            out/*.aab
           if-no-files-found: error
 
   smoke:

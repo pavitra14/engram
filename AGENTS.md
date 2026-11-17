@@ -174,7 +174,7 @@ These caught the first build out. The installed versions behave this way:
 4. Push a branch named `release/vX.Y.Z-beta.N` from that commit, or a tag of the same name if your environment allows pushing tags (Claude Code cloud sessions cannot). From 0.7 a beta is published as an ordinary release; only `-alpha` and `-rc` names are marked pre-release. The phone APK is only built for these refs.
 5. CI builds, runs the emulator test, and publishes the release with `engram-vX.Y.Z.apk` (arm64) attached.
 
-The APK is signed with the React Native template's debug keystore, which is the same on every build, so new versions install over old ones. Replace it with a real keystore (via a config plugin and CI secrets) before any Play Store submission.
+Release builds are signed with the owner's keystore when the `ENGRAM_KEYSTORE_BASE64`, `ENGRAM_KEYSTORE_PASSWORD`, `ENGRAM_KEY_ALIAS` and `ENGRAM_KEY_PASSWORD` secrets exist (`plugins/withReleaseSigning.js`); without them the build falls back to the template debug key. The release job also builds an AAB for Google Play. See `docs/PLAY.md`. Never commit a keystore or print a secret.
 
 ## Conventions
 

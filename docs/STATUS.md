@@ -25,6 +25,10 @@ _Last updated: 17 Nov 2026, after `v0.7.0-beta.2`. Update this file whenever you
 - Quick Settings tile, icon shortcuts, app lock, focus timer, morning and evening notifications.
 - Anything that crashes shows the crash screen; note what it says.
 
+## Preparing for Google Play (17 Nov 2026)
+
+F-Droid is dropped (D52). In the repo: release-signing plugin, AAB in the release job, target SDK 36, About links in Settings, `SYSTEM_ALERT_WINDOW` blocked. **Not yet done, owner's:** make the keystore and add the four secrets, create the Play Console account and app, run the 14-day closed test, add governing law to the policy and terms. Full list: `docs/PLAY.md`. None of this has been through a CI run yet; the first run will also print the merged permissions and the Firebase count, which need reading.
+
 ## What 0.7 changed (released as `v0.7.0-beta.2`, the first ordinary release)
 
 - **Package id is `dev.pavitra.engram`** (D47). Installs beside older builds; people move by backup and restore.

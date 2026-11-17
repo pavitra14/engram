@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { useDb } from '@/db/provider';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useFlag } from '@/cloud/flags';
@@ -661,6 +661,14 @@ export default function SettingsScreen() {
               ) : (
                 <Row title="Delete everything" sub={`${count} ${count === 1 ? 'thought' : 'thoughts'} on this phone`} action="Delete" danger onPress={confirmWipe} />
               )}
+            </View>
+          </Section>
+
+          <Section title="About">
+            <View>
+              <Row title="Privacy Policy" sub="What Engram stores and sends" action="Open" onPress={() => void Linking.openURL('https://engram.pavitra.dev/privacy')} />
+              <Row title="Terms of Use" sub="The rules for using Engram" action="Open" onPress={() => void Linking.openURL('https://engram.pavitra.dev/terms')} />
+              <Row title="Contact" sub="engram@pavitra.dev" action="Email" onPress={() => void Linking.openURL('mailto:engram@pavitra.dev')} />
             </View>
           </Section>
 

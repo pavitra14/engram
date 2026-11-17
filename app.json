@@ -21,7 +21,8 @@
       "predictiveBackGestureEnabled": false,
       "blockedPermissions": [
         "android.permission.ACTIVITY_RECOGNITION",
-        "android.permission.HIGH_SAMPLING_RATE_SENSORS"
+        "android.permission.HIGH_SAMPLING_RATE_SENSORS",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "plugins": [
@@ -65,7 +66,15 @@
         }
       ],
       "expo-font",
-      "expo-build-properties",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
+          }
+        }
+      ],
       [
         "expo-speech-recognition",
         {
@@ -160,7 +169,8 @@
           "faceIDPermission": "Engram uses Face ID to unlock your notes."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "./plugins/withReleaseSigning"
     ],
     "experiments": {
       "typedRoutes": true

@@ -308,3 +308,8 @@ The owner wants 0.7 usable by several people. CI marks only `-alpha` and `-rc` n
 ## D51. All rights reserved, not open source (17 Nov 2026)
 
 The owner wants people to read the code and use the app, but not copy, modify or reuse the code. `LICENSE` says so explicitly rather than leaving the repository without a licence, which means the same in law but is easy to misread. It allows installing from the official releases for personal use, issues, and the viewing and forking that GitHub's terms already allow on GitHub; it takes rights to any contribution sent in. `docs/TERMS.md` section 6 and the README match it. Do not add an open-source licence, or code under a licence that would force one, without the owner's say-so.
+
+## D52. Google Play only; no F-Droid (17 Nov 2026)
+
+The owner chose to skip F-Droid. The code stays all rights reserved (D51), which F-Droid's main repository does not accept, and ML Kit (text in pictures, translation) is proprietary. Distribution is the GitHub releases page and Google Play. Release builds are signed with an owner-held key supplied by CI secrets, and also produce an AAB for Play. Steps and open checks are in `docs/PLAY.md`.
+
