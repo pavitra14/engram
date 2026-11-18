@@ -2,6 +2,8 @@
 
 _Last updated: 18 Nov 2026, after `v0.8.0-beta.3` (pre-release). Update this file whenever you finish work._
 
+> **18 Nov 2026:** the `metrics` flag is switched **on** in Supabase at the owner's request. Phones whose owner said yes to usage counts now send one anonymous daily total through `record_usage`. Turn it off in `public.feature_flags` to stop all sending.
+
 ## Where things are
 
 - The app is **0.8.0** (`versionCode` 8), released as `v0.8.0-beta.3`, a **pre-release** the owner will promote by hand once tested (the owner chose the beta.3 number). The last ordinary release is `v0.7.0-beta.2`; the website shows the latest ordinary release, so it keeps showing 0.7 until 0.8 is promoted. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
