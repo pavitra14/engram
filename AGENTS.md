@@ -28,7 +28,7 @@ When you finish a piece of work, update `docs/STATUS.md` (and `DECISIONS.md` if 
 - **Platform:** Android first. iOS is out of scope for now, but avoid Android-only code where a cross-platform option is equally good.
 - **Package id:** `dev.pavitra.engram`. App name: Engram. URL scheme: `engram://`.
 - **Stack:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript, Expo Router, PowerSync (`@powersync/react-native` on `@op-engineering/op-sqlite`, local-only), `react-native-enriched-html` (the note editor), `react-native-android-widget`, `d3-force` (layout only), Reanimated 4.7, `expo-clipboard`, `expo-speech-recognition`, `expo-notifications`, `expo-calendar`, `expo-image-picker`, `react-native-executorch` (text embeddings only). Skia was removed in v2; nothing draws on a canvas.
-- **Versions are 0.x.** The app is `0.8.0` (`versionCode` 8), released as `v0.8.0-beta.3` (a pre-release until the owner promotes it); the last ordinary release is `v0.7.0-beta.2`. Two earlier releases were numbered 1.0.0 and 2.0.0-beta.1 by mistake; the owner asked for them to be removed. Never number a release 1.0 or higher unless the owner says so.
+- **Versions are 0.x.** The app is `0.9.0` (`versionCode` 9), released as `v0.9.0-beta.4`, an ordinary release. `v0.8.0-beta.3` was a pre-release and was never promoted; 0.9 carries its changes. Two earlier releases were numbered 1.0.0 and 2.0.0-beta.1 by mistake; the owner asked for them to be removed. Never number a release 1.0 or higher unless the owner says so.
 
 ## Repository map
 
@@ -41,13 +41,13 @@ src/
     group/[id].tsx     one group's thoughts ("loose" = ungrouped, "largest" = test hook)
     thought/[id].tsx   a note: title and formatted body edited in place, file, to-do, tags, links
     latest.tsx         engram://latest opens the newest thought (test hook)
-    tour.tsx           the first-run tour and the usage-counts question; shown once, and from Settings
+    tour.tsx           the first-run tour, then two questions (linking by meaning, usage counts); shown once, and from Settings
     review.tsx         the weekly review: the week in numbers, then older notes to decide on
     search.tsx         full-text search with kind filters and group matches
     voice.tsx          full-screen voice capture with live transcript
     compose.tsx        a new note (title + formatted body); also opened by widgets and calendar events
     todo.tsx           the to-do list by due date, quick add, the week's calendar, done
-    settings.tsx       appearance, voice, linking by meaning, calendar, backup, data
+    settings.tsx       every setting, in collapsible groups with search (built from components/SettingsLayout.tsx)
     handle-share.tsx   sheet shown when another app shares to Engram
     ask.tsx            Ask your notes (behind the `ask` flag)
     recap.tsx          the month in review
@@ -58,7 +58,7 @@ src/
     +native-intent.ts  routes incoming share intents to /handle-share
   components/          CaptureBar, NoteEditor (+ FormatBar), GroupMap, Entry, TodoRow,
                        ActionSheet (slide-up menu), ThoughtMenu (hold a note in any list),
-                       CloudSection (Settings), ui.tsx primitives
+                       CloudSection (Settings), SettingsLayout (groups, sections, rows, search), ui.tsx primitives
   db/                  schema.ts (tables and columns), powersync.ts (opens the database),
                        provider.tsx (useDb), db.ts (the Db interface), repo.ts (all SQL),
                        legacy.ts (the pre-0.3 database and its one-time import), types.ts
@@ -71,7 +71,7 @@ src/
                        assistants.ts (Chat with Claude / ChatGPT), open.ts, useVoice.ts,
                        translate.ts (English versions, on the phone), habits.ts (daily question,
                        streak, week numbers, note templates), when.ts (dates in plain words), checks.ts (check boxes),
-                       recall.ts, projects.ts, markdown.ts, ocr.ts, ask.ts (+ ask.logic.ts), usage.ts (+ usage.logic.ts, anonymous usage counts), focus.ts, briefs.ts, lock.ts, toast.ts, actions.ts, backup.ts, samples.ts, bus.ts, text.ts
+                       recall.ts, projects.ts, markdown.ts, ocr.ts, ask.ts (+ ask.logic.ts), usage.ts (+ usage.logic.ts, anonymous usage counts), focus.ts, briefs.ts, lock.ts, toast.ts, actions.ts, backup.ts (+ backup.logic.ts, what a backup holds and how it is restored; tested in Node), samples.ts, bus.ts, text.ts
   theme.tsx            light and black palettes, type scale, ThemeProvider, useTheme()
 assets/brand/          SVG sources for the mark and wordmark; PNGs in assets/images are rendered from them
 index.ts               entry point: expo-router plus the widget task handler
@@ -122,6 +122,9 @@ You do not need the Android SDK locally. CI builds the APK.
 - **Unfinished features sit behind a flag that is off by default.** Flags are rows in the cloud's `feature_flags` table, read by `src/cloud/flags.ts`. A flag that is missing, false, or never fetched is off; the last fetched answer is remembered for when the phone is offline. Engram Cloud is behind `cloud`, which is off: with it off the Settings section is hidden, no session is restored and no change is recorded for sending. To add a flag, add its name to `FLAGS` and a row to the table.
 - **Deleting is `removeThought`, which moves to the trash.** Only `deleteForever` and `emptyOldTrash` remove rows. Every list query filters `trashed_at IS NULL`; a new query must too.
 - **Columns in `LOCAL_THOUGHT_COLUMNS` stay on the phone** (pins, trash, recall, parked list, focus minutes) and are written without `mark()`. The `projects` table is local too.
+- **A backup restore puts back everything a note carried** (`restoreBackup` in `backup.logic.ts`): to-do, reminder, repeat, star, pin, trash, recall, list, focus minutes. Never the alarm id (`notif_id`); `reconcileReminders` makes new alarms on the restoring phone. A new thought column must be added to `NewThought` too, or restores and conflict copies will drop it, and `backupChecks()` in `scripts/check.ts` should compare it.
+- **Settings rows are found by search from their own words.** Use `Row` and `Section` from `SettingsLayout.tsx`; wrap explaining text and non-row controls in `Extra`. A section whose controls are not rows needs `terms` to be searchable. New sections go inside a `Group`.
+- **A share waiting at launch is picked up by `_layout.tsx`.** Expo Router waits only 150 ms for the launch address on Android, which a slow cold start misses; the layout checks `getSharedPayloads()` and opens `/handle-share`. Keep that check, and keep `handle-share.tsx`'s `saving` guard so a share is never saved twice.
 - **Short messages use `showToast`** (`src/lib/toast.ts`), with at most one action. Prefer Undo over a confirmation.
 - **Text read from pictures is derived data** (`image_text`), like translations. It is read by `modules/engram-ocr` with recognisers bundled in the APK; do not swap in the Play services variants, which download on first use and failed on the emulator in 0.6. `modules/<name>/android` is hand-written native code and is the one exception to "never write Android code".
 - **Ask your notes runs on the phone and is behind the `ask` flag.** `ask.ts` gives the model only the few notes search found, and the screen lists them. The model is downloaded on request, like the meaning model, with telemetry off.
@@ -174,7 +177,7 @@ These caught the first build out. The installed versions behave this way:
 4. Push a branch named `release/vX.Y.Z-beta.N` (if main already has the commit, the paths filter skips the run; see `docs/CI.md`), or a tag of the same name if your environment allows pushing tags (Claude Code cloud sessions cannot). From 0.7 a beta is published as an ordinary release; `-alpha` and `-rc` names are marked pre-release, and so is any release whose `docs/release-notes.md` starts with the line `<!-- prerelease -->` (the owner promotes it by hand once tested; remove the line for the next release). The phone APK is only built for these refs.
 5. CI builds, runs the emulator test, and publishes the release with `engram-vX.Y.Z.apk` (arm64) attached.
 
-Release builds are signed with the owner's keystore when the `ENGRAM_KEYSTORE_BASE64`, `ENGRAM_KEYSTORE_PASSWORD`, `ENGRAM_KEY_ALIAS` and `ENGRAM_KEY_PASSWORD` secrets exist (`plugins/withReleaseSigning.js`); without them the build falls back to the template debug key. The release job also builds an AAB for Google Play. See `docs/PLAY.md`. Never commit a keystore or print a secret.
+Release builds are signed with the owner's keystore when the `ENGRAM_KEYSTORE_BASE64`, `ENGRAM_KEYSTORE_PASSWORD`, `ENGRAM_KEY_ALIAS` and `ENGRAM_KEY_PASSWORD` secrets exist (`plugins/withReleaseSigning.js`); without them the build falls back to the template debug key. The release job also builds an AAB for Google Play and attaches it to the GitHub release (`engram-vX.Y.Z.aab`) only when the real key signed it; a debug-signed bundle is useless to Play and is left off with a warning. See `docs/PLAY.md`. Never commit a keystore or print a secret.
 
 ## Conventions
 

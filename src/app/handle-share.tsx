@@ -33,6 +33,9 @@ type State =
 /** The brain as it is this moment, not a cached one. */
 const freshBrain = (db: Db) => loadBrain(db, Date.now());
 
+/** True while one share screen is saving, so a second one opened for the same share does nothing. */
+let saving = false;
+
 const isWords = (p: SharePayload) => p.shareType === 'text' || p.shareType === 'url';
 
 /** The copy of a shared file that the share library made in Engram's cache, if it made one. */
@@ -90,6 +93,12 @@ export default function HandleShareScreen() {
       return () => clearTimeout(t);
     }
     handled.current = true;
+    if (saving) {
+      // Another share screen is already saving this share (the app was opened by it and also found it waiting).
+      if (router.canGoBack()) router.back();
+      return;
+    }
+    saving = true;
     (async () => {
       try {
         // Files are copied into Engram's cache by the share library; that step is local.
@@ -104,6 +113,7 @@ export default function HandleShareScreen() {
           if (t) saved.push(t);
         }
         clearSharedPayloads();
+        saving = false;
         if (saved.length === 0) {
           setState({ phase: 'failed', message: 'There was nothing in that share that Engram could save.' });
           return;
@@ -111,6 +121,11 @@ export default function HandleShareScreen() {
         const brain = await loadBrain(db, Date.now());
         setState({ phase: 'saved', first: saved[0], all: saved, count: saved.length, where: placement(brain, saved[0]) });
       } catch (e) {
+        saving = false;
+        // Not offered again each time the app opens; the message asks for the share to be repeated.
+        try {
+          clearSharedPayloads();
+        } catch {}
         console.log('engram: share failed', e instanceof Error ? e.message : String(e));
         setState({ phase: 'failed', message: 'The item could not be copied into Engram. Try sharing it again.' });
       }

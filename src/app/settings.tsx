@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { useDb } from '@/db/provider';
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,6 +10,7 @@ import { useFlag } from '@/cloud/flags';
 import { runSummary, translateAll } from '@/lib/translate';
 import { CloudSection } from '@/components/CloudSection';
 import { ActionSheet, type SheetOption } from '@/components/ActionSheet';
+import { Extra, Group, Groups, Row, Section, SettingsSearch } from '@/components/SettingsLayout';
 import { Header, Notice, Pill } from '@/components/ui';
 import * as repo from '@/db/repo';
 import { autoBackupFolder, chooseBackupFolder, exportFullBackup, exportMarkdown, importBackup, importNotes, stopAutoBackup } from '@/lib/backup';
@@ -28,25 +29,6 @@ import { ACCENT_NAMES, ACCENTS, type AppearanceSetting, type, useTheme } from '@
 import { count as countUse, M, previewUsage, readUsageAnswer, setUsage, type UsageAnswer } from '@/lib/usage';
 import { describe } from '@/lib/usage.logic';
 
-function Row({ title, sub, action, onPress, danger }: { title: string; sub: string; action: string; onPress: () => void; danger?: boolean }) {
-  const { c } = useTheme();
-  return (
-    <View style={[styles.row, { borderTopColor: c.rule }]}>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[type.bodyStrong, { color: c.ink }]}>{title}</Text>
-        <Text style={[type.meta, { color: c.soft }]}>{sub}</Text>
-      </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${action}: ${title}`}
-        onPress={onPress}
-        style={({ pressed }) => [styles.action, { backgroundColor: c.surface, borderColor: c.line, opacity: pressed ? 0.6 : 1 }]}>
-        <Text style={[type.smallStrong, { color: danger ? c.danger : c.ink }]}>{action}</Text>
-      </Pressable>
-    </View>
-  );
-}
-
 function Segments<T extends string>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
   const { c } = useTheme();
   return (
@@ -64,16 +46,6 @@ function Segments<T extends string>({ options, value, onChange }: { options: { v
           </Pressable>
         );
       })}
-    </View>
-  );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  const { c } = useTheme();
-  return (
-    <View style={{ gap: 10 }}>
-      <Text style={[type.labelStrong, { color: c.ink }]}>{title}</Text>
-      {children}
     </View>
   );
 }
@@ -139,6 +111,27 @@ export default function SettingsScreen() {
   const [backupTo, setBackupTo] = useState<{ folder: string | null; last: number }>({ folder: null, last: 0 });
   const [trashed, setTrashed] = useState(0);
   const [choice, setChoice] = useState<{ title: string; message?: string; options: SheetOption[] } | null>(null);
+
+  // Groups that are open are remembered between visits. A new install opens the first one.
+  // A test link (?home=, ?smart=, ?metrics=) opens the group it changes.
+  const [query, setQuery] = useState('');
+  const [opened, setOpened] = useState<string[]>(['look']);
+  const linked = params.home ? 'look' : params.smart ? 'smart' : params.metrics ? 'privacy' : null;
+  useEffect(() => {
+    void repo.getMeta(db, 'settings_open').then((v) => {
+      let saved: string[] = ['look'];
+      try {
+        const parsed = v ? JSON.parse(v) : null;
+        if (Array.isArray(parsed)) saved = parsed.filter((x): x is string => typeof x === 'string');
+      } catch {}
+      setOpened(linked && !saved.includes(linked) ? [...saved, linked] : saved);
+    });
+  }, [db, linked]);
+  const toggleGroup = (id: string) => {
+    const next = opened.includes(id) ? opened.filter((g) => g !== id) : [...opened, id];
+    setOpened(next);
+    void repo.setMeta(db, 'settings_open', JSON.stringify(next));
+  };
   useEffect(() => {
     let live = true;
     (async () => {
@@ -349,367 +342,372 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 40, gap: 26 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 40, gap: 26 }}>
         <Header title="Settings" back="Today" sub="Your notes stay on this phone" />
         <View style={{ paddingHorizontal: 24, gap: 26 }}>
+          <SettingsSearch value={query} onChange={setQuery} />
           <Notice text={status} />
-
-          <Section title="Appearance">
-            <Segments options={APPEARANCES} value={appearance} onChange={setAppearance} />
-            <Text style={[type.meta, { color: c.soft }]}>Black uses true black to save power on AMOLED screens. System follows your phone.</Text>
-          </Section>
-
-          <Section title="Accent colour">
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {ACCENT_NAMES.map((a) => (
-                <Pill key={a} label={ACCENTS[a].label} selected={accent === a} onPress={() => setAccent(a)} />
-              ))}
-            </ScrollView>
-            <Text style={[type.meta, { color: c.soft }]}>The colour of buttons and links. Widgets and the app icon stay cobalt.</Text>
-          </Section>
-
-          <Section title="Home screen">
-            <Segments
-              options={HOME_VIEWS}
-              value={homeView}
-              onChange={(v) => {
-                setHomeView(v);
-                void repo.setMeta(db, 'home_view', v);
-              }}
-            />
-            <Text style={[type.meta, { color: c.soft }]}>
-              {homeView === 'list'
-                ? 'Your thoughts as a list, newest first.'
-                : homeView === 'split'
-                  ? 'The map of your groups on top, the list below.'
-                  : 'The map of your groups fills the screen. The list is one tap away.'}
-            </Text>
-          </Section>
-
-          <Section title="Today">
-            <Row
-              title="A question a day"
-              sub={dailyQ ? 'On. Today shows one question you can answer as a note.' : 'Off.'}
-              action={dailyQ ? 'Turn off' : 'Turn on'}
-              onPress={() => {
-                setDailyQ(!dailyQ);
-                void repo.setMeta(db, 'daily_question', dailyQ ? 'off' : 'on');
-              }}
-            />
-          </Section>
-
-          <Section title="Catching thoughts">
-            <View>
-              <Row
-                title="Reminders from plain words"
-                sub={plainReminders ? 'On. "Call the bank Friday 10am", typed or spoken, sets that reminder. A message lets you undo it.' : 'Off. Reminders are only set by hand.'}
-                action={plainReminders ? 'Turn off' : 'Turn on'}
-                onPress={() => {
-                  setPlainReminders(!plainReminders);
-                  void repo.setMeta(db, 'plain_reminders', plainReminders ? 'off' : 'on');
-                }}
-              />
-              <Row
-                title="Shake to record"
-                sub={shake ? 'On. Shake the phone while Engram is open to start a voice note.' : 'Off. Works only while Engram is open.'}
-                action={shake ? 'Turn off' : 'Turn on'}
-                onPress={() => {
-                  setShake(!shake);
-                  void repo.setMeta(db, 'shake', shake ? 'off' : 'on').then(() => dataChanged());
-                }}
-              />
-              <Row
-                title="Quick-note notification"
-                sub={briefs.sticky ? 'On. A quiet notification stays in the shade: tap it to write, or use Speak.' : 'Off.'}
-                action={briefs.sticky ? 'Turn off' : 'Turn on'}
-                onPress={() => void changeBriefs({ ...briefs, sticky: !briefs.sticky })}
-              />
-              <Row
-                title="Quick Settings tile"
-                sub={`Opens ${tileOpens === 'voice' ? 'a voice note' : 'a new note'}. To add it, swipe down twice from the top of the screen, tap the pencil, and drag "New thought" into your tiles.`}
-                action={tileOpens === 'voice' ? 'Use note' : 'Use voice'}
-                onPress={() => {
-                  const next = tileOpens === 'voice' ? 'note' : 'voice';
-                  setTileOpens(next);
-                  void repo.setMeta(db, 'tile_opens', next);
-                }}
-              />
-            </View>
-            <Text style={[type.meta, { color: c.soft }]}>
-              Hold the Engram icon on your home screen for shortcuts to a voice note, a new note and your to-dos. On a Pixel, Quick Tap
-              (system settings, Gestures) can open Engram when you tap the back of the phone twice.
-            </Text>
-          </Section>
-
-          <Section title="Through the day">
-            <View>
-              <Row
-                title="Morning brief"
-                sub={briefs.morning != null ? `At ${hour(briefs.morning)}: what is due today and the day's question.` : 'Off. A notification with what is due today.'}
-                action="Change"
-                onPress={() => chooseHour('Morning brief', MORNINGS, (h) => void changeBriefs({ ...briefs, morning: h }))}
-              />
-              <Row
-                title="Evening wrap-up"
-                sub={briefs.evening != null ? `At ${hour(briefs.evening)}: how much you saved today, and a nudge to pick out the to-dos.` : 'Off. A notification at the end of the day.'}
-                action="Change"
-                onPress={() => chooseHour('Evening wrap-up', EVENINGS, (h) => void changeBriefs({ ...briefs, evening: h }))}
-              />
-            </View>
-            <Text style={[type.meta, { color: c.soft }]}>
-              Both are written on this phone from your own list. They are as up to date as the last time you opened Engram.
-            </Text>
-          </Section>
-
-          <Section title="Privacy">
-            <View>
-              <Row
-                title="App lock"
-                sub={lock.on ? 'On. Engram asks for your fingerprint, face or PIN when you open it.' : 'Off. Anyone holding the unlocked phone can open Engram.'}
-                action={lock.on ? 'Turn off' : 'Turn on'}
-                onPress={toggleLock}
-              />
-              {lock.on ? (
+          <Groups query={query}>
+            <Group id="look" title="Look and feel" sub="Theme, accent colour, home screen" open={opened.includes('look')} onToggle={toggleGroup} query={query}>
+              <Section title="Appearance" terms="theme dark light black mode system night">
+                <Extra>
+                  <Segments options={APPEARANCES} value={appearance} onChange={setAppearance} />
+                </Extra>
+                <Extra><Text style={[type.meta, { color: c.soft }]}>Black uses true black to save power on AMOLED screens. System follows your phone.</Text></Extra>
+              </Section>
+              <Section title="Accent colour" terms="color button link">
+                <Extra>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    {ACCENT_NAMES.map((a) => (
+                      <Pill key={a} label={ACCENTS[a].label} selected={accent === a} onPress={() => setAccent(a)} />
+                    ))}
+                  </ScrollView>
+                </Extra>
+                <Extra><Text style={[type.meta, { color: c.soft }]}>The colour of buttons and links. Widgets and the app icon stay cobalt.</Text></Extra>
+              </Section>
+              <Section title="Home screen" terms="layout map list split today view">
+                <Extra>
+                  <Segments
+                    options={HOME_VIEWS}
+                    value={homeView}
+                    onChange={(v) => {
+                      setHomeView(v);
+                      void repo.setMeta(db, 'home_view', v);
+                    }}
+                  />
+                </Extra>
+                <Extra><Text style={[type.meta, { color: c.soft }]}>
+                  {homeView === 'list'
+                    ? 'Your thoughts as a list, newest first.'
+                    : homeView === 'split'
+                      ? 'The map of your groups on top, the list below.'
+                      : 'The map of your groups fills the screen. The list is one tap away.'}
+                </Text></Extra>
+              </Section>
+            </Group>
+            <Group id="capture" title="Capture" sub="Reminders, voice notes, shortcuts, daily briefs" open={opened.includes('capture')} onToggle={toggleGroup} query={query}>
+              <Section title="Catching thoughts">
+                <View>
+                  <Row
+                    title="Reminders from plain words"
+                    sub={plainReminders ? 'On. "Call the bank Friday 10am", typed or spoken, sets that reminder. A message lets you undo it.' : 'Off. Reminders are only set by hand.'}
+                    action={plainReminders ? 'Turn off' : 'Turn on'}
+                    onPress={() => {
+                      setPlainReminders(!plainReminders);
+                      void repo.setMeta(db, 'plain_reminders', plainReminders ? 'off' : 'on');
+                    }}
+                  />
+                  <Row
+                    title="Shake to record"
+                    sub={shake ? 'On. Shake the phone while Engram is open to start a voice note.' : 'Off. Works only while Engram is open.'}
+                    action={shake ? 'Turn off' : 'Turn on'}
+                    onPress={() => {
+                      setShake(!shake);
+                      void repo.setMeta(db, 'shake', shake ? 'off' : 'on').then(() => dataChanged());
+                    }}
+                  />
+                  <Row
+                    title="Quick-note notification"
+                    sub={briefs.sticky ? 'On. A quiet notification stays in the shade: tap it to write, or use Speak.' : 'Off.'}
+                    action={briefs.sticky ? 'Turn off' : 'Turn on'}
+                    onPress={() => void changeBriefs({ ...briefs, sticky: !briefs.sticky })}
+                  />
+                  <Row
+                    title="Quick Settings tile"
+                    sub={`Opens ${tileOpens === 'voice' ? 'a voice note' : 'a new note'}. To add it, swipe down twice from the top of the screen, tap the pencil, and drag "New thought" into your tiles.`}
+                    action={tileOpens === 'voice' ? 'Use note' : 'Use voice'}
+                    onPress={() => {
+                      const next = tileOpens === 'voice' ? 'note' : 'voice';
+                      setTileOpens(next);
+                      void repo.setMeta(db, 'tile_opens', next);
+                    }}
+                  />
+                </View>
+                <Extra><Text style={[type.meta, { color: c.soft }]}>
+                  Hold the Engram icon on your home screen for shortcuts to a voice note, a new note and your to-dos. On a Pixel, Quick Tap
+                  (system settings, Gestures) can open Engram when you tap the back of the phone twice.
+                </Text></Extra>
+              </Section>
+              <Section title="Voice notes">
+                <View>
+                  <Row title="Voice language" sub={langLabel} action="Change" onPress={() => setChoosingLang(true)} />
+                  {onDevice ? (
+                    pack === 'installed' ? (
+                      <Extra><Text style={[type.meta, { color: c.soft, paddingTop: 4 }]}>The offline speech pack for {langLabel} is installed.</Text></Extra>
+                    ) : (
+                      <Row
+                        title="Offline speech pack"
+                        sub={
+                          pack === 'downloading'
+                            ? 'Downloading. Android does not report progress; this row goes away once the pack is installed.'
+                            : 'Needed to turn speech into text on this phone'
+                        }
+                        action={pack === 'downloading' ? 'Working' : 'Download'}
+                        onPress={() => (pack === 'downloading' ? undefined : void downloadPack())}
+                      />
+                    )
+                  ) : (
+                    <Extra><Text style={[type.meta, { color: c.soft, paddingTop: 4 }]}>
+                      This phone cannot transcribe speech offline, so voice notes are saved as audio only.
+                    </Text></Extra>
+                  )}
+                </View>
+              </Section>
+              <Section title="Today">
                 <Row
-                  title="Lock"
-                  sub={LOCK_DELAYS.find((d) => d.ms === lock.afterMs)?.label ?? 'Straight away'}
-                  action="Change"
+                  title="A question a day"
+                  sub={dailyQ ? 'On. Today shows one question you can answer as a note.' : 'Off.'}
+                  action={dailyQ ? 'Turn off' : 'Turn on'}
+                  onPress={() => {
+                    setDailyQ(!dailyQ);
+                    void repo.setMeta(db, 'daily_question', dailyQ ? 'off' : 'on');
+                  }}
+                />
+              </Section>
+              <Section title="Through the day">
+                <View>
+                  <Row
+                    title="Morning brief"
+                    sub={briefs.morning != null ? `At ${hour(briefs.morning)}: what is due today and the day's question.` : 'Off. A notification with what is due today.'}
+                    action="Change"
+                    onPress={() => chooseHour('Morning brief', MORNINGS, (h) => void changeBriefs({ ...briefs, morning: h }))}
+                  />
+                  <Row
+                    title="Evening wrap-up"
+                    sub={briefs.evening != null ? `At ${hour(briefs.evening)}: how much you saved today, and a nudge to pick out the to-dos.` : 'Off. A notification at the end of the day.'}
+                    action="Change"
+                    onPress={() => chooseHour('Evening wrap-up', EVENINGS, (h) => void changeBriefs({ ...briefs, evening: h }))}
+                  />
+                </View>
+                <Extra><Text style={[type.meta, { color: c.soft }]}>
+                  Both are written on this phone from your own list. They are as up to date as the last time you opened Engram.
+                </Text></Extra>
+              </Section>
+            </Group>
+            <Group id="smart" title="Smart features" sub="Linking by meaning, translation, calendar" open={opened.includes('smart')} onToggle={toggleGroup} query={query}>
+              <Section title="Linking by meaning">
+                <View>
+                  <Row
+                    title="Understand meaning"
+                    sub={smartStatus}
+                    action={smartBusy ? 'Working' : smart.status === 'off' || smart.status === 'error' ? 'Turn on' : 'Turn off'}
+                    onPress={() => {
+                      if (smartBusy) return;
+                      if (smart.status === 'off' || smart.status === 'error') void enableSmartLinking(db);
+                      else void disableSmartLinking(db);
+                    }}
+                  />
+                </View>
+                <Extra><Text style={[type.meta, { color: c.soft }]}>
+                  The model runs on this phone and works in 50+ languages. Your thoughts are never sent anywhere; the only download is the model itself.
+                </Text></Extra>
+              </Section>
+              <Section title="Translation">
+                <Row
+                  title="Translate into English"
+                  sub={
+                    translate
+                      ? 'On. Notes in other languages get an English version under them.'
+                      : 'Off. Notes stay only in the language you wrote them in.'
+                  }
+                  action={translate ? 'Turn off' : 'Turn on'}
                   onPress={() =>
-                    setChoice({
-                      title: 'Lock Engram',
-                      options: LOCK_DELAYS.map((d) => ({
-                        label: `${d.label}${d.ms ? ' away' : ''}`,
-                        onPress: () => {
-                          const next = { ...lock, afterMs: d.ms };
-                          setLock(next);
-                          void saveLockSetting(db, next).then(() => dataChanged());
-                        },
-                      })),
+                    run(async () => {
+                      const next = !translate;
+                      setTranslate(next);
+                      await repo.setMeta(db, 'translate', next ? 'on' : 'off');
+                      if (!next) {
+                        await repo.dropTranslations(db);
+                        dataChanged();
+                        return 'English versions removed. Your notes are unchanged.';
+                      }
+                      return runSummary(await translateAll(db));
                     })
                   }
                 />
-              ) : null}
-            </View>
-            <Text style={[type.meta, { color: c.soft }]}>
-              Sharing into Engram, widgets and new notes still work while it is locked. Reading anything needs the unlock.
-            </Text>
-            <View>
-              <Row
-                title="Share usage counts"
-                sub={
-                  usage === 'yes'
-                    ? 'On. Once a day, anonymous totals of which features you used. Never your notes, never an id.'
-                    : 'Off. Nothing about how you use Engram is counted or sent.'
-                }
-                action={usage === 'yes' ? 'Turn off' : 'Turn on'}
-                onPress={toggleUsage}
-              />
-              <Row title="What's sent" sub="The exact counts for today, in plain words" action="Show" onPress={() => void showUsage()} />
-            </View>
-          </Section>
-
-          {askOn ? (
-            <Section title="Ask your notes">
-              <Row
-                title="Language model"
-                sub={
-                  askModel.status === 'ready'
-                    ? 'On this phone. Open Search to ask a question.'
-                    : askModel.status === 'downloading'
-                      ? `Downloading: ${Math.round(askModel.progress * 100)}%. Keep Engram open.`
-                      : askModel.status === 'error'
-                        ? `The download did not finish. ${askModel.message ?? ''}`.trim()
-                        : `Not downloaded. It is ${ASK_SIZE_NOTE}; use Wi-Fi.`
-                }
-                action={askModel.status === 'ready' ? 'Remove' : askModel.status === 'downloading' ? 'Wait' : 'Download'}
-                onPress={() => {
-                  if (askModel.status === 'ready') void removeAsk(db);
-                  else if (askModel.status !== 'downloading') void prepareAsk(db);
-                }}
-              />
-              <Text style={[type.meta, { color: c.soft }]}>
-                Questions are answered on this phone from your notes. Nothing you write or ask is sent anywhere; only the model itself is downloaded.
-              </Text>
-            </Section>
-          ) : null}
-
-          <Section title="Voice notes">
-            <View>
-              <Row title="Voice language" sub={langLabel} action="Change" onPress={() => setChoosingLang(true)} />
-              {onDevice ? (
-                pack === 'installed' ? (
-                  <Text style={[type.meta, { color: c.soft, paddingTop: 4 }]}>The offline speech pack for {langLabel} is installed.</Text>
-                ) : (
+                {translate ? (
+                  <Row title="Translate notes not yet done" sub="Checks notes that were skipped or failed last time" action="Try again" onPress={() => run(async () => runSummary(await translateAll(db)))} />
+                ) : null}
+                <Extra><Text style={[type.meta, { color: c.soft }]}>
+                  Translation happens on this phone. Your words are not sent anywhere; the first note in each language downloads a
+                  language pack of about 30 MB from Google. The original is always kept.
+                </Text></Extra>
+              </Section>
+              {askOn ? (
+                <Section title="Ask your notes">
                   <Row
-                    title="Offline speech pack"
+                    title="Language model"
                     sub={
-                      pack === 'downloading'
-                        ? 'Downloading. Android does not report progress; this row goes away once the pack is installed.'
-                        : 'Needed to turn speech into text on this phone'
+                      askModel.status === 'ready'
+                        ? 'On this phone. Open Search to ask a question.'
+                        : askModel.status === 'downloading'
+                          ? `Downloading: ${Math.round(askModel.progress * 100)}%. Keep Engram open.`
+                          : askModel.status === 'error'
+                            ? `The download did not finish. ${askModel.message ?? ''}`.trim()
+                            : `Not downloaded. It is ${ASK_SIZE_NOTE}; use Wi-Fi.`
                     }
-                    action={pack === 'downloading' ? 'Working' : 'Download'}
-                    onPress={() => (pack === 'downloading' ? undefined : void downloadPack())}
+                    action={askModel.status === 'ready' ? 'Remove' : askModel.status === 'downloading' ? 'Wait' : 'Download'}
+                    onPress={() => {
+                      if (askModel.status === 'ready') void removeAsk(db);
+                      else if (askModel.status !== 'downloading') void prepareAsk(db);
+                    }}
                   />
-                )
-              ) : (
-                <Text style={[type.meta, { color: c.soft, paddingTop: 4 }]}>
-                  This phone cannot transcribe speech offline, so voice notes are saved as audio only.
-                </Text>
-              )}
-            </View>
-          </Section>
-
-          <Section title="Linking by meaning">
-            <View>
-              <Row
-                title="Understand meaning"
-                sub={smartStatus}
-                action={smartBusy ? 'Working' : smart.status === 'off' || smart.status === 'error' ? 'Turn on' : 'Turn off'}
-                onPress={() => {
-                  if (smartBusy) return;
-                  if (smart.status === 'off' || smart.status === 'error') void enableSmartLinking(db);
-                  else void disableSmartLinking(db);
-                }}
-              />
-            </View>
-            <Text style={[type.meta, { color: c.soft }]}>
-              The model runs on this phone and works in 50+ languages. Your thoughts are never sent anywhere; the only download is the model itself.
-            </Text>
-          </Section>
-
-          <Section title="Translation">
-            <Row
-              title="Translate into English"
-              sub={
-                translate
-                  ? 'On. Notes in other languages get an English version under them.'
-                  : 'Off. Notes stay only in the language you wrote them in.'
-              }
-              action={translate ? 'Turn off' : 'Turn on'}
-              onPress={() =>
-                run(async () => {
-                  const next = !translate;
-                  setTranslate(next);
-                  await repo.setMeta(db, 'translate', next ? 'on' : 'off');
-                  if (!next) {
-                    await repo.dropTranslations(db);
-                    dataChanged();
-                    return 'English versions removed. Your notes are unchanged.';
-                  }
-                  return runSummary(await translateAll(db));
-                })
-              }
-            />
-            {translate ? (
-              <Row title="Translate notes not yet done" sub="Checks notes that were skipped or failed last time" action="Try again" onPress={() => run(async () => runSummary(await translateAll(db)))} />
-            ) : null}
-            <Text style={[type.meta, { color: c.soft }]}>
-              Translation happens on this phone. Your words are not sent anywhere; the first note in each language downloads a
-              language pack of about 30 MB from Google. The original is always kept.
-            </Text>
-          </Section>
-
-          <Section title="Calendar">
-            <View>
-              <Row
-                title="Show today's events"
-                sub={calendar ? 'On. Tap an event on Today to take notes on it.' : 'Off. Engram does not read your calendar.'}
-                action={calendar ? 'Turn off' : 'Turn on'}
-                onPress={toggleCalendar}
-              />
-            </View>
-          </Section>
-
-          <Section title="Help">
-            <View>
-              <Row title="The tour" sub="Five short pages on what Engram does and how to use it" action="Show" onPress={() => router.push('/tour')} />
-              <Row title="The month in review" sub="A month of your notes in a few numbers" action="Open" onPress={() => router.push('/recap')} />
-            </View>
-          </Section>
-
-          {cloudOn ? (
-            <Section title="Engram Cloud">
-              <CloudSection />
-            </Section>
-          ) : null}
-
-          <Section title="Your thoughts">
-            <View>
-              <Row
-                title="Back up"
-                sub="One zip with your thoughts, tags, links, photos, recordings and files"
-                action="Export"
-                onPress={() =>
-                  run(async () => {
-                    const r = await exportFullBackup(db);
-                    countUse(M.backupExport);
-                    return `Backup created with ${r.thoughts} thoughts and ${r.files} files.${r.leftOut ? ` ${r.leftOut} files could not be included.` : ''}`;
-                  })
-                }
-              />
-              <Row
-                title="Restore"
-                sub="Add thoughts from a backup, with their files. Also how you move from an older Engram."
-                action="Import"
-                onPress={() =>
-                  run(async () => {
-                    const r = await importBackup(db);
-                    countUse(M.backupRestore);
-                    return r ? `Added ${r.added} thoughts and ${r.files} files. ${r.skipped} were already here.` : null;
-                  })
-                }
-              />
-              <Row
-                title="Back up every week"
-                sub={
-                  backupTo.folder
-                    ? `On. ${backupTo.last ? `Last written ${new Date(backupTo.last).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}.` : 'Not written yet.'} Words, tags and links; files and recordings are not included.`
-                    : 'Off. Choose a folder and Engram writes a backup file there once a week when you open it.'
-                }
-                action={backupTo.folder ? 'Stop' : 'Choose'}
-                onPress={() =>
-                  run(async () => {
-                    if (backupTo.folder) {
-                      await stopAutoBackup(db);
-                      setBackupTo({ folder: null, last: backupTo.last });
-                      return 'Weekly backups stopped. Files already written stay where they are.';
+                  <Extra><Text style={[type.meta, { color: c.soft }]}>
+                    Questions are answered on this phone from your notes. Nothing you write or ask is sent anywhere; only the model itself is downloaded.
+                  </Text></Extra>
+                </Section>
+              ) : null}
+              <Section title="Calendar">
+                <View>
+                  <Row
+                    title="Show today's events"
+                    sub={calendar ? 'On. Tap an event on Today to take notes on it.' : 'Off. Engram does not read your calendar.'}
+                    action={calendar ? 'Turn off' : 'Turn on'}
+                    onPress={toggleCalendar}
+                  />
+                </View>
+              </Section>
+            </Group>
+            <Group id="privacy" title="Privacy and security" sub="App lock, usage counts, Engram Cloud" open={opened.includes('privacy')} onToggle={toggleGroup} query={query}>
+              <Section title="Privacy">
+                <View>
+                  <Row
+                    title="App lock"
+                    sub={lock.on ? 'On. Engram asks for your fingerprint, face or PIN when you open it.' : 'Off. Anyone holding the unlocked phone can open Engram.'}
+                    action={lock.on ? 'Turn off' : 'Turn on'}
+                    onPress={toggleLock}
+                  />
+                  {lock.on ? (
+                    <Row
+                      title="Lock"
+                      sub={LOCK_DELAYS.find((d) => d.ms === lock.afterMs)?.label ?? 'Straight away'}
+                      action="Change"
+                      onPress={() =>
+                        setChoice({
+                          title: 'Lock Engram',
+                          options: LOCK_DELAYS.map((d) => ({
+                            label: `${d.label}${d.ms ? ' away' : ''}`,
+                            onPress: () => {
+                              const next = { ...lock, afterMs: d.ms };
+                              setLock(next);
+                              void saveLockSetting(db, next).then(() => dataChanged());
+                            },
+                          })),
+                        })
+                      }
+                    />
+                  ) : null}
+                </View>
+                <Extra><Text style={[type.meta, { color: c.soft }]}>
+                  Sharing into Engram, widgets and new notes still work while it is locked. Reading anything needs the unlock.
+                </Text></Extra>
+                <View>
+                  <Row
+                    title="Share usage counts"
+                    sub={
+                      usage === 'yes'
+                        ? 'On. Once a day, anonymous totals of which features you used. Never your notes, never an id.'
+                        : 'Off. Nothing about how you use Engram is counted or sent.'
                     }
-                    if (!(await chooseBackupFolder(db))) return null;
-                    setBackupTo({ folder: await autoBackupFolder(db), last: Date.now() });
-                    return 'The first backup is in that folder. A new one is written each week.';
-                  })
-                }
-              />
-              <Row title="Export as Markdown" sub="A zip with one .md file per note, links as [[Title]]. Opens in Obsidian and similar apps." action="Export" onPress={() => run(async () => `Exported ${await exportMarkdown(db)} notes.`)} />
-              <Row
-                title="Bring in notes"
-                sub="Markdown or text files, Google Keep's Takeout files, or a zip of them"
-                action="Import"
-                onPress={() =>
-                  run(async () => {
-                    const r = await importNotes(db, rebuildAllLinks);
-                    if (!r) return null;
-                    return `Added ${r.added} ${r.added === 1 ? 'note' : 'notes'}.${r.skipped ? ` ${r.skipped} ${r.skipped === 1 ? 'file was' : 'files were'} not notes and were left out.` : ''}`;
-                  })
-                }
-              />
-              <Row title="Trash" sub={trashed === 0 ? 'Empty. Deleted thoughts wait here for 30 days.' : `${trashed} deleted ${trashed === 1 ? 'thought' : 'thoughts'}, kept for 30 days`} action="Open" onPress={() => router.push('/trash')} />
-              <Row title="Rebuild links" sub="Recalculate automatic links and groups" action="Rebuild" onPress={() => run(async () => `Found ${await rebuildAllLinks(db)} links.`)} />
-              {count === 0 ? (
-                <Row title="Sample thoughts" sub="See how Engram works with examples" action="Load" onPress={() => run(async () => ((await loadSamples(db)) ? 'Sample thoughts loaded.' : null))} />
-              ) : (
-                <Row title="Delete everything" sub={`${count} ${count === 1 ? 'thought' : 'thoughts'} on this phone`} action="Delete" danger onPress={confirmWipe} />
-              )}
-            </View>
-          </Section>
-
-          <Section title="About">
-            <View>
-              <Row title="Privacy Policy" sub="What Engram stores and sends" action="Open" onPress={() => void Linking.openURL('https://engrm.app/privacy')} />
-              <Row title="Terms of Use" sub="The rules for using Engram" action="Open" onPress={() => void Linking.openURL('https://engrm.app/terms')} />
-              <Row title="Contact" sub="contact@engrm.app" action="Email" onPress={() => void Linking.openURL('mailto:contact@engrm.app')} />
-            </View>
-          </Section>
+                    action={usage === 'yes' ? 'Turn off' : 'Turn on'}
+                    onPress={toggleUsage}
+                  />
+                  <Row title="What's sent" sub="The exact counts for today, in plain words" action="Show" onPress={() => void showUsage()} />
+                </View>
+              </Section>
+              {cloudOn ? (
+                <Section title="Engram Cloud" terms="sync account sign in devices">
+                  <CloudSection />
+                </Section>
+              ) : null}
+            </Group>
+            <Group id="data" title="Your data" sub="Back up, restore, export, trash" open={opened.includes('data')} onToggle={toggleGroup} query={query}>
+              <Section title="Your thoughts">
+                <View>
+                  <Row
+                    title="Back up"
+                    sub="One zip with your thoughts, tags, links, photos, recordings and files"
+                    action="Export"
+                    onPress={() =>
+                      run(async () => {
+                        const r = await exportFullBackup(db);
+                        countUse(M.backupExport);
+                        return `Backup created with ${r.thoughts} thoughts and ${r.files} files.${r.leftOut ? ` ${r.leftOut} files could not be included.` : ''}`;
+                      })
+                    }
+                  />
+                  <Row
+                    title="Restore"
+                    sub="Add thoughts from a backup, with their files. Also how you move from an older Engram."
+                    action="Import"
+                    onPress={() =>
+                      run(async () => {
+                        const r = await importBackup(db);
+                        countUse(M.backupRestore);
+                        return r ? `Added ${r.added} thoughts and ${r.files} files. ${r.skipped} were already here.` : null;
+                      })
+                    }
+                  />
+                  <Row
+                    title="Back up every week"
+                    sub={
+                      backupTo.folder
+                        ? `On. ${backupTo.last ? `Last written ${new Date(backupTo.last).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}.` : 'Not written yet.'} Words, tags and links; files and recordings are not included.`
+                        : 'Off. Choose a folder and Engram writes a backup file there once a week when you open it.'
+                    }
+                    action={backupTo.folder ? 'Stop' : 'Choose'}
+                    onPress={() =>
+                      run(async () => {
+                        if (backupTo.folder) {
+                          await stopAutoBackup(db);
+                          setBackupTo({ folder: null, last: backupTo.last });
+                          return 'Weekly backups stopped. Files already written stay where they are.';
+                        }
+                        if (!(await chooseBackupFolder(db))) return null;
+                        setBackupTo({ folder: await autoBackupFolder(db), last: Date.now() });
+                        return 'The first backup is in that folder. A new one is written each week.';
+                      })
+                    }
+                  />
+                  <Row title="Export as Markdown" sub="A zip with one .md file per note, links as [[Title]]. Opens in Obsidian and similar apps." action="Export" onPress={() => run(async () => `Exported ${await exportMarkdown(db)} notes.`)} />
+                  <Row
+                    title="Bring in notes"
+                    sub="Markdown or text files, Google Keep's Takeout files, or a zip of them"
+                    action="Import"
+                    onPress={() =>
+                      run(async () => {
+                        const r = await importNotes(db, rebuildAllLinks);
+                        if (!r) return null;
+                        return `Added ${r.added} ${r.added === 1 ? 'note' : 'notes'}.${r.skipped ? ` ${r.skipped} ${r.skipped === 1 ? 'file was' : 'files were'} not notes and were left out.` : ''}`;
+                      })
+                    }
+                  />
+                  <Row title="Trash" sub={trashed === 0 ? 'Empty. Deleted thoughts wait here for 30 days.' : `${trashed} deleted ${trashed === 1 ? 'thought' : 'thoughts'}, kept for 30 days`} action="Open" onPress={() => router.push('/trash')} />
+                  <Row title="Rebuild links" sub="Recalculate automatic links and groups" action="Rebuild" onPress={() => run(async () => `Found ${await rebuildAllLinks(db)} links.`)} />
+                  {count === 0 ? (
+                    <Row title="Sample thoughts" sub="See how Engram works with examples" action="Load" onPress={() => run(async () => ((await loadSamples(db)) ? 'Sample thoughts loaded.' : null))} />
+                  ) : (
+                    <Row title="Delete everything" sub={`${count} ${count === 1 ? 'thought' : 'thoughts'} on this phone`} action="Delete" danger onPress={confirmWipe} />
+                  )}
+                </View>
+              </Section>
+            </Group>
+            <Group id="help" title="Help and about" sub="The tour, privacy policy, contact" open={opened.includes('help')} onToggle={toggleGroup} query={query}>
+              <Section title="Help">
+                <View>
+                  <Row title="The tour" sub="Five short pages on what Engram does and how to use it" action="Show" onPress={() => router.push('/tour')} />
+                  <Row title="The month in review" sub="A month of your notes in a few numbers" action="Open" onPress={() => router.push('/recap')} />
+                </View>
+              </Section>
+              <Section title="About">
+                <View>
+                  <Row title="Privacy Policy" sub="What Engram stores and sends" action="Open" onPress={() => void Linking.openURL('https://engrm.app/privacy')} />
+                  <Row title="Terms of Use" sub="The rules for using Engram" action="Open" onPress={() => void Linking.openURL('https://engrm.app/terms')} />
+                  <Row title="Contact" sub="contact@engrm.app" action="Email" onPress={() => void Linking.openURL('mailto:contact@engrm.app')} />
+                </View>
+              </Section>
+            </Group>
+          </Groups>
 
           <Text style={[type.meta, { color: c.faint }]}>Engram {Constants.expoConfig?.version ?? ''}</Text>
         </View>

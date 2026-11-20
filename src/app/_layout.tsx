@@ -1,12 +1,13 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { Newsreader_400Regular, Newsreader_500Medium, useFonts } from '@expo-google-fonts/newsreader';
 import * as Notifications from 'expo-notifications';
-import { type ErrorBoundaryProps, router, Stack } from 'expo-router';
+import { type ErrorBoundaryProps, router, Stack, usePathname } from 'expo-router';
+import { getSharedPayloads } from 'expo-sharing';
 import * as SplashScreen from 'expo-splash-screen';
 import { DbProvider, useDb } from '@/db/provider';
 import { StatusBar } from 'expo-status-bar';
 import { Accelerometer } from 'expo-sensors';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -61,6 +62,39 @@ function Screens() {
     });
     return () => sub.remove();
   }, [db]);
+
+  // A share that opened Engram from cold must not be lost. Expo Router gives Android only
+  // 150 ms to report the address the app was opened with; a slow start misses it and opens
+  // on Today, while the share waits unread in the share library. So look for a waiting share
+  // once the screens are up, and whenever the app comes back, and open the share sheet for it.
+  // The share screen clears what it saved, so nothing is saved twice.
+  const pathname = usePathname();
+  const onShare = useRef(false);
+  useEffect(() => {
+    onShare.current = pathname === '/handle-share';
+  }, [pathname]);
+  useEffect(() => {
+    let wait: ReturnType<typeof setTimeout> | undefined;
+    const look = () => {
+      clearTimeout(wait);
+      wait = setTimeout(() => {
+        if (onShare.current) return;
+        try {
+          if (getSharedPayloads().length > 0) router.push('/handle-share');
+        } catch {
+          // No share library on this platform.
+        }
+      }, 600);
+    };
+    look();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') look();
+    });
+    return () => {
+      clearTimeout(wait);
+      sub.remove();
+    };
+  }, []);
 
   // Shake to start a voice note, if switched on in Settings. Only while Engram is open:
   // listening in the background would need a permanent notification and would drain the battery.

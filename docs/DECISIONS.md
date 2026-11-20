@@ -325,3 +325,19 @@ The owner wants to know that people use Engram and which features matter, withou
 - **Kill switch:** the `metrics` flag. Debug builds never send; the emulator test answers no.
 
 Do not add ids, per-event logging or new metrics without updating `docs/PRIVACY.md` (and the website) first.
+
+## D54. Backups carry everything, the trash included (0.9)
+
+A full backup now holds trashed notes and every to-do and phone-only field, and a restore puts them all back (issue #3). The alternative, leaving phone-only columns (pins, recall, list, focus minutes) out because they are "local", was rejected: a backup is how people move phones, and losing those on a move is the bug the owner hit. The alarm id is the one exception, since it means nothing on another phone; reminders get new alarms after the restore. Files in the zip are keyed by note id so names cannot collide; restores still read the old name-only key.
+
+## D55. Settings in groups with search, found from the rows' own words (0.9)
+
+Settings became six collapsible groups with a search box (issue #11). Search reads each `Row`'s title and subtitle from the element tree instead of from a separate index, so the words people search for are the words on screen and there is nothing to keep in step. Help and About were merged into one group rather than leaving About alone at the bottom. Which groups are open is remembered; a new install opens only "Look and feel".
+
+## D56. A share waiting at launch is opened by the app, not left to the router (0.9)
+
+On Android, Expo Router gives the launch address 150 ms; a slow cold start misses it and opens Today, losing a share (issue #10). Rather than patch the router, the root layout looks for a waiting share with `expo-sharing`'s `getSharedPayloads()` (local, no network) at start and on return to the app, and opens the share screen. A guard in the share screen stops one share being saved twice.
+
+## D57. The tour asks about linking by meaning (0.9)
+
+New installs are asked whether to turn on linking by meaning, with the model's download size stated, before the usage-counts question (issue #9). It follows the usage-counts pattern: nothing is turned on unless the person says yes, and skipping leaves it off.

@@ -16,7 +16,18 @@ import { dataChanged } from './bus';
 import { looksEnglish } from './text';
 
 type Result = { translatedTexts: unknown; sourceLanguage: string | null };
-type Module = { onTranslateTask: (p: { input: string[]; targetLangCode: string }) => Promise<Result> };
+type Args = { input: string[]; sourceLangCode: string; targetLangCode: string; preferredStrategy: string; requiresWifi: boolean; requireCharging: boolean };
+type Module = { onTranslateTask: (p: Args) => Promise<Result> };
+
+/**
+ * What the translator is asked, with every key given a real value. The library
+ * passes each key to Android even when it is missing, and its Kotlin side takes a
+ * map of non-null values, so one undefined key failed every translation with
+ * "Cannot convert '[object Object]' to a Kotlin type". 'auto' means "work out the language".
+ */
+export function translateArgs(input: string[]): Args {
+  return { input, sourceLangCode: 'auto', targetLangCode: 'en', preferredStrategy: 'lowLatency', requiresWifi: false, requireCharging: false };
+}
 
 export async function translationOn(db: Db): Promise<boolean> {
   return (await repo.getMeta(db, 'translate')) === 'on';
@@ -50,7 +61,7 @@ export async function translateThought(db: Db, id: string): Promise<boolean> {
   const input = [title, body].filter(Boolean);
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require('expo-translate-text') as Module;
-  const res = await mod.onTranslateTask({ input, targetLangCode: 'en' });
+  const res = await mod.onTranslateTask(translateArgs(input));
   const out = Array.isArray(res.translatedTexts) ? (res.translatedTexts as string[]) : [];
   const lang = res.sourceLanguage;
   const same = out.length !== input.length || out.every((s, i) => s.trim().toLowerCase() === input[i].trim().toLowerCase());
@@ -107,16 +118,25 @@ export async function translateAll(db: Db, onProgress?: (done: number, total: nu
   return run;
 }
 
-/** What to tell the person after a run, in one or two sentences. */
+/**
+ * What to tell the person after a run, in one or two sentences. The phone's own
+ * error text is left out (it goes to the log): it is written for developers.
+ */
 export function runSummary(r: TranslateRun): string {
-  const made = r.made === 0 ? 'None of your notes needed translating' : `${r.made} ${r.made === 1 ? 'note has' : 'notes have'} an English version now`;
-  if (r.failed === 0 || !r.problem) return `On. ${made}.`;
+  const failed = r.failed > 0 && r.problem;
+  const made =
+    r.made > 0
+      ? `${r.made} ${r.made === 1 ? 'note has' : 'notes have'} an English version now`
+      : failed
+        ? 'Nothing was translated'
+        : 'None of your notes needed translating';
+  if (!failed) return `On. ${made}.`;
   const n = `${r.failed} ${r.failed === 1 ? 'note' : 'notes'}`;
   const why =
-    r.problem.kind === 'pack'
+    r.problem!.kind === 'pack'
       ? `${n} could not be translated because the phone did not finish downloading a language pack from Google. This needs Google Play services and a connection; tap Try again in a minute.`
-      : `${n} could not be translated.`;
-  return `On. ${made}. ${why} What the phone reported: ${r.problem.message.slice(0, 160)}`;
+      : `${n} could not be translated. Tap Try again; if it keeps happening, the translator on this phone may need an update to Google Play services.`;
+  return `On. ${made}. ${why}`;
 }
 
 const NAMES: Record<string, string> = {

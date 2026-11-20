@@ -13,6 +13,7 @@ import * as repo from '../src/db/repo';
 import { plainDDL } from '../src/db/schema';
 import { type OpResult, type Remote, type RemoteRow, syncOnce } from '../src/cloud/sync';
 import { askPrompt, citedNumbers, cleanAnswer, questionTerms } from '../src/lib/ask.logic';
+import { makeBackup, mediaKey, mediaKeys, parseBackup, restoreBackup } from '../src/lib/backup.logic';
 import { splitQuick } from '../src/lib/capture.logic';
 import { questionFor, streak, weekOf } from '../src/lib/habits';
 import { checkItems, progress, toggleCheck } from '../src/lib/checks';
@@ -20,6 +21,7 @@ import { computeGroups } from '../src/lib/groups';
 import { fileNames, htmlToMarkdown, markdownToHtml, noteToMarkdown, parseKeep, parseTextFile } from '../src/lib/markdown';
 import { dueIn, matchProjects, orphaned } from '../src/lib/projects';
 import { DECISION_STEP, decisionRecall, dueRecalls, firstRecall, habitDoneToday, habitStreak, milestone, monthRecap, nextRecall, onThisDay, surprise, toggleHabit } from '../src/lib/recall';
+import { runSummary, translateArgs } from '../src/lib/translate';
 import { parseWhen } from '../src/lib/when';
 import { activeBucket, ageBucket, buildMessage, CAP, daysActiveIn, describe, localDay, notesBucket, plan, rememberDay } from '../src/lib/usage.logic';
 import { meaningSimilarity, nearMisses, related, relateAll, surfaceTokens, tokenize, whyLinked } from '../src/lib/linker';
@@ -402,7 +404,11 @@ async function cloudChecks(): Promise<void> {
   done = await syncOnce(b, cloud.remote, id);
   assert.equal(done.copies, 1, 'the second phone is told its words were kept as a copy');
   assert.equal((await repo.getThought(b, 'n1'))!.body, 'A says: feed it at night', 'the original takes the first words to arrive');
-  assert.ok((await repo.listThoughts(b)).some((t) => t.body === 'B says: feed it in the morning' && /from this phone/.test(t.title ?? '')));
+  const kept = (await repo.listThoughts(b)).find((t) => t.body === 'B says: feed it in the morning' && /from this phone/.test(t.title ?? ''));
+  assert.ok(kept);
+  assert.equal(kept.todo, 1, 'the copy keeps its to-do');
+  assert.equal(kept.repeat, 'weekly', 'and its repeat');
+  assert.ok(done.touched.includes(kept.id), 'the copy is handed to the alarms');
   await syncOnce(a, cloud.remote, id);
   assert.ok((await repo.listThoughts(a)).some((t) => t.body === 'B says: feed it in the morning'), 'the copy reaches the first phone too');
   assert.deepEqual(await titles(a), await titles(b), 'both phones end up the same');
@@ -689,6 +695,63 @@ async function localChecks(): Promise<void> {
   assert.equal((await db.first<{ n: number }>('SELECT COUNT(*) AS n FROM image_text'))!.n, 0, 'a deleted picture takes its words with it');
 }
 
+// Translation: every key reaches Android with a value, and the summary never contradicts itself.
+assert.ok(Object.values(translateArgs(['hola'])).every((v) => v !== undefined && v !== null), 'no key is undefined');
+assert.equal(translateArgs(['x']).sourceLangCode, 'auto');
+assert.equal(runSummary({ made: 0, checked: 3, failed: 0, problem: null }), 'On. None of your notes needed translating.');
+const oneFailed = runSummary({ made: 0, checked: 0, failed: 1, problem: { kind: 'other', message: 'Cannot convert [object Object] to a Kotlin type' } });
+assert.match(oneFailed, /^On\. Nothing was translated\. 1 note could not be translated\./);
+assert.doesNotMatch(oneFailed, /needed translating|Kotlin/, 'no contradiction and no raw error');
+assert.match(runSummary({ made: 2, checked: 2, failed: 1, problem: { kind: 'pack', message: 'x' } }), /2 notes have an English version now\. 1 note could not .* language pack/);
+
+async function backupChecks(): Promise<void> {
+  const a = nodeDb();
+  await repo.prepare(a);
+  await repo.insertThought(a, { id: 'p', kind: 'image', title: 'Receipt', body: '', media_path: 'file:///data/media/x.png', created_at: 1 });
+  await repo.insertThought(a, { id: 'q', kind: 'text', title: 'Call the bank', body: 'about the card', created_at: 2 });
+  await repo.insertThought(a, { id: 'r', kind: 'text', title: 'Old idea', body: '', created_at: 3 });
+  await repo.setTodo(a, 'q', { remindAt: 9_000_000_000_000, notifId: 'alarm-here', repeat: 'monthly' });
+  await repo.setPriority(a, 'q', true);
+  await repo.setPinned(a, 'q', true);
+  await repo.setRecall(a, 'q', 2, 77);
+  await repo.setList(a, 'q', 'someday');
+  await repo.addFocus(a, 'q', 25);
+  await repo.trashThought(a, 'r');
+  await repo.addTag(a, 'q', 'money');
+  await repo.upsertLink(a, 'p', 'q', 'manual', 1);
+
+  const backup = parseBackup(JSON.stringify(await makeBackup(a, 5)));
+  assert.equal(backup.thoughts.length, 3, 'the trash is in the backup too');
+  assert.ok(backup.thoughts.every((t) => t.notif_id === null), 'alarm ids stay on the phone that made them');
+  assert.throws(() => parseBackup('{"app":"other"}'), /not an Engram backup/);
+
+  // Files are keyed by note id, so two files with one name cannot collide; old backups are still found by name.
+  assert.equal(mediaKey({ id: 'p', media_path: 'file:///data/media/x.png' }), 'media/p-x.png');
+  assert.deepEqual(mediaKeys({ id: 'p', media_path: 'file:///m/a%20b.png' }), ['media/p-a b.png', 'media/a b.png']);
+
+  const b = nodeDb();
+  await repo.prepare(b);
+  const asked: string[] = [];
+  const done = await restoreBackup(b, backup, async (t) => {
+    asked.push(t.id);
+    return 'file:///new/x.png';
+  });
+  assert.deepEqual(done, { added: 3, skipped: 0, files: 1, ids: ['q', 'p', 'r'] });
+  assert.deepEqual(asked, ['p'], 'only notes with a file ask for one');
+  const q = (await repo.getThought(b, 'q'))!;
+  const before = (await repo.getThought(a, 'q'))!;
+  for (const k of ['todo', 'remind_at', 'repeat', 'priority', 'done_at', 'pinned', 'recall_step', 'recall_at', 'list', 'focus_min', 'created_at'] as const) {
+    assert.deepEqual(q[k], before[k], `${k} survives a backup and restore`);
+  }
+  assert.equal(q.notif_id, null, 'a new alarm is made on the restoring phone, not copied');
+  assert.ok((await repo.getThought(b, 'r'))!.trashed_at, 'a trashed note goes back to the trash');
+  assert.equal((await repo.getThought(b, 'p'))!.media_path, 'file:///new/x.png');
+  assert.deepEqual((await repo.tagsOf(b, 'q')).map((t) => t.name), ['money']);
+  assert.equal((await repo.listLinks(b)).length, 1);
+  // Restoring twice adds nothing.
+  assert.deepEqual(await restoreBackup(b, backup, async () => null), { added: 0, skipped: 3, files: 0, ids: [] });
+}
+
 async function usageChecks(): Promise<void> {
   const db = nodeDb();
   await repo.prepare(db);
@@ -728,8 +791,9 @@ async function usageChecks(): Promise<void> {
 databaseChecks()
   .then(cloudChecks)
   .then(localChecks)
+  .then(backupChecks)
   .then(usageChecks)
-  .then(() => console.log(`ok: usage counts, database, trash and local marks, projects, dates in plain words, check boxes, recall, Markdown, old-database import, cloud sync between two phones, search, text helpers, formatted notes, linker, meaning, groups and reminders (${all.length} links in fixture)`))
+  .then(() => console.log(`ok: backup round trip, usage counts, database, trash and local marks, projects, dates in plain words, check boxes, recall, Markdown, old-database import, cloud sync between two phones, search, text helpers, formatted notes, linker, meaning, groups and reminders (${all.length} links in fixture)`))
   .catch((e) => {
     console.error(e);
     process.exit(1);

@@ -8,14 +8,17 @@ import { useFlag } from '@/cloud/flags';
 import { Button } from '@/components/ui';
 import { useDb } from '@/db/provider';
 import * as repo from '@/db/repo';
+import { MODEL_SIZE_NOTE } from '@/lib/semantic';
+import { enableSmartLinking } from '@/lib/smart';
 import { setUsage } from '@/lib/usage';
 import { ASK_BODY, ASK_TITLE } from '@/lib/usage.logic';
 import { font, type, useTheme } from '@/theme';
 
 /**
  * The first-run tour: five pages, each showing a small piece of the real
- * interface and saying what it is for, then one question: whether to share
- * anonymous usage counts. Shown once; Settings can show it again.
+ * interface and saying what it is for, then two questions: whether to link notes
+ * by meaning (a model download), and whether to share anonymous usage counts.
+ * Nothing is turned on unless the person says yes. Shown once; Settings can show it again.
  */
 export default function TourScreen() {
   const db = useDb();
@@ -124,6 +127,20 @@ export default function TourScreen() {
       ),
     },
     {
+      title: 'Link notes by meaning?',
+      body: `Engram can link "car service due" with "garage booking" even though they share no words. A language model does this on this phone, in 50+ languages, and your notes never leave it. Turning it on downloads the model once (${MODEL_SIZE_NOTE}), so Wi-Fi is best. You can change this in Settings.`,
+      art: card(
+        <View style={{ gap: 10 }}>
+          <Text style={{ fontFamily: font.serif, fontSize: 18, color: c.ink }}>Car service due</Text>
+          <View style={styles.check}>
+            <Feather name="link-2" size={16} color={c.accent} />
+            <Text style={[type.meta, { color: c.soft }]}>Linked by meaning</Text>
+          </View>
+          <Text style={{ fontFamily: font.serif, fontSize: 18, color: c.ink }}>Garage booking on Saturday</Text>
+        </View>,
+      ),
+    },
+    {
       title: ASK_TITLE,
       body: ASK_BODY,
       art: card(
@@ -144,6 +161,13 @@ export default function TourScreen() {
   ];
 
   const last = page === pages.length - 1;
+  const meaningPage = page === pages.length - 2;
+  // Answering the meaning question moves on to the last one. Yes starts the download now.
+  const chooseMeaning = (on: boolean) => {
+    if (on) void enableSmartLinking(db);
+    pager.current?.scrollTo({ x: (page + 1) * width, animated: true });
+    setPage(page + 1);
+  };
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => setPage(Math.round(e.nativeEvent.contentOffset.x / Math.max(1, width)));
   const next = () => (last ? void finish() : pager.current?.scrollTo({ x: (page + 1) * width, animated: true }));
 
@@ -170,7 +194,12 @@ export default function TourScreen() {
         ))}
       </ScrollView>
 
-      {last ? (
+      {meaningPage ? (
+        <View style={[styles.foot, styles.choice]}>
+          <Button title="Not now" style={{ flex: 1 }} onPress={() => chooseMeaning(false)} />
+          <Button title="Turn on" tone="solid" style={{ flex: 1 }} onPress={() => chooseMeaning(true)} />
+        </View>
+      ) : last ? (
         // The question's own answers take the whole row, so neither is squeezed.
         <View style={[styles.foot, styles.choice]}>
           <Button title="No thanks" style={{ flex: 1 }} onPress={() => void finish(false)} />

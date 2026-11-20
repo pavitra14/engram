@@ -33,11 +33,12 @@ const PENDING = 'sync_pending';
 const CURSOR = 'sync_cursor';
 
 /** Keeps this phone's words as a new note when the original lost a conflict. */
-async function keepCopy(db: Db, id: string, why: string): Promise<boolean> {
+/** Keeps this phone's version as a new note, to-do state included. Returns the copy's id, or null when there was nothing to keep. */
+async function keepCopy(db: Db, id: string, why: string): Promise<string | null> {
   const mine = await repo.getThought(db, id);
-  if (!mine) return false;
+  if (!mine) return null;
   const label = (mine.title?.trim() || mine.body.trim().split('\n')[0] || 'Note').slice(0, 80);
-  await repo.insertThought(db, {
+  const copy = await repo.insertThought(db, {
     kind: mine.kind,
     title: `${label} (${why})`,
     body: mine.body,
@@ -49,8 +50,18 @@ async function keepCopy(db: Db, id: string, why: string): Promise<boolean> {
     file_name: mine.file_name,
     mime_type: mine.mime_type,
     file_size: mine.file_size,
+    event_id: mine.event_id,
+    event_title: mine.event_title,
+    event_at: mine.event_at,
+    todo: mine.todo,
+    remind_at: mine.remind_at,
+    repeat: mine.repeat,
+    priority: mine.priority,
+    done_at: mine.done_at,
+    pinned: mine.pinned,
+    list: mine.list,
   });
-  return true;
+  return copy.id;
 }
 
 async function push(db: Db, remote: Remote, newId: () => string, out: SyncSummary): Promise<void> {
@@ -93,13 +104,21 @@ async function push(db: Db, remote: Remote, newId: () => string, out: SyncSummar
         if (r.s === 'ok' && typeof r.rev === 'number') {
           await repo.setRev(db, e.id, r.rev);
         } else if (r.s === 'conflict') {
-          if (await keepCopy(db, e.id, 'from this phone')) out.copies += 1;
+          const copy = await keepCopy(db, e.id, 'from this phone');
+          if (copy) {
+            out.copies += 1;
+            out.touched.push(copy);
+          }
           await repo.clearOutbox(db, e);
           const theirs = await remote.thought(e.id);
           if (theirs) await repo.applyRemote(db, { ...theirs, t: 'thoughts' });
           out.touched.push(e.id);
         } else if (r.s === 'gone') {
-          if (await keepCopy(db, e.id, 'deleted on another device')) out.copies += 1;
+          const copy = await keepCopy(db, e.id, 'deleted on another device');
+          if (copy) {
+            out.copies += 1;
+            out.touched.push(copy);
+          }
           await repo.clearOutbox(db, e);
           await repo.applyRemote(db, { t: 'thoughts', id: e.id, seq: 0, deleted: true });
           out.touched.push(e.id);

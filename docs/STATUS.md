@@ -1,12 +1,12 @@
 # Status
 
-_Last updated: 18 Nov 2026, after `v0.8.0-beta.3` (pre-release). Update this file whenever you finish work._
+_Last updated: 20 Nov 2026, releasing `v0.9.0-beta.4`. Update this file whenever you finish work._
 
 > **18 Nov 2026:** the `metrics` flag is switched **on** in Supabase at the owner's request. Phones whose owner said yes to usage counts now send one anonymous daily total through `record_usage`. Turn it off in `public.feature_flags` to stop all sending.
 
 ## Where things are
 
-- The app is **0.8.0** (`versionCode` 8), released as `v0.8.0-beta.3`, a **pre-release** the owner will promote by hand once tested (the owner chose the beta.3 number). The last ordinary release is `v0.7.0-beta.2`; the website shows the latest ordinary release, so it keeps showing 0.7 until 0.8 is promoted. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
+- The app is **0.9.0** (`versionCode` 9), released as `v0.9.0-beta.4`, an **ordinary release** (the owner asked for the next release without saying pre-release, and AGENTS says to drop the marker after 0.8). `v0.8.0-beta.3` stayed a pre-release; 0.9 carries its changes. The website shows the latest ordinary release, so it moves from 0.7 to 0.9 within an hour of publishing. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
 - **Engram Cloud is switched off** by the `cloud` feature flag (D37). The code and the server side from 0.4 are still there. Status against issue #2 is in `CLOUD.md`.
 - **Ask your notes is switched off** by the `ask` flag. Its model is not yet in `package.json` (see "Before turning Ask on" below).
 - The old `v1.0.0`, `v2.0.0-beta.1` releases and the `redesign-diag` branch still need deleting by hand on GitHub. Branch deletion commands are in the owner's hands; the agent cannot delete them from a cloud session.
@@ -26,6 +26,28 @@ _Last updated: 18 Nov 2026, after `v0.8.0-beta.3` (pre-release). Update this fil
 - Translation in a non-English language. If it fails, the message shown on the phone is the first thing to report.
 - Quick Settings tile, icon shortcuts, app lock, focus timer, morning and evening notifications.
 - Anything that crashes shows the crash screen; note what it says.
+
+## What 0.9 changes (20 Nov 2026, milestone `v0.9.0-beta.4`, issues #3 to #11)
+
+All nine open issues were worked in one batch at the owner's request; each issue has dated comments with the details.
+
+- **#3 Backup restore kept no to-do state.** `insertThought` now takes the to-do and phone-only fields when given (`NewThought` grew them); `backup.logic.ts` holds `makeBackup`/`restoreBackup`/`parseBackup`; restore runs `reconcileReminders`; backups include the trash and never the alarm id. `keepCopy` in sync carries the to-do state too. `backupChecks()` in `check.ts` does a full round trip.
+- **#5 and #7 Backup import.** Refuses files or unpacked contents over 600 MB, reads the file once, unpacks one media entry at a time and yields between them. Media zip entries are `media/<id>-<name>`; old `media/<name>` still found. A restored file never overwrites one already present.
+- **#4 OCR.** The two ML Kit recognisers are made once, reused, and closed in `OnDestroy`.
+- **#8 Translation.** `translateArgs` passes every key (`sourceLangCode: 'auto'` and the rest); `runSummary` says "Nothing was translated" when all failed and no longer shows the raw error.
+- **#10 Cold-start share.** Expo Router's 150 ms limit on the launch address made slow cold starts open on Today. `_layout.tsx` now opens `/handle-share` when `getSharedPayloads()` has something waiting (at start and on return), with a `saving` guard in the share screen. The smoke test force-stops the app and shares text (`20b`, `20c`).
+- **#11 Settings.** Six collapsible groups and a "Find a setting" search (`components/SettingsLayout.tsx`); open groups are remembered in meta `settings_open`; test links open the group they change.
+- **#6 Cloud listeners.** Wired whatever the flag; `onFlagsChange` restores a saved session if `cloud` turns on. Flags are still fetched only at launch (privacy promise).
+- **#9 Tour.** A "Link notes by meaning?" page before the usage question; "Turn on" calls `enableSmartLinking`. The smoke test taps "Not now".
+- **Release job.** Attaches `engram-vX.Y.Z.aab` when the release key signed it. The owner added the four keystore secrets on 18 Nov (the workflow_dispatch run 44240327057 shows them set), so **0.9 is the first release signed with the real key**: it cannot install over the debug-signed 0.7 and 0.8, and testers move by backup, uninstall, install, restore (the release notes say so). The signer printout in CI was broken (a glob over several build-tools versions); it now picks the newest `apksigner` and also prints the bundle's signer with `keytool`.
+- **Not verified by automation:** a restore on a real phone, translation of a non-English note, a cold-start share on the S24 Ultra (the emulator may start fast enough to beat the 150 ms limit and never show the bug), the Settings search on a real keyboard.
+
+### Owner test list for 0.9
+- Back up, restore on a fresh install: to-dos, reminders, stars, pins and the trash come back; a future reminder rings.
+- Force-stop Engram, share a link and a photo in: both are saved.
+- Translation with a Hindi or other non-English note.
+- Settings: groups open and close and are remembered; search "backup", "theme", "reminder".
+- Fresh install: the tour's meaning question; "Turn on" starts the download shown in Settings.
 
 ## What 0.8 adds: anonymous usage counts (18 Nov 2026)
 

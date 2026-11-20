@@ -6,36 +6,24 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { Db } from '@/db/db';
 
 import * as repo from '@/db/repo';
-import type { Link, Thought } from '@/db/types';
+import type { Thought } from '@/db/types';
 
+import { type Backup, makeBackup, mediaKey, mediaKeys, mediaName, parseBackup, restoreBackup } from './backup.logic';
 import { dataChanged } from './bus';
 import { fileNames, type ImportedNote, noteToMarkdown, parseKeep, parseTextFile } from './markdown';
+import { reconcileReminders } from './reminders';
 import { titleOf } from './text';
-
-type Backup = {
-  app: 'engram';
-  version: 1;
-  exported_at: number;
-  thoughts: Thought[];
-  links: Link[];
-  tags: { thought_id: string; name: string }[];
-};
 
 /** Words, links and tags only, as one JSON file. Kept for the crash screen, where the smallest thing that can work is wanted. */
 export async function exportBackup(db: Db): Promise<number> {
-  const [thoughts, links, tags] = await Promise.all([
-    repo.listThoughts(db, { limit: 100000 }),
-    repo.listLinks(db),
-    repo.allTagPairs(db),
-  ]);
-  const backup: Backup = { app: 'engram', version: 1, exported_at: Date.now(), thoughts, links, tags };
+  const backup = await makeBackup(db);
   const stamp = new Date().toISOString().slice(0, 10);
   const file = new File(Paths.cache, `engram-backup-${stamp}.json`);
   if (file.exists) file.delete();
   file.create();
   await file.write(JSON.stringify(backup));
   await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'Save Engram backup' });
-  return thoughts.length;
+  return backup.thoughts.length;
 }
 
 /** Photos and recordings above this size in total are left out of a backup: the zip is built in memory. */
@@ -47,8 +35,8 @@ const MEDIA_LIMIT = 400 * 1024 * 1024;
  * Returns how many thoughts went in and how many files had to be left out.
  */
 export async function exportFullBackup(db: Db): Promise<{ thoughts: number; files: number; leftOut: number }> {
-  const [thoughts, links, tags] = await Promise.all([repo.listThoughts(db, { limit: 100000 }), repo.listLinks(db), repo.allTagPairs(db)]);
-  const backup: Backup = { app: 'engram', version: 1, exported_at: Date.now(), thoughts, links, tags };
+  const backup = await makeBackup(db);
+  const thoughts = backup.thoughts;
   // Media is stored as it is (level 0): pictures and recordings are compressed already.
   const entries: Record<string, Uint8Array | [Uint8Array, { level: 0 }]> = { 'backup.json': strToU8(JSON.stringify(backup)) };
   let files = 0;
@@ -64,7 +52,7 @@ export async function exportFullBackup(db: Db): Promise<{ thoughts: number; file
       }
       const bytes = await f.bytes();
       size += bytes.length;
-      entries[`media/${mediaName(t.media_path)}`] = [bytes, { level: 0 }];
+      entries[mediaKey(t)!] = [bytes, { level: 0 }];
       files += 1;
     } catch {
       leftOut += 1;
@@ -79,71 +67,68 @@ export async function exportFullBackup(db: Db): Promise<{ thoughts: number; file
   return { thoughts: thoughts.length, files, leftOut };
 }
 
-const mediaName = (path: string) => decodeURIComponent(path.split('/').pop() ?? 'file');
+/** A backup file larger than this is refused before it is read: the phone would run out of memory. */
+const IMPORT_FILE_LIMIT = 600 * 1024 * 1024;
+/** And so is a zip whose contents would come to more than this once unpacked. */
+const IMPORT_UNPACKED_LIMIT = 600 * 1024 * 1024;
+const BIG = 'That backup is too big to restore on this phone (over 600 MB).';
+
+const yieldToScreen = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 /**
  * Merges a backup into this device: a .zip made by "Export a backup" (with its
- * files) or an older .json one (words only). Existing thoughts (same id) are kept as they are.
+ * files) or an older .json one (words only). Existing thoughts (same id) are
+ * kept as they are. To-dos, reminders and stars come back, and reminders still
+ * ahead get a phone alarm again.
  */
 export async function importBackup(db: Db): Promise<{ added: number; skipped: number; files: number } | null> {
   const picked = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
   if (picked.canceled || !picked.assets[0]) return null;
   const file = new File(picked.assets[0].uri);
+  if ((file.size ?? picked.assets[0].size ?? 0) > IMPORT_FILE_LIMIT) throw new Error(BIG);
+  // Read once; a zip is then unpacked one entry at a time, so only one file is in memory beside it.
+  const bytes = await file.bytes();
   let raw: string;
-  let media: Record<string, Uint8Array> = {};
-  const head = (await file.bytes()).subarray(0, 2);
-  if (head[0] === 0x50 && head[1] === 0x4b) {
-    // A zip: the words are in backup.json, the files beside it.
-    const all = unzipSync(await file.bytes());
-    if (!all['backup.json']) throw new Error('That zip is not an Engram backup. For notes from other apps, use "Bring in notes".');
-    raw = strFromU8(all['backup.json']);
-    media = all;
+  const inZip = new Set<string>();
+  const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+  if (isZip) {
+    let unpacked = 0;
+    const found = unzipSync(bytes, {
+      filter: (f) => {
+        unpacked += f.originalSize;
+        inZip.add(f.name);
+        return f.name === 'backup.json';
+      },
+    });
+    if (unpacked > IMPORT_UNPACKED_LIMIT) throw new Error(BIG);
+    if (!found['backup.json']) throw new Error('That zip is not an Engram backup. For notes from other apps, use "Bring in notes".');
+    raw = strFromU8(found['backup.json']);
   } else {
-    raw = await file.text();
+    raw = strFromU8(bytes);
   }
-  let data: Backup;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    throw new Error('That file is not an Engram backup.');
-  }
-  if (data?.app !== 'engram' || !Array.isArray(data.thoughts)) {
-    throw new Error('That file is not an Engram backup.');
-  }
-  let added = 0;
-  let skipped = 0;
-  let files = 0;
+  const data = parseBackup(raw);
   const dir = new Directory(Paths.document, 'media');
   if (!dir.exists) dir.create({ idempotent: true, intermediates: true });
-  const present = new Set<string>();
-  for (const t of data.thoughts) {
-    if (!t?.id || !t.kind) continue;
-    if (await repo.getThought(db, t.id)) {
-      skipped += 1;
-    } else {
-      // The file comes back under its old name in this app's own storage; without one the path is dropped.
-      let media_path: string | null = null;
-      const bytes = t.media_path ? media[`media/${mediaName(t.media_path)}`] : undefined;
-      if (bytes && t.media_path) {
-        const dest = new File(dir, mediaName(t.media_path));
-        if (!dest.exists) dest.create();
-        dest.write(bytes);
-        media_path = dest.uri;
-        files += 1;
-      }
-      await repo.insertThought(db, { ...t, media_path });
-      added += 1;
-    }
-    present.add(t.id);
-  }
-  for (const l of data.links ?? []) {
-    if (present.has(l.a_id) && present.has(l.b_id)) await repo.upsertLink(db, l.a_id, l.b_id, l.kind, l.weight);
-  }
-  for (const g of data.tags ?? []) {
-    if (present.has(g.thought_id)) await repo.addTag(db, g.thought_id, g.name);
-  }
+  const fileFor = async (t: Thought): Promise<string | null> => {
+    if (!isZip || !t.media_path) return null;
+    const key = mediaKeys(t).find((k) => inZip.has(k));
+    if (!key) return null;
+    const entry = unzipSync(bytes, { filter: (f) => f.name === key })[key];
+    if (!entry) return null;
+    // Never write over a file another note already uses.
+    const name = mediaName(t.media_path);
+    let dest = new File(dir, name);
+    if (dest.exists) dest = new File(dir, `${t.id}-${name}`);
+    if (!dest.exists) dest.create();
+    dest.write(entry);
+    await yieldToScreen();
+    return dest.uri;
+  };
+  const done = await restoreBackup(db, data, fileFor);
+  // Reminders still ahead get an alarm on this phone.
+  await reconcileReminders(db, done.ids);
   dataChanged();
-  return { added, skipped, files };
+  return { added: done.added, skipped: done.skipped, files: done.files };
 }
 
 // ---------- Markdown out ----------
@@ -259,8 +244,7 @@ export async function stopAutoBackup(db: Db): Promise<void> {
 }
 
 async function writeBackupTo(db: Db, folder: string): Promise<void> {
-  const [thoughts, links, tags] = await Promise.all([repo.listThoughts(db, { limit: 100000 }), repo.listLinks(db), repo.allTagPairs(db)]);
-  const backup: Backup = { app: 'engram', version: 1, exported_at: Date.now(), thoughts, links, tags };
+  const backup: Backup = await makeBackup(db);
   const stamp = new Date().toISOString().slice(0, 10);
   const uri = await StorageAccessFramework.createFileAsync(folder, `engram-backup-${stamp}`, 'application/json');
   await StorageAccessFramework.writeAsStringAsync(uri, JSON.stringify(backup));

@@ -5,7 +5,7 @@ _Written 17 Nov 2026. F-Droid was considered and dropped (D52): the code is all 
 ## What is in the repo
 
 - **Release signing:** `plugins/withReleaseSigning.js` signs release builds with Engram's own key when `ENGRAM_KEYSTORE_PATH`, `ENGRAM_KEYSTORE_PASSWORD`, `ENGRAM_KEY_ALIAS` and `ENGRAM_KEY_PASSWORD` are set. Without them the build keeps the template debug key. CI sets them for release builds from the repository secrets below.
-- **Play bundle:** release builds also produce `engram.aab` (arm64), uploaded with the APK as the `engram-apk` artifact. It is not attached to the GitHub release.
+- **Play bundle:** release builds also produce `engram.aab` (arm64), uploaded with the APK as the `engram-apk` artifact. From 0.9 the release job attaches it to the GitHub release as `engram-vX.Y.Z.aab`, **only when it was signed with the release key**. Without the four secrets the bundle is debug-signed, Play would refuse it, and the job leaves it off with a warning.
 - **Target SDK 36** is set in `app.json` through `expo-build-properties`. Play requires 36 for new apps. Do not set `compileSdkVersion`: Expo SDK 58's libraries need 37, which is the default (a 36 override broke the build on 17 Nov).
 - **In-app links** to the Privacy Policy, Terms and Contact are in Settings, under About.
 - `SYSTEM_ALERT_WINDOW` is blocked in `app.json`; nothing in the app draws over other apps.
@@ -24,6 +24,17 @@ _Written 17 Nov 2026. F-Droid was considered and dropped (D52): the code is all 
 4. **Play Console account.** A personal account created after 13 Nov 2023 must run a closed test with 12 or more testers, opted in for 14 continuous days, before applying for production. Testers must install from Play, not from GitHub.
 5. Add the **governing law** to the Privacy Policy and Terms (here and in `engram-web`).
 6. **Register the package and signing fingerprint** in the Android Developer Console, which also covers Google's developer verification of sideloaded apps (enforced from 30 Sep 2026 in Brazil, Indonesia, Singapore and Thailand; global in 2027).
+
+## What's new text for Play (v0.9.0-beta.4, under 500 characters)
+
+```
+• Restoring a backup now keeps to-dos, reminders, stars and pins
+• Sharing to Engram while it's closed no longer loses the item
+• Translation of notes in other languages works again
+• Settings is grouped, with a search box
+• The tour asks whether to link notes by meaning
+• Optional anonymous usage counts, off unless you say yes
+```
 
 ## Console checklist
 

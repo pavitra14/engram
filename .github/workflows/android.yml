@@ -97,15 +97,22 @@ jobs:
           unzip -l ../out/engram.apk | grep -ci "com/google/firebase" || true
           unzip -l ../out/engram.apk | grep -ci "com/google/android/gms" || true
           cp app/build/outputs/bundle/release/app-release.aab ../out/engram.aab
+          # Play refuses a debug-signed bundle, so the release attaches the AAB only when the real key signed it.
+          if [ -n "$KEYSTORE_B64" ]; then echo "release key" > ../out/signed-with-release-key.txt; fi
           ls -lh ../out
           echo "Signer of the phone APK:"
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs ../out/engram.apk | grep -i "certificate DN\|SHA-256" || true
+          # Several build-tools versions may be installed; a bare glob passed the second as an argument.
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --print-certs ../out/engram.apk | grep -i "certificate DN\|SHA-256" || true
+          echo "Signer of the Play bundle:"
+          keytool -printcert -jarfile ../out/engram.aab | grep -i "Owner:\|SHA256:" || true
       - uses: actions/upload-artifact@v4
         with:
           name: engram-apk
           path: |
             out/*.apk
             out/*.aab
+            out/*.txt
           if-no-files-found: error
 
   smoke:
@@ -185,4 +192,11 @@ jobs:
           # release whose notes start with <!-- prerelease --> (the owner promotes it once tested).
           PRE=""; case "$TAG" in *-alpha*|*-rc*) PRE="--prerelease";; esac
           if head -n 1 docs/release-notes.md | grep -q '<!-- prerelease -->'; then PRE="--prerelease"; fi
-          gh release create "$TAG" "out/engram-$TAG.apk" $PRE --target "$GITHUB_SHA" --title "Engram $TAG" --notes-file docs/release-notes.md
+          FILES=("out/engram-$TAG.apk")
+          if [ -f out/signed-with-release-key.txt ]; then
+            mv out/engram.aab "out/engram-$TAG.aab"
+            FILES+=("out/engram-$TAG.aab")
+          else
+            echo "::warning::No release key: the Play bundle is debug-signed and is not attached. Add the ENGRAM_KEYSTORE_* secrets (docs/PLAY.md)."
+          fi
+          gh release create "$TAG" "${FILES[@]}" $PRE --target "$GITHUB_SHA" --title "Engram $TAG" --notes-file docs/release-notes.md

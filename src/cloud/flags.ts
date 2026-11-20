@@ -46,6 +46,14 @@ export function useFlag(flag: Flag): boolean {
   );
 }
 
+/** Calls back whenever the set of flags changes. Returns a function that stops it. */
+export function onFlagsChange(l: () => void): () => void {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+}
+
 /** Reads the remembered answer, then asks the server for a fresh one. Never throws. */
 export async function loadFlags(db: Db): Promise<void> {
   try {

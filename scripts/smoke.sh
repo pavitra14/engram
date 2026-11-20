@@ -27,8 +27,11 @@ launch
 # A new install opens on the tour.
 sleep 25; shot 01-tour
 tap 900 2290; sleep 2; shot 01b-tour-page-2
+# Then two questions. Linking by meaning: the test says "Not now" (left button), so the
+# before-and-after meaning check below still starts from off.
+for _ in 1 2 3 4; do tap 900 2290; sleep 2; done; shot 01c-tour-meaning-question
+tap 300 2290; sleep 2; shot 01d-tour-usage-question
 # The last page asks about usage counts. The test answers no in Settings, so CI never sends any.
-for _ in 1 2 3 4; do tap 900 2290; sleep 2; done; shot 01c-tour-usage-question
 open "engram://settings?metrics=off"; sleep 5
 
 open "engram://samples"; sleep 18; shot 02-home
@@ -113,6 +116,14 @@ adb shell am start -W -a android.intent.action.SEND -t text/plain \
   --es android.intent.extra.TEXT "Sourdough\ hydration\ notes\ from\ the\ smoke\ test" "$PKG" >/dev/null
 sleep 2; shot 20-share-text
 sleep 5
+
+# Shared while Engram is not running at all (issue #10): it must still be saved.
+adb shell am force-stop "$PKG"; sleep 2
+adb shell am start -W -a android.intent.action.SEND -t text/plain \
+  --es android.intent.extra.TEXT "Coldstart\ share\ from\ the\ smoke\ test" "$PKG" >/dev/null
+sleep 6; shot 20b-share-cold
+sleep 4
+open "engram://search?q=coldstart"; sleep 5; shot 20c-share-cold-saved
 
 # A reminder from plain words: the note keeps its words, a to-do is made, and a message offers Undo.
 open "engram://"; sleep 4

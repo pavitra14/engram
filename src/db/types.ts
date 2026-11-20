@@ -78,4 +78,16 @@ export type NewThought = {
   event_title?: string | null;
   event_at?: number | null;
   created_at?: number;
+  /** To-do and phone-only state, carried over by a backup restore or a kept conflict copy. Missing means a fresh note. */
+  todo?: number | null;
+  remind_at?: number | null;
+  repeat?: Thought['repeat'];
+  priority?: number | null;
+  done_at?: number | null;
+  pinned?: number | null;
+  trashed_at?: number | null;
+  recall_step?: number | null;
+  recall_at?: number | null;
+  list?: Thought['list'];
+  focus_min?: number | null;
 };

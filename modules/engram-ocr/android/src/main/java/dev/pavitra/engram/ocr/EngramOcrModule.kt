@@ -3,6 +3,7 @@ package dev.pavitra.engram.ocr
 import android.net.Uri
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.devanagari.DevanagariTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import expo.modules.kotlin.Promise
@@ -17,8 +18,26 @@ import java.io.File
  * Resolves with the text blocks in reading order; an empty list means no words.
  */
 class EngramOcrModule : Module() {
+  // One pair of recognisers for the life of the module. ML Kit clients hold native
+  // resources, so they are made once, reused for every picture and closed on destroy.
+  private var latinClient: TextRecognizer? = null
+  private var devanagariClient: TextRecognizer? = null
+
+  private fun latin(): TextRecognizer =
+    latinClient ?: TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).also { latinClient = it }
+
+  private fun devanagari(): TextRecognizer =
+    devanagariClient ?: TextRecognition.getClient(DevanagariTextRecognizerOptions.Builder().build()).also { devanagariClient = it }
+
   override fun definition() = ModuleDefinition {
     Name("EngramOcr")
+
+    OnDestroy {
+      latinClient?.close()
+      devanagariClient?.close()
+      latinClient = null
+      devanagariClient = null
+    }
 
     AsyncFunction("read") { uriString: String, promise: Promise ->
       try {
@@ -31,8 +50,8 @@ class EngramOcrModule : Module() {
           Uri.fromFile(file)
         }
         val image = InputImage.fromFilePath(context, uri)
-        val latin = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        val devanagari = TextRecognition.getClient(DevanagariTextRecognizerOptions.Builder().build())
+        val latin = latin()
+        val devanagari = devanagari()
 
         latin.process(image)
           .addOnSuccessListener { first ->

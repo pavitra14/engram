@@ -16,7 +16,7 @@ import { rebuildAllLinks } from '@/lib/capture';
 import { reconcileReminders } from '@/lib/reminders';
 
 import * as api from './api';
-import { flagOn, loadFlags } from './flags';
+import { flagOn, loadFlags, onFlagsChange } from './flags';
 import { type Remote, type RemoteRow, resetCursor, syncOnce } from './sync';
 
 export type CloudState = {
@@ -128,10 +128,26 @@ let started = false;
 export async function startCloud(db: Db): Promise<void> {
   if (started || !api.cloudConfigured) return;
   started = true;
+  // These are wired whatever the flag says; they do nothing until there is a session
+  // (syncSoon returns at once without one), so a flag turned on later needs no restart to take effect.
+  subscribeData(() => {
+    if (!quiet) syncSoon(db);
+  });
+  AppState.addEventListener('change', (s) => {
+    if (s === 'active') syncSoon(db, 1000);
+  });
   // Engram Cloud is behind a switch on the server. While it is off, this phone neither
   // restores a session nor records changes for sending.
   await loadFlags(db);
-  if (!flagOn('cloud')) return;
+  await restoreSession(db);
+  onFlagsChange(() => void restoreSession(db));
+}
+
+/** Picks up the account this phone was signed in to, if any, and starts recording changes for it. */
+let restoring = false;
+async function restoreSession(db: Db): Promise<void> {
+  if (session || restoring || !flagOn('cloud')) return;
+  restoring = true;
   try {
     const saved = await SecureStore.getItemAsync(KEY);
     if (saved) {
@@ -143,13 +159,9 @@ export async function startCloud(db: Db): Promise<void> {
     }
   } catch {
     // No usable session: stay local.
+  } finally {
+    restoring = false;
   }
-  subscribeData(() => {
-    if (!quiet) syncSoon(db);
-  });
-  AppState.addEventListener('change', (s) => {
-    if (s === 'active') syncSoon(db, 1000);
-  });
 }
 
 /** After signing in: remember whose copy this is, queue everything on the phone, and sync. */
