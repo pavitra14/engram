@@ -1,0 +1,1 @@
+        b7ea2bd dev.pavitra.engram/.QuickTileService filter 5af10b2 permission android.permission.BIND_QUICK_SETTINGS_TILE

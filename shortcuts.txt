@@ -1,0 +1,13 @@
+      Package: dev.pavitra.engram  UID: 10192
+        Calls: 0
+        Last known FG: 440565
+        Last reset: [1795167524998] 2026-11-20 09:38:44
+
+        PackageInfo:
+          IsShadow: false (installed)
+          Version: 9
+          Backup Allowed: true
+          Last package update time: 1795167557678
+
+        Shortcuts:
+          ShortcutInfo {id=voice, flags=0x1a4 [ImManIc-rStr]
