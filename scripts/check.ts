@@ -21,6 +21,7 @@ import { computeGroups } from '../src/lib/groups';
 import { fileNames, htmlToMarkdown, markdownToHtml, noteToMarkdown, parseKeep, parseTextFile } from '../src/lib/markdown';
 import { dueIn, matchProjects, orphaned } from '../src/lib/projects';
 import { DECISION_STEP, decisionRecall, dueRecalls, firstRecall, habitDoneToday, habitStreak, milestone, monthRecap, nextRecall, onThisDay, surprise, toggleHabit } from '../src/lib/recall';
+import { joinParagraphs, MAX_TEXT, type OcrLine, paragraphsFromBlocks, paragraphsFromLines } from '../src/lib/ocr.logic';
 import { runSummary, translateArgs } from '../src/lib/translate';
 import { parseWhen } from '../src/lib/when';
 import { activeBucket, ageBucket, buildMessage, CAP, daysActiveIn, describe, localDay, notesBucket, plan, rememberDay } from '../src/lib/usage.logic';
@@ -703,6 +704,31 @@ const oneFailed = runSummary({ made: 0, checked: 0, failed: 1, problem: { kind: 
 assert.match(oneFailed, /^On\. Nothing was translated\. 1 note could not be translated\./);
 assert.doesNotMatch(oneFailed, /needed translating|Kotlin/, 'no contradiction and no raw error');
 assert.match(runSummary({ made: 2, checked: 2, failed: 1, problem: { kind: 'pack', message: 'x' } }), /2 notes have an English version now\. 1 note could not .* language pack/);
+
+// --- words read from pictures ---
+{
+  const line = (text: string, top: number, block: number, strip = 0): OcrLine => ({ text, top, bottom: top + 40, block, strip });
+  // Lines the picture wrapped inside one block become one paragraph, not one short line each.
+  const wrapped = [
+    line("You've stayed in the profession for the", 0, 1),
+    line('wrong', 50, 1),
+    line("reasons. If you've confused the low level", 100, 1),
+    line('application with what the job is.', 150, 1),
+  ];
+  assert.deepEqual(paragraphsFromLines(wrapped), ["You've stayed in the profession for the wrong reasons. If you've confused the low level application with what the job is."]);
+  // A new block is a new paragraph; blank lines are dropped.
+  assert.deepEqual(paragraphsFromLines([line('One.', 0, 1), line('   ', 50, 2), line('Two.', 120, 3)]), ['One.', 'Two.']);
+  // A paragraph cut by the edge between two strips is joined; a gap as big as a paragraph break is not.
+  assert.deepEqual(paragraphsFromLines([line('First half of a', 1000, 1, 0), line('sentence that goes on.', 1050, 10001, 1)]), ['First half of a sentence that goes on.']);
+  assert.deepEqual(paragraphsFromLines([line('End of one.', 1000, 1, 0), line('Start of another.', 1130, 10001, 1)]), ['End of one.', 'Start of another.']);
+  // Without positions (the older call) the picture's own line breaks are still removed.
+  assert.deepEqual(paragraphsFromBlocks(['for the\nwrong\nreasons.', '', 'Next block']), ['for the wrong reasons.', 'Next block']);
+  assert.equal(joinParagraphs(['a', 'b']), 'a\n\nb');
+  assert.equal(joinParagraphs(['x'.repeat(MAX_TEXT + 500)]).length, MAX_TEXT, 'only a runaway read is cut');
+  // A page of fifty paragraphs is kept whole: the old 8,000-character cap would have lost most of it.
+  const page = Array.from({ length: 50 }, (_, i) => `Paragraph ${i} ${'words '.repeat(40)}`.trim());
+  assert.equal(joinParagraphs(page).split('\n\n').length, 50);
+}
 
 async function backupChecks(): Promise<void> {
   const a = nodeDb();

@@ -14,7 +14,13 @@ import { requireOptionalNativeModule } from 'expo';
 import type { Db } from '@/db/db';
 import * as repo from '@/db/repo';
 
-type Module = { read: (uri: string) => Promise<string[]> };
+import { joinParagraphs, type OcrLine, paragraphsFromBlocks, paragraphsFromLines } from './ocr.logic';
+
+/**
+ * `readLines` gives every line with its place in the picture and reads a tall picture
+ * in strips, so none of it is skipped. `read` is the older call, one string per block.
+ */
+type Module = { readLines?: (uri: string) => Promise<OcrLine[]>; read: (uri: string) => Promise<string[]> };
 
 /** Null when the native module is missing (an old build, or a platform without it), so nothing here can stop the app. */
 function recogniser(): Module | null {
@@ -28,16 +34,16 @@ function recogniser(): Module | null {
 /** Whether this build can read pictures at all. */
 export const canReadPictures = (): boolean => recogniser() !== null;
 
-/** The words in a picture, one block per line. Empty when there are none or the recogniser is not available. */
+/** The words in a picture, a paragraph at a time with a blank line between. Empty when there are none or the recogniser is not available. */
 export async function wordsInPicture(uri: string): Promise<string> {
   const mod = recogniser();
   if (!mod) return '';
+  if (typeof mod.readLines === 'function') {
+    const lines = await mod.readLines(uri);
+    return joinParagraphs(paragraphsFromLines(Array.isArray(lines) ? lines : []));
+  }
   const blocks = await mod.read(uri);
-  return (Array.isArray(blocks) ? blocks : [])
-    .map((b) => String(b).trim())
-    .filter(Boolean)
-    .join('\n')
-    .slice(0, 8000);
+  return joinParagraphs(paragraphsFromBlocks(Array.isArray(blocks) ? blocks : []));
 }
 
 /** Reads one saved picture and stores its words. Returns true if it found any. */

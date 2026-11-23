@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: 20 Nov 2026, releasing `v0.9.0-beta.4`. Update this file whenever you finish work._
+_Last updated: 23 Nov 2026, text in pictures (issue #17). Update this file whenever you finish work._
 
 > **18 Nov 2026:** the `metrics` flag is switched **on** in Supabase at the owner's request. Phones whose owner said yes to usage counts now send one anonymous daily total through `record_usage`. Turn it off in `public.feature_flags` to stop all sending.
 
@@ -26,6 +26,15 @@ _Last updated: 20 Nov 2026, releasing `v0.9.0-beta.4`. Update this file whenever
 - Translation in a non-English language. If it fails, the message shown on the phone is the first thing to report.
 - Quick Settings tile, icon shortcuts, app lock, focus timer, morning and evening notifications.
 - Anything that crashes shows the crash screen; note what it says.
+
+## In progress for `v0.10.0-beta.5`: text in pictures (23 Nov 2026, issue #17)
+
+- **The panel scrolls.** "Text in this picture" on the note screen shows all of the words in a panel (max 280 px tall) that scrolls by itself, replacing the 12-line cut-off. "Read it again" sits under it, since a picture that already has words had no way to be read a second time.
+- **Lines are reflowed.** The recogniser keeps the picture's own line breaks, so a wrapped sentence came out as short lines. `src/lib/ocr.logic.ts` joins the lines of one block into a paragraph and puts a blank line between paragraphs. The 8,000-character cap is now 60,000 (`MAX_TEXT`).
+- **A tall picture is read whole.** `modules/engram-ocr` has a new `readLines` call that returns each line with its place in the picture. A picture taller than twice its width (a long screenshot, not turned by an EXIF tag) is cut into strips 1.5 widths tall that overlap by 15%, read one after another with `BitmapRegionDecoder`, and each strip keeps only the lines whose middle is in the part it owns. The old `read` call stays as a fallback; `ocr.ts` uses `readLines` when the module has it. If strips cannot be cut, the picture is read whole as before.
+- `check.ts` covers the reflow, the join across strips and the cap. **The Kotlin is not compiled or run anywhere yet**: there is no Android SDK in a cloud session, so the first proof is the CI build and a real phone.
+- **Old pictures keep their old words** until "Read it again" is pressed on each; a bulk re-read at launch was left out on purpose (battery).
+- **Not verified:** a long screenshot read on the S24 Ultra, Devanagari in a tall picture, the nested scroll feel on a phone. The full-screen picture viewer from the same issue is not built yet.
 
 ## What 0.9 changes (20 Nov 2026, milestone `v0.9.0-beta.4`, issues #3 to #11)
 

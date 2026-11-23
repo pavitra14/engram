@@ -359,15 +359,32 @@ export default function ThoughtScreen() {
 
         {thought.seen_text ? (
           <View style={{ gap: 6, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.surface }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={[type.meta, { color: c.soft }]}>Text in this picture, read on this phone</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <Text style={[type.meta, { color: c.soft, flex: 1 }]}>Text in this picture, read on this phone</Text>
               <Pressable accessibilityRole="button" onPress={() => void Clipboard.setStringAsync(thought.seen_text ?? '').then(() => setNote('Copied the text in the picture.'))} hitSlop={8} style={styles.linkAnother}>
                 <Text style={[type.smallStrong, { color: c.accent }]}>Copy</Text>
               </Pressable>
             </View>
-            <Text selectable style={[type.small, { color: c.ink }]} numberOfLines={12}>
-              {thought.seen_text}
-            </Text>
+            {/* All of it, in a panel that scrolls by itself: the page behind keeps its own scroll. */}
+            <ScrollView nestedScrollEnabled style={{ maxHeight: 280 }} contentContainerStyle={{ paddingVertical: 4 }} showsVerticalScrollIndicator accessibilityLabel="Text in this picture">
+              <Text selectable style={[type.small, { color: c.ink }]}>
+                {thought.seen_text}
+              </Text>
+            </ScrollView>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                void readPicture(db, thought.id, thought.media_path ?? '')
+                  .then((found) => {
+                    setNote(found ? 'Read the picture again.' : 'No words found this time.');
+                    return relink(db, thought.id);
+                  })
+                  .catch((e) => setNote(`The picture could not be read. ${e instanceof Error ? e.message : ''}`.trim()))
+              }
+              hitSlop={8}
+              style={[styles.linkAnother, { alignSelf: 'flex-start' }]}>
+              <Text style={[type.smallStrong, { color: c.accent }]}>Read it again</Text>
+            </Pressable>
           </View>
         ) : null}
 
