@@ -341,3 +341,21 @@ On Android, Expo Router gives the launch address 150 ms; a slow cold start misse
 ## D57. The tour asks about linking by meaning (0.9)
 
 New installs are asked whether to turn on linking by meaning, with the model's download size stated, before the usage-counts question (issue #9). It follows the usage-counts pattern: nothing is turned on unless the person says yes, and skipping leaves it off.
+
+## D58. New versions: opt-in, Play asks Play, everyone else reads GitHub (0.10)
+
+Issue #13. Checking for a newer version is a new request while signed out, so it is asked for like usage counts: in the tour, once on Today for people updating from 0.9 (after the usage question, never both sheets together), and in Settings. "Check now" works with the switch off. At most one automatic check a day, on app open. Places this differs from the issue's proposal, and why:
+
+- **The install source is read on the phone, not set at build time.** The APK and the AAB come from the same JavaScript bundle in one CI job, so a build-time channel would need per-task native config. Android records who installed the app; `com.android.vending` means Play, anything else (a sideloaded APK, adb) means GitHub. The Play update API also says nothing for a non-Play install, so a mistake costs at most a missed notice.
+- **Pre-releases are skipped.** The issue read `/releases` to include them, but a pre-release is the owner's to test and promote by hand (AGENTS.md, Releasing). Testers should not be pointed at one. Drafts are skipped too.
+- **Play's immediate update, not the flexible one.** The person has already tapped "Update", so Play's full-screen flow (download, install, restart) is the plainest result and needs no download-state listener in the app.
+- **One switch covers both channels.** Play's check goes through the Play Store app, not Engram, but asking once for "hear about new versions" is simpler than a Play-only exception and keeps the rule "nothing is checked until yes".
+- Versions compare by their three numbers only: the app knows itself as `0.10.0`, without the `-beta.5` its tag carries, and every release raises the numbers.
+
+## D59. A note's picture opens full screen in the app (0.10)
+
+Issue #17 (and its duplicate #16). The picture on a note is shown whole (`contain`, no longer cropped) and a tap opens `picture/[id]`: pinch or double-tap to zoom, drag when zoomed, swipe down or Back to close, and "Open in another app" for the gallery. An in-app viewer keeps the person beside their note, which matters when comparing the picture with the text read from it; leaving for the gallery stays one tap away. The background is the theme's own, like every screen.
+
+## D60. Hardware features marked optional for Play (0.10)
+
+Issue #12. Play treated a portrait screen and Wi-Fi as required: the first is implied by the portrait lock, the second by `ACCESS_WIFI_STATE` from `react-native-blob-util`. `plugins/withOptionalFeatures.js` declares both with `required="false"`; the portrait lock stays. Removing the blob-util permissions (`ACCESS_WIFI_STATE`, storage, `DOWNLOAD_WITHOUT_NOTIFICATION`) was left for later: it needs the model downloads checked on a real phone first.

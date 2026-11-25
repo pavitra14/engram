@@ -1,0 +1,5 @@
+{
+  "name": "engram-updates",
+  "platforms": ["android"],
+  "android": { "modules": ["dev.pavitra.engram.updates.EngramUpdatesModule"] }
+}

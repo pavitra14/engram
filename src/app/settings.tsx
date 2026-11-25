@@ -28,6 +28,9 @@ import { canTranscribeOnDevice, SPEECH_LANGS, speechLang } from '@/lib/useVoice'
 import { ACCENT_NAMES, ACCENTS, type AppearanceSetting, type, useTheme } from '@/theme';
 import { count as countUse, M, previewUsage, readUsageAnswer, setUsage, type UsageAnswer } from '@/lib/usage';
 import { describe } from '@/lib/usage.logic';
+import { checkForUpdate, lastChecked, readUpdatesAnswer, setUpdates, startUpdate, type UpdatesAnswer, updateChannel, useAvailableUpdate } from '@/lib/updates';
+import { relativeTime } from '@/lib/text';
+import { showToast } from '@/lib/toast';
 
 function Segments<T extends string>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
   const { c } = useTheme();
@@ -86,6 +89,10 @@ export default function SettingsScreen() {
   const smart = useSemanticState();
   const params = useLocalSearchParams<{ smart?: string; home?: string; metrics?: string }>();
   const [usage, setUsageState] = useState<UsageAnswer>(null);
+  const [updates, setUpdatesState] = useState<UpdatesAnswer>(null);
+  const [checkedAt, setCheckedAt] = useState<number | null>(null);
+  const [checking, setChecking] = useState(false);
+  const available = useAvailableUpdate(db);
   const [calendar, setCalendar] = useState(false);
   const [choosingLang, setChoosingLang] = useState(false);
   const cloudOn = useFlag('cloud');
@@ -229,6 +236,32 @@ export default function SettingsScreen() {
     if (params.metrics === 'off') void setUsage(db, false).then(() => setUsageState('no'));
     else void readUsageAnswer(db).then(setUsageState);
   }, [db, params.metrics, version]);
+
+  useEffect(() => {
+    void readUpdatesAnswer(db).then(setUpdatesState);
+    void lastChecked(db).then(setCheckedAt);
+  }, [db, version]);
+
+  const toggleUpdates = () => {
+    const yes = updates !== 'yes';
+    setUpdatesState(yes ? 'yes' : 'no');
+    void setUpdates(db, yes).then(() => lastChecked(db).then(setCheckedAt));
+  };
+
+  const checkNow = () => {
+    if (checking) return;
+    setChecking(true);
+    void checkForUpdate(db, { force: true })
+      .then((r) => {
+        setChecking(false);
+        void lastChecked(db).then(setCheckedAt);
+        if (r.status === 'current') showToast(`You have the newest version, ${Constants.expoConfig?.version ?? ''}.`);
+        else if (r.status === 'failed') showToast(r.message);
+        else if (r.status === 'newer')
+          showToast(r.found.channel === 'github' ? `Engram ${r.found.version} is out.` : 'A new version is ready.');
+      })
+      .catch(() => setChecking(false));
+  };
 
   const toggleUsage = () => {
     const yes = usage !== 'yes';
@@ -692,11 +725,41 @@ export default function SettingsScreen() {
                 </View>
               </Section>
             </Group>
-            <Group id="help" title="Help and about" sub="The tour, privacy policy, contact" open={opened.includes('help')} onToggle={toggleGroup} query={query}>
+            <Group id="help" title="Help and about" sub="The tour, new versions, privacy policy, contact" open={opened.includes('help')} onToggle={toggleGroup} query={query}>
               <Section title="Help">
                 <View>
                   <Row title="The tour" sub="Five short pages on what Engram does and how to use it" action="Show" onPress={() => router.push('/tour')} />
                   <Row title="The month in review" sub="A month of your notes in a few numbers" action="Open" onPress={() => router.push('/recap')} />
+                </View>
+              </Section>
+              <Section title="New versions" terms="update updates upgrade release latest version play store github">
+                <View>
+                  <Row
+                    title="Tell me about new versions"
+                    sub={
+                      updates === 'yes'
+                        ? updateChannel() === 'play'
+                          ? 'On. Once a day Engram asks Google Play whether a newer version is out.'
+                          : 'On. Once a day Engram looks at its releases page on GitHub. Nothing of yours is sent.'
+                        : 'Off. Engram never checks by itself.'
+                    }
+                    action={updates === 'yes' ? 'Turn off' : 'Turn on'}
+                    onPress={toggleUpdates}
+                  />
+                  {available ? (
+                    <Row
+                      title={available.channel === 'github' ? `Engram ${available.version} is out` : 'A new version is ready'}
+                      sub={available.channel === 'github' ? 'Opens the release page, where the new APK is' : 'Google Play downloads and installs it'}
+                      action={available.channel === 'github' ? 'Open' : 'Update'}
+                      onPress={() => void startUpdate(available).catch(() => showToast('The update could not be started.'))}
+                    />
+                  ) : null}
+                  <Row
+                    title="Check now"
+                    sub={`You have ${Constants.expoConfig?.version ?? ''}.${checkedAt ? ` Last checked ${relativeTime(checkedAt)}.` : ''}`}
+                    action={checking ? 'Checking' : 'Check'}
+                    onPress={checkNow}
+                  />
                 </View>
               </Section>
               <Section title="About">

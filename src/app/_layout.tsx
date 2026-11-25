@@ -27,6 +27,7 @@ import { ThemeProvider, useTheme } from '@/theme';
 import { dataChanged, useDataVersion } from '@/lib/bus';
 import { refreshWidgets } from '@/widgets/snapshot';
 import { startCloud } from '@/cloud/cloud';
+import { checkForUpdate } from '@/lib/updates';
 import { appOpened, sendUsage, startUsage } from '@/lib/usage';
 
 void SplashScreen.preventAutoHideAsync();
@@ -131,10 +132,13 @@ function Screens() {
       .then(() => startCloud(db))
       .then(() => sendUsage(db))
       .catch(() => {});
+    // At most once a day, and only if the person asked to hear about new versions.
+    void checkForUpdate(db).catch(() => {});
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
       appOpened();
       void sendUsage(db).catch(() => {});
+      void checkForUpdate(db).catch(() => {});
     });
     return () => sub.remove();
   }, [db]);
@@ -200,6 +204,7 @@ function Screens() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg }, animation: 'ios_from_right', animationDuration: 220 }}>
         <Stack.Screen name="index" options={{ animation: 'fade', animationDuration: 140 }} />
         <Stack.Screen name="thought/[id]" options={{ animation: 'ios_from_right', animationDuration: 220 }} />
+        <Stack.Screen name="picture/[id]" options={{ animation: 'fade', animationDuration: 160 }} />
         <Stack.Screen name="group/[id]" options={{ animation: 'ios_from_right', animationDuration: 220 }} />
         <Stack.Screen name="map" options={{ animation: 'fade', animationDuration: 160 }} />
         <Stack.Screen name="todo" options={{ animation: 'fade_from_bottom', animationDuration: 180 }} />

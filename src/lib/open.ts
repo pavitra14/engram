@@ -5,10 +5,10 @@ import { Platform } from 'react-native';
 
 import type { Thought } from '@/db/types';
 
-/** Opens a saved video or document in whichever app on the phone handles that kind of file. */
+/** Opens a saved picture, video or document in whichever app on the phone handles that kind of file. */
 export async function openFile(thought: Thought): Promise<void> {
   if (!thought.media_path) return;
-  const type = thought.mime_type ?? (thought.kind === 'video' ? 'video/*' : '*/*');
+  const type = thought.mime_type ?? (thought.kind === 'video' ? 'video/*' : thought.kind === 'image' ? 'image/*' : '*/*');
   if (Platform.OS === 'android') {
     try {
       const data = await getContentUriAsync(thought.media_path);

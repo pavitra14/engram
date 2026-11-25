@@ -83,6 +83,10 @@ jobs:
             || { echo "The build failed; trying once more."; ./gradlew assembleRelease --no-daemon --build-cache -PreactNativeArchitectures=x86_64; }
           mkdir -p ../out
           cp app/build/outputs/apk/release/app-release.apk ../out/engram-x86_64.apk
+          # What Play reads from the merged manifest: required and optional hardware, and permissions.
+          # Expect uses-feature-not-required for screen.portrait and wifi (issue #12).
+          AAPT2="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/aapt2"
+          "$AAPT2" dump badging ../out/engram-x86_64.apk | grep -E "uses-feature|uses-implied-feature|uses-permission" | tee ../out/features-and-permissions.txt || true
       - name: Build the phone APK and the Play bundle (arm64)
         if: env.RELEASING == 'true'
         working-directory: android

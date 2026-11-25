@@ -22,6 +22,8 @@ import { loadSamples } from '@/lib/samples';
 import { questionFor, streak, weekOf } from '@/lib/habits';
 import { dayLabel, daysAgo, longDate, timeOfDay, titleOf, when } from '@/lib/text';
 import { font, type, useTheme } from '@/theme';
+import { UpdateNotice } from '@/components/UpdateNotice';
+import { UpdateQuestion } from '@/components/UpdateQuestion';
 import { UsageQuestion } from '@/components/UsageQuestion';
 
 type HomeView = 'list' | 'split' | 'map';
@@ -186,6 +188,7 @@ export default function HomeScreen() {
 
   const agenda = (
     <>
+      <UpdateNotice />
       {question === 'show' && !answered && !empty ? (
         <View style={[styles.ask, { backgroundColor: c.surface, borderColor: c.line }]}>
           <Text style={[type.meta, { color: c.soft }]}>Today&rsquo;s question</Text>
@@ -399,6 +402,7 @@ export default function HomeScreen() {
         </ScrollView>
         <CaptureBar clipboard />
         <UsageQuestion />
+        <UpdateQuestion />
       </View>
     );
   }
@@ -446,7 +450,8 @@ export default function HomeScreen() {
         ListEmptyComponent={emptyState}
       />
       <CaptureBar clipboard />
-        <UsageQuestion />
+      <UsageQuestion />
+      <UpdateQuestion />
     </View>
   );
 }

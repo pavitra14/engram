@@ -1,0 +1,6 @@
+{
+  "name": "engram-updates",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Says which store installed Engram, and asks Google Play whether a newer version is available and starts Play's own update screen. Engram itself makes no network request here."
+}

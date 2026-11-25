@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Effective 18 November 2026. Applies to Engram for Android, version 0.8 and later._
+_Effective 25 November 2026. Applies to Engram for Android, version 0.8 and later._
 
 > The published version is at **[https://engrm.app/privacy](https://engrm.app/privacy)**, which also covers the website. Keep the two in step: the page's source is `app/privacy/page.tsx` in [pavitra14/engram-web](https://github.com/pavitra14/engram-web).
 
@@ -12,6 +12,7 @@ Engram is a note-taking app made by its developer, pavitra14 on GitHub ("we"). T
 - **Usage counts are your choice.** When you first open Engram, it asks whether you'd like to send an anonymous daily count of which features you used. Nothing is counted unless you say yes, it never includes your notes, and you can change your answer any time in Settings.
 - Everything you capture is stored in the app's private storage on your phone.
 - You need no account. Without one, none of your notes, recordings, photos or files leave the phone.
+- **Hearing about new versions is your choice too.** Engram asks whether it may check once a day for a newer version. The check carries nothing of yours, and you can change your answer in Settings.
 - The app makes a few network requests that carry none of your content. They are listed below.
 - If you choose to sign in to Engram Cloud (currently switched off for everyone), the items listed under "Engram Cloud" are copied to our server so your devices stay in step.
 
@@ -52,6 +53,7 @@ Without an account, Engram makes only these requests. None of them carries your 
 |---|---|---|
 | Each time the app starts | Engram's server (Supabase, Mumbai region) | A request for which unfinished features are switched on. It includes no account or device id. |
 | Once a day, only if you said yes to usage counts | Engram's server (Supabase, Mumbai region) | A finished day's anonymous feature counts, three rough ranges and the app version. No id and no content. See "Usage counts" below. |
+| Once a day when you open the app, only if you said yes to hearing about new versions, or when you tap "Check now" | Installed from Google Play: the Play Store app on your phone, which asks Google Play. Installed another way: GitHub (`api.github.com`) | A request for the list of Engram's releases (GitHub), or Play's own update check. No id and no content. Updating through Play is done by Google Play; Engram downloads nothing itself. |
 | Only if you turn on "Understand meaning" or download the Ask model | Hugging Face (models published by Software Mansion) | A download of the language model. The library's usage reporting is switched off. |
 | Only if you turn on translation | Google ML Kit | A download of the language pack for each language. |
 | Only if you install the offline speech pack | Android, through Google's speech services | Handled by Android, not by Engram. |

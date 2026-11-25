@@ -23,6 +23,7 @@ import { dueIn, matchProjects, orphaned } from '../src/lib/projects';
 import { DECISION_STEP, decisionRecall, dueRecalls, firstRecall, habitDoneToday, habitStreak, milestone, monthRecap, nextRecall, onThisDay, surprise, toggleHabit } from '../src/lib/recall';
 import { joinParagraphs, MAX_TEXT, type OcrLine, paragraphsFromBlocks, paragraphsFromLines } from '../src/lib/ocr.logic';
 import { runSummary, translateArgs } from '../src/lib/translate';
+import { channelFor, checkDue, CHECK_EVERY_MS, compareVersions, newerRelease, parseVersion, plainNotes } from '../src/lib/updates.logic';
 import { parseWhen } from '../src/lib/when';
 import { activeBucket, ageBucket, buildMessage, CAP, daysActiveIn, describe, localDay, notesBucket, plan, rememberDay } from '../src/lib/usage.logic';
 import { meaningSimilarity, nearMisses, related, relateAll, surfaceTokens, tokenize, whyLinked } from '../src/lib/linker';
@@ -704,6 +705,33 @@ const oneFailed = runSummary({ made: 0, checked: 0, failed: 1, problem: { kind: 
 assert.match(oneFailed, /^On\. Nothing was translated\. 1 note could not be translated\./);
 assert.doesNotMatch(oneFailed, /needed translating|Kotlin/, 'no contradiction and no raw error');
 assert.match(runSummary({ made: 2, checked: 2, failed: 1, problem: { kind: 'pack', message: 'x' } }), /2 notes have an English version now\. 1 note could not .* language pack/);
+
+// --- new versions ---
+{
+  assert.deepEqual(parseVersion('v0.10.0-beta.5'), { major: 0, minor: 10, patch: 0 });
+  assert.deepEqual(parseVersion('0.9.0'), { major: 0, minor: 9, patch: 0 });
+  assert.equal(parseVersion('latest'), null);
+  // Numbers, not strings: 0.10 is newer than 0.9.
+  assert.ok(compareVersions(parseVersion('v0.10.0-beta.5')!, parseVersion('0.9.0')!) > 0);
+  assert.equal(compareVersions(parseVersion('v0.10.0-beta.5')!, parseVersion('0.10.0')!), 0, 'the same release is not newer than itself');
+  const rel = (tag: string, extra: object = {}) => ({ tag_name: tag, html_url: `https://github.com/pavitra14/engram/releases/tag/${tag}`, body: `## What's new\n- **Faster** [map](https://x.y)`, ...extra });
+  const list = [rel('v0.9.0-beta.4'), rel('v0.12.0-beta.7', { prerelease: true }), rel('v0.11.0-beta.6'), rel('v0.10.0-beta.5'), rel('v0.13.0-beta.8', { draft: true })];
+  const found = newerRelease(list, '0.9.0');
+  assert.equal(found?.version, '0.11.0-beta.6', 'the newest published release, never a draft or pre-release');
+  assert.equal(found?.notes, "What's new\n• Faster map");
+  assert.equal(newerRelease(list, '0.11.0'), null, 'nothing when up to date');
+  assert.equal(newerRelease([], '0.9.0'), null);
+  assert.ok(checkDue(null, 1000));
+  assert.ok(!checkDue(1000, 1000 + CHECK_EVERY_MS - 1), 'once a day at most');
+  assert.ok(checkDue(1000, 1000 + CHECK_EVERY_MS));
+  assert.ok(checkDue(5000, 1000), 'a clock moved backwards does not block checking forever');
+  assert.equal(channelFor('com.android.vending'), 'play');
+  assert.equal(channelFor(null), 'github');
+  assert.equal(channelFor('com.google.android.packageinstaller'), 'github');
+  const notes = plainNotes('<!-- prerelease -->\n# Engram 0.10\n\nUse `Check now`.\n\n---\n\n* one\n* two');
+  assert.equal(notes, 'Engram 0.10\n\nUse Check now.\n\n• one\n• two');
+  assert.ok(plainNotes('line\n'.repeat(500), 100).endsWith('…'), 'long notes are shortened');
+}
 
 // --- words read from pictures ---
 {

@@ -1,12 +1,12 @@
 # Status
 
-_Last updated: 23 Nov 2026, text in pictures (issue #17). Update this file whenever you finish work._
+_Last updated: 25 Nov 2026, release `v0.10.0-beta.5` (issues #12, #13, #17). Update this file whenever you finish work._
 
 > **18 Nov 2026:** the `metrics` flag is switched **on** in Supabase at the owner's request. Phones whose owner said yes to usage counts now send one anonymous daily total through `record_usage`. Turn it off in `public.feature_flags` to stop all sending.
 
 ## Where things are
 
-- The app is **0.9.0** (`versionCode` 9), released as `v0.9.0-beta.4`, an **ordinary release** (the owner asked for the next release without saying pre-release, and AGENTS says to drop the marker after 0.8). `v0.8.0-beta.3` stayed a pre-release; 0.9 carries its changes. The website shows the latest ordinary release, so it moves from 0.7 to 0.9 within an hour of publishing. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
+- The app is **0.10.0** (`versionCode` 10), released as `v0.10.0-beta.5`, an ordinary release. 0.9.0 (`v0.9.0-beta.4`) was the first signed with the owner's key. `v0.8.0-beta.3` stayed a pre-release; 0.9 carried its changes. The website shows the latest ordinary release, so it moves from 0.7 to 0.9 within an hour of publishing. Work is pushed straight to `main`; every release is a `0.x` beta until the owner says otherwise.
 - **Engram Cloud is switched off** by the `cloud` feature flag (D37). The code and the server side from 0.4 are still there. Status against issue #2 is in `CLOUD.md`.
 - **Ask your notes is switched off** by the `ask` flag. Its model is not yet in `package.json` (see "Before turning Ask on" below).
 - The old `v1.0.0`, `v2.0.0-beta.1` releases and the `redesign-diag` branch still need deleting by hand on GitHub. Branch deletion commands are in the owner's hands; the agent cannot delete them from a cloud session.
@@ -27,14 +27,23 @@ _Last updated: 23 Nov 2026, text in pictures (issue #17). Update this file whene
 - Quick Settings tile, icon shortcuts, app lock, focus timer, morning and evening notifications.
 - Anything that crashes shows the crash screen; note what it says.
 
-## In progress for `v0.10.0-beta.5`: text in pictures (23 Nov 2026, issue #17)
+## What 0.10 changes (25 Nov 2026, milestone `v0.10.0-beta.5`, issues #12, #13, #17; #16 closed as a duplicate of #17)
+
+**Full-screen picture (issue #17, D59).** The picture on a note is shown whole (`contain`) and a tap opens `src/app/picture/[id].tsx`: pinch (up to 5×) or double-tap (2.5×, towards the tap) to zoom, drag when zoomed (kept on screen), swipe down 120 pt or Back to close, and "Open in another app" (`openFile`, now with `image/*`). Gestures use Gesture Handler 3's hooks with Reanimated; a second finger stops a pinch from closing it. The smoke test taps the picture (`11c-picture-viewer`). **Not verified:** zoom and swipe feel on a phone.
+
+**New versions (issue #13, D58).** `src/lib/updates.ts` (+ `updates.logic.ts`, tested) and a new native module `modules/engram-updates` (Play In-App Updates 2.1.0, immediate flow; and `installer()`). Asked in the tour (new page before usage counts), once on Today for 0.9 users after the usage question (`UpdateQuestion`), and in Settings, Help and about, **New versions** (switch, Check now, the found version). A found version shows as a card at the top of Today (`UpdateNotice`), with "See what's new" (release notes as plain text, first 900 characters) or Play's "Update", and "Not now". Meta keys: `updates`, `update_checked`, `update_found`, `update_dismissed`. Privacy policy, AGENTS and the website say so. **Not verified:** the Kotlin compiles only in CI; a Play-installed older build updating in-app, and a sideloaded older APK seeing the notice, need real phones. 0.9 users get no notice for 0.10 itself.
+
+**Play device reach (issue #12, D60).** `plugins/withOptionalFeatures.js` marks `android.hardware.screen.portrait` and `android.hardware.wifi` not required. Prebuild shows both; CI now prints `aapt2 dump badging` features and permissions (`out/features-and-permissions.txt`). Owner to confirm the Play Console warning is gone on upload. Not done: blocking blob-util's extra permissions (needs a real-phone model download check).
+
+### Text in pictures (also in 0.10, issue #17)
+
 
 - **The panel scrolls.** "Text in this picture" on the note screen shows all of the words in a panel (max 280 px tall) that scrolls by itself, replacing the 12-line cut-off. "Read it again" sits under it, since a picture that already has words had no way to be read a second time.
 - **Lines are reflowed.** The recogniser keeps the picture's own line breaks, so a wrapped sentence came out as short lines. `src/lib/ocr.logic.ts` joins the lines of one block into a paragraph and puts a blank line between paragraphs. The 8,000-character cap is now 60,000 (`MAX_TEXT`).
 - **A tall picture is read whole.** `modules/engram-ocr` has a new `readLines` call that returns each line with its place in the picture. A picture taller than twice its width (a long screenshot, not turned by an EXIF tag) is cut into strips 1.5 widths tall that overlap by 15%, read one after another with `BitmapRegionDecoder`, and each strip keeps only the lines whose middle is in the part it owns. The old `read` call stays as a fallback; `ocr.ts` uses `readLines` when the module has it. If strips cannot be cut, the picture is read whole as before.
 - `check.ts` covers the reflow, the join across strips and the cap. **The Kotlin is not compiled or run anywhere yet**: there is no Android SDK in a cloud session, so the first proof is the CI build and a real phone.
 - **Old pictures keep their old words** until "Read it again" is pressed on each; a bulk re-read at launch was left out on purpose (battery).
-- **Not verified:** a long screenshot read on the S24 Ultra, Devanagari in a tall picture, the nested scroll feel on a phone. The full-screen picture viewer from the same issue is not built yet.
+- **Not verified:** a long screenshot read on the S24 Ultra, Devanagari in a tall picture, the nested scroll feel on a phone. 
 
 ## What 0.9 changes (20 Nov 2026, milestone `v0.9.0-beta.4`, issues #3 to #11)
 

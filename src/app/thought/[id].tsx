@@ -325,7 +325,14 @@ export default function ThoughtScreen() {
         ) : null}
 
         {thought.kind === 'image' && thought.media_path ? (
-          <Image source={{ uri: thought.media_path }} style={[styles.image, { backgroundColor: c.surface }]} resizeMode="cover" accessibilityLabel="Saved image" />
+          <Pressable
+            onPress={() => router.push(`/picture/${thought.id}`)}
+            accessibilityRole="imagebutton"
+            accessibilityLabel="View picture full screen"
+            style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+          >
+            <Image source={{ uri: thought.media_path }} style={[styles.image, { backgroundColor: c.surface }]} resizeMode="contain" />
+          </Pressable>
         ) : null}
 
         <NoteEditor

@@ -27,10 +27,12 @@ launch
 # A new install opens on the tour.
 sleep 25; shot 01-tour
 tap 900 2290; sleep 2; shot 01b-tour-page-2
-# Then two questions. Linking by meaning: the test says "Not now" (left button), so the
-# before-and-after meaning check below still starts from off.
+# Then three questions. Linking by meaning: the test says "Not now" (left button), so the
+# before-and-after meaning check below still starts from off. New versions: "No thanks",
+# so CI never asks GitHub.
 for _ in 1 2 3 4; do tap 900 2290; sleep 2; done; shot 01c-tour-meaning-question
-tap 300 2290; sleep 2; shot 01d-tour-usage-question
+tap 300 2290; sleep 2; shot 01d-tour-updates-question
+tap 300 2290; sleep 2; shot 01e-tour-usage-question
 # The last page asks about usage counts. The test answers no in Settings, so CI never sends any.
 open "engram://settings?metrics=off"; sleep 5
 
@@ -70,6 +72,11 @@ if [ -n "${IMG_ID:-}" ]; then
 fi
 # The picture just shared, opened: any words read from it are shown under it.
 open "engram://latest"; sleep 8; shot 11b-image-text
+if [ -n "${IMG_ID:-}" ]; then
+  # Tapping the picture opens it full screen; Back returns to the note.
+  tap 540 700; sleep 3; shot 11c-picture-viewer
+  adb shell input keyevent 4; sleep 2; shot 11d-picture-closed
+fi
 adb shell input keyevent 4; sleep 1
 
 # Linking by meaning. Before: the garage thought shares no words with anything.

@@ -25,15 +25,14 @@ _Written 17 Nov 2026. F-Droid was considered and dropped (D52): the code is all 
 5. Add the **governing law** to the Privacy Policy and Terms (here and in `engram-web`).
 6. **Register the package and signing fingerprint** in the Android Developer Console, which also covers Google's developer verification of sideloaded apps (enforced from 30 Sep 2026 in Brazil, Indonesia, Singapore and Thailand; global in 2027).
 
-## What's new text for Play (v0.9.0-beta.4, under 500 characters)
+## What's new text for Play (v0.10.0-beta.5, under 500 characters)
 
 ```
-• Restoring a backup now keeps to-dos, reminders, stars and pins
-• Sharing to Engram while it's closed no longer loses the item
-• Translation of notes in other languages works again
-• Settings is grouped, with a search box
-• The tour asks whether to link notes by meaning
-• Optional anonymous usage counts, off unless you say yes
+• Tap a picture in a note to see it full screen, and pinch to zoom
+• All the text read from a picture is shown, in proper paragraphs
+• Long screenshots are read whole, small print included
+• Optional: hear when a new version is out and update through Play
+• Engram can now be installed on tablets and more devices
 ```
 
 ## Console checklist
@@ -42,7 +41,7 @@ _Written 17 Nov 2026. F-Droid was considered and dropped (D52): the code is all 
 - Privacy policy URL: https://engrm.app/privacy
 - Data safety form. Local only; optional Engram Cloud sync (off for everyone for now); no ads; the feature flags are read from Supabase at launch; model and language-pack downloads. **App activity: app interactions**, collected only if the person opts in (optional), not shared, not linked to the person's identity, used for analytics; no device or other ids. Coarse location is not stored (the IP address is never kept with the counts). Match `docs/PRIVACY.md`.
 - Content rating questionnaire, target audience (not for children), no ads, no login needed.
-- Permission declarations. Check against the list the release job prints. Expected: microphone, camera, calendar read and write, notifications, foreground service (media playback, for audio), biometric, internet.
+- Permission declarations. Check against the list the release job prints. Expected: microphone, camera, calendar read and write, notifications, foreground service (media playback, for audio), biometric, internet. From 0.10, Play's in-app update check (opt-in) runs through Google Play; it sends nothing Engram collects.
 - Account deletion: Engram Cloud sign-in is flagged off. If the flag is ever turned on, Play requires an in-app and a web way to delete the account.
 - Production access application after the closed test, then a staged rollout.
 

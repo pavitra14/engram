@@ -10,14 +10,16 @@ import { useDb } from '@/db/provider';
 import * as repo from '@/db/repo';
 import { MODEL_SIZE_NOTE } from '@/lib/semantic';
 import { enableSmartLinking } from '@/lib/smart';
+import { ASK_UPDATES_TITLE, askUpdatesBody, setUpdates, updateChannel } from '@/lib/updates';
 import { setUsage } from '@/lib/usage';
 import { ASK_BODY, ASK_TITLE } from '@/lib/usage.logic';
 import { font, type, useTheme } from '@/theme';
 
 /**
  * The first-run tour: five pages, each showing a small piece of the real
- * interface and saying what it is for, then two questions: whether to link notes
- * by meaning (a model download), and whether to share anonymous usage counts.
+ * interface and saying what it is for, then three questions: whether to link notes
+ * by meaning (a model download), whether to hear about new versions, and whether
+ * to share anonymous usage counts.
  * Nothing is turned on unless the person says yes. Shown once; Settings can show it again.
  */
 export default function TourScreen() {
@@ -28,6 +30,7 @@ export default function TourScreen() {
   const pager = useRef<ComponentRef<typeof ScrollView>>(null);
   const [page, setPage] = useState(0);
   const cloudOn = useFlag('cloud');
+  const [channel] = useState(updateChannel);
 
   // Skipping leaves the usage question unanswered; Today asks it once instead.
   const finish = async (share?: boolean) => {
@@ -141,6 +144,20 @@ export default function TourScreen() {
       ),
     },
     {
+      title: ASK_UPDATES_TITLE,
+      body: askUpdatesBody(channel),
+      art: card(
+        <View style={{ gap: 10 }}>
+          <Text style={[type.meta, { color: c.soft }]}>New version</Text>
+          <Text style={{ fontFamily: font.serifMedium, fontSize: 20, color: c.ink }}>A new version of Engram is ready</Text>
+          <View style={styles.check}>
+            <Feather name={channel === 'play' ? 'download' : 'external-link'} size={16} color={c.accent} />
+            <Text style={[type.meta, { color: c.soft }]}>{channel === 'play' ? 'Updates through Google Play' : 'Opens the release page'}</Text>
+          </View>
+        </View>,
+      ),
+    },
+    {
       title: ASK_TITLE,
       body: ASK_BODY,
       art: card(
@@ -161,12 +178,20 @@ export default function TourScreen() {
   ];
 
   const last = page === pages.length - 1;
-  const meaningPage = page === pages.length - 2;
-  // Answering the meaning question moves on to the last one. Yes starts the download now.
-  const chooseMeaning = (on: boolean) => {
-    if (on) void enableSmartLinking(db);
+  const meaningPage = page === pages.length - 3;
+  const updatesPage = page === pages.length - 2;
+  const forward = () => {
     pager.current?.scrollTo({ x: (page + 1) * width, animated: true });
     setPage(page + 1);
+  };
+  // Answering a question moves on to the next one. Yes to meaning starts the download now.
+  const chooseMeaning = (on: boolean) => {
+    if (on) void enableSmartLinking(db);
+    forward();
+  };
+  const chooseUpdates = (on: boolean) => {
+    void setUpdates(db, on);
+    forward();
   };
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => setPage(Math.round(e.nativeEvent.contentOffset.x / Math.max(1, width)));
   const next = () => (last ? void finish() : pager.current?.scrollTo({ x: (page + 1) * width, animated: true }));
@@ -198,6 +223,11 @@ export default function TourScreen() {
         <View style={[styles.foot, styles.choice]}>
           <Button title="Not now" style={{ flex: 1 }} onPress={() => chooseMeaning(false)} />
           <Button title="Turn on" tone="solid" style={{ flex: 1 }} onPress={() => chooseMeaning(true)} />
+        </View>
+      ) : updatesPage ? (
+        <View style={[styles.foot, styles.choice]}>
+          <Button title="No thanks" style={{ flex: 1 }} onPress={() => chooseUpdates(false)} />
+          <Button title="Tell me" tone="solid" style={{ flex: 1 }} onPress={() => chooseUpdates(true)} />
         </View>
       ) : last ? (
         // The question's own answers take the whole row, so neither is squeezed.
