@@ -27,6 +27,8 @@ _Last updated: 25 Nov 2026, release `v0.10.0-beta.5` (issues #12, #13, #17). Upd
 - Quick Settings tile, icon shortcuts, app lock, focus timer, morning and evening notifications.
 - Anything that crashes shows the crash screen; note what it says.
 
+**Release record (25 Nov 2026):** `v0.10.0-beta.5` published by run 45656212494 (build, emulator, release all green; main run also green) as an ordinary release with `engram-v0.10.0-beta.5.apk` and `.aab` (signed with the release key). `aapt2` shows `uses-feature-not-required` for screen.portrait and wifi; the permission list matches 0.9's APK (Play In-App Updates added none). Camera and microphone are still implied as required features (Play did not flag them); marking them optional is a possible follow-up. Website privacy page updated (engram-web 803aec5). Issues #12, #13, #17 closed; #16 closed as a duplicate; milestone closed.
+
 ## What 0.10 changes (25 Nov 2026, milestone `v0.10.0-beta.5`, issues #12, #13, #17; #16 closed as a duplicate of #17)
 
 **Full-screen picture (issue #17, D59).** The picture on a note is shown whole (`contain`) and a tap opens `src/app/picture/[id].tsx`: pinch (up to 5×) or double-tap (2.5×, towards the tap) to zoom, drag when zoomed (kept on screen), swipe down 120 pt or Back to close, and "Open in another app" (`openFile`, now with `image/*`). Gestures use Gesture Handler 3's hooks with Reanimated; a second finger stops a pinch from closing it. The smoke test taps the picture (`11c-picture-viewer`). **Not verified:** zoom and swipe feel on a phone.
