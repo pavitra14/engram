@@ -1,0 +1,2 @@
+11-25 17:02:54.909  4757  4796 I ReactNativeJS: engram: picture read, 278 characters
+11-25 17:03:04.470  4757  4796 I ReactNativeJS: engram: picture read, 278 characters

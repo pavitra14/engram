@@ -1,0 +1,7 @@
+  [28] provider ProviderId{user:0, app:10192, cmp:ComponentInfo{dev.pavitra.engram/dev.pavitra.engram.widget.QuickThought}}
+    min=(64001x14337)   minResize=(64001x14337) updatePeriodMillis=0 resizeMode=1 widgetCategory=1 autoAdvanceViewId=-1 initialLayout=#7f0c0085 initialKeyguardLayout=#0   zombie=false
+  [29] provider ProviderId{user:0, app:10192, cmp:ComponentInfo{dev.pavitra.engram/dev.pavitra.engram.widget.Todo}}
+    min=(46081x28161)   minResize=(46081x28161) updatePeriodMillis=1800000 resizeMode=3 widgetCategory=1 autoAdvanceViewId=-1 initialLayout=#7f0c0085 initialKeyguardLayout=#0   zombie=false
+  [30] provider ProviderId{user:0, app:10192, cmp:ComponentInfo{dev.pavitra.engram/dev.pavitra.engram.widget.Memory}}
+    min=(64001x17921)   minResize=(64001x17921) updatePeriodMillis=10800000 resizeMode=3 widgetCategory=1 autoAdvanceViewId=-1 initialLayout=#7f0c0085 initialKeyguardLayout=#0   zombie=false
+ 
