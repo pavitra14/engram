@@ -1,0 +1,2 @@
+    RTC_WAKEUP #48: Alarm{601e98c type 0 origWhen 1796202000000 whenElapsed 576399501 dev.pavitra.engram}
+      operation=PendingIntent{24148d5: PendingIntentRecord{3bb18ea dev.pavitra.engram broadcastIntent}}
