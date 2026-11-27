@@ -27,6 +27,8 @@ _Last updated: 25 Nov 2026, release `v0.10.0-beta.5` (issues #12, #13, #17). Upd
 - Quick Settings tile, icon shortcuts, app lock, focus timer, morning and evening notifications.
 - Anything that crashes shows the crash screen; note what it says.
 
+**Play, 27 Nov 2026:** uploading the 0.10 AAB, Play warned it drops 13,628 devices. The owner has not rolled it out, and no new release is to be published until the owner says so. The 0.9 and 0.10 bundles match on every filter (minSdk, ABI, native libraries, bundle config); 0.10 only adds two `required=false` features. So the comparison is likely against a different earlier bundle (probably one with 32-bit ARM). Tracked in #18 (milestone `v0.11.0-beta.6`), waiting on the Console's per-device reason.
+
 **Release record (25 Nov 2026):** `v0.10.0-beta.5` published by run 45656212494 (build, emulator, release all green; main run also green) as an ordinary release with `engram-v0.10.0-beta.5.apk` and `.aab` (signed with the release key). `aapt2` shows `uses-feature-not-required` for screen.portrait and wifi; the permission list matches 0.9's APK (Play In-App Updates added none). Camera and microphone are still implied as required features (Play did not flag them); marking them optional is a possible follow-up. Website privacy page updated (engram-web 803aec5). Issues #12, #13, #17 closed; #16 closed as a duplicate; milestone closed.
 
 ## What 0.10 changes (25 Nov 2026, milestone `v0.10.0-beta.5`, issues #12, #13, #17; #16 closed as a duplicate of #17)
