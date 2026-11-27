@@ -359,3 +359,7 @@ Issue #17 (and its duplicate #16). The picture on a note is shown whole (`contai
 ## D60. Hardware features marked optional for Play (0.10)
 
 Issue #12. Play treated a portrait screen and Wi-Fi as required: the first is implied by the portrait lock, the second by `ACCESS_WIFI_STATE` from `react-native-blob-util`. `plugins/withOptionalFeatures.js` declares both with `required="false"`; the portrait lock stays. Removing the blob-util permissions (`ACCESS_WIFI_STATE`, storage, `DOWNLOAD_WITHOUT_NOTIFICATION`) was left for later: it needs the model downloads checked on a real phone first.
+
+## D61. Phones only; support the oldest Android possible (27 Nov 2026)
+
+The owner decided Engram is for phones only and should support the oldest Android version possible. Big screens (tablets, Chromebooks, desktop windowing) are out of scope: no tablet layouts, width caps or keyboard work, and non-phone form factors are to be opted out of in the Play Console. `minSdkVersion` stays at 24 (Android 7.0), which is React Native 0.88's own floor; do not raise it. The remaining way to reach older phones is 32-bit ARM, which `react-native-executorch` blocks (64-bit only); the plan is in #18.
